@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import type { NextFunction, Request, Response } from 'express';
+import type { PublicUser } from 'shared';
 import { env } from '../env.js';
 import { prisma } from '../prisma.js';
 
@@ -109,16 +110,9 @@ export function toPublic(user: {
   wins: number;
   losses: number;
   draws: number;
+  isAdmin: boolean;
   createdAt: Date;
-}): {
-  id: number;
-  username: string;
-  rating: number;
-  wins: number;
-  losses: number;
-  draws: number;
-  createdAt: string;
-} {
+}): PublicUser {
   return {
     id: user.id,
     username: user.username,
@@ -126,6 +120,17 @@ export function toPublic(user: {
     wins: user.wins,
     losses: user.losses,
     draws: user.draws,
+    isAdmin: user.isAdmin,
     createdAt: user.createdAt.toISOString(),
   };
+}
+
+/** Только для администраторов */
+export async function requireAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const user = await currentUser(req);
+  if (!user?.isAdmin) {
+    res.status(403).json({ error: 'Доступ только для администратора' });
+    return;
+  }
+  next();
 }

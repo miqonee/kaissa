@@ -28,6 +28,20 @@ export interface PublicUser {
   losses: number;
   draws: number;
   createdAt: string;
+  isAdmin: boolean;
+}
+
+/** Строка списка пользователей в админке */
+export interface AdminUserRow {
+  id: number;
+  username: string;
+  rating: number;
+  wins: number;
+  losses: number;
+  games: number;
+  isAdmin: boolean;
+  online: boolean;
+  createdAt: string;
 }
 
 export interface LobbyPlayer {
@@ -270,3 +284,42 @@ export const TIME_PRESETS: { label: string; tc: TimeControl }[] = [
 export function timeControlLabel(tc: TimeControl): string {
   return tc.kind === 'none' ? '∞' : `${tc.baseMin}+${tc.incSec}`;
 }
+
+
+// ---------- Описание режимов (для UI создания лобби) ----------
+
+export interface ModeInfo {
+  mode: GameMode;
+  title: string;
+  short: string;
+  rules: string[];
+}
+
+export const MODE_INFO: ModeInfo[] = [
+  {
+    mode: 'bughouse',
+    title: 'Багхаус',
+    short: 'Две доски. Сбитые фигуры переходят партнёру и ставятся на его доску.',
+    rules: [
+      'Играют две доски одновременно: партнёры по команде всегда разного цвета.',
+      'Сбитая фигура меняет цвет и попадает в «карман» партнёра.',
+      'Вместо обычного хода можно поставить фигуру из кармана на любое пустое поле.',
+      'Пешку нельзя ставить на первую и восьмую горизонтали.',
+      'Мат, сдача или флаг на любой из досок завершают весь матч.',
+      'Ничьих нет: партия всегда заканчивается результатом.',
+    ],
+  },
+  {
+    mode: 'team',
+    title: 'Одна доска 2×2',
+    short: 'Одна доска. Команда играет одним цветом, партнёры ходят через одного.',
+    rules: [
+      'Одна доска: команда 1 — белые, команда 2 — чёрные.',
+      'Внутри команды ходы чередуются: первый игрок, затем партнёр, затем снова первый.',
+      'Совещаться можно, но ход делает только тот, чья очередь.',
+      'Правила классические: рокировка, взятие на проходе, превращение пешки.',
+      'Пат считается поражением зажатой стороны — ничьих в клубе нет.',
+      'Партия завершается матом, патом, сдачей или флагом.',
+    ],
+  },
+];

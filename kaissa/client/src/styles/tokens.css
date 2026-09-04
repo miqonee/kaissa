@@ -1,0 +1,123 @@
+/* ============================================================
+   «Каисса» — дизайн-токены. Две темы: тёплая бумага и ночной клуб.
+   Тема переключается атрибутом data-theme на <html>.
+   ============================================================ */
+
+:root {
+  /* Типографика */
+  --font-display: 'Spectral', Georgia, 'Times New Roman', serif;
+  --font-ui: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* Радиусы и отступы */
+  --r-xs: 4px;
+  --r-s: 7px;
+  --r-m: 11px;
+  --r-l: 16px;
+  --gap-xs: 6px;
+  --gap-s: 10px;
+  --gap-m: 16px;
+  --gap-l: 24px;
+  --gap-xl: 36px;
+
+  /* Скорости */
+  --t-fast: 0.12s ease;
+  --t-med: 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ---------------- Светлая тема: тёплая бумага ---------------- */
+
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #f2efe6;
+  --bg-pattern: #eae5d8;
+  --surface: #fbf9f4;
+  --surface-2: #f6f2e8;
+  --surface-inset: #ece7d9;
+  --surface-hover: #fffdf8;
+
+  --ink: #23211b;
+  --ink-2: #4e4a3d;
+  --ink-3: #857f6c;
+  --ink-inv: #fbf9f4;
+
+  --line: #dcd6c4;
+  --line-2: #c3bca4;
+  --line-strong: #a8a08a;
+
+  --accent: #9c7b2c;
+  --accent-2: #b8923c;
+  --accent-soft: #f0e4c4;
+  --accent-ink: #ffffff;
+
+  --felt: #1e4437;
+  --felt-2: #2b5a49;
+  --felt-ink: #f4f1e8;
+
+  --ok: #2b6e46;
+  --ok-soft: #dceadf;
+  --warn: #a8571b;
+  --warn-soft: #f6e6d5;
+  --bad: #9c3226;
+  --bad-soft: #f5dedb;
+  --info: #2f6091;
+
+  --board-light: #ecd6ae;
+  --board-dark: #b07f56;
+  --board-frame: #7c5a3c;
+
+  --shadow-s: 0 1px 2px rgba(35, 33, 27, 0.07);
+  --shadow-m: 0 3px 10px rgba(35, 33, 27, 0.09), 0 1px 3px rgba(35, 33, 27, 0.06);
+  --shadow-l: 0 18px 48px rgba(35, 33, 27, 0.22);
+  --ring: 0 0 0 2px var(--accent-2);
+}
+
+/* ---------------- Тёмная тема: ночной клуб ---------------- */
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #14171a;
+  --bg-pattern: #191d21;
+  --surface: #1d2126;
+  --surface-2: #232830;
+  --surface-inset: #171b1f;
+  --surface-hover: #262c34;
+
+  --ink: #e8e4da;
+  --ink-2: #b3ada0;
+  --ink-3: #7e7a70;
+  --ink-inv: #14171a;
+
+  --line: #2c323a;
+  --line-2: #3a4149;
+  --line-strong: #4d545d;
+
+  --accent: #cfa14a;
+  --accent-2: #e0b866;
+  --accent-soft: #33291a;
+  --accent-ink: #14171a;
+
+  --felt: #1f4a3c;
+  --felt-2: #2a6250;
+  --felt-ink: #eaf2ec;
+
+  --ok: #57b47e;
+  --ok-soft: #1b2f24;
+  --warn: #d3873f;
+  --warn-soft: #302217;
+  --bad: #d9645a;
+  --bad-soft: #33201e;
+  --info: #6ba3d8;
+
+  --board-light: #b99a72;
+  --board-dark: #6f5137;
+  --board-frame: #3b2c1e;
+
+  --shadow-s: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-m: 0 4px 14px rgba(0, 0, 0, 0.45);
+  --shadow-l: 0 20px 56px rgba(0, 0, 0, 0.6);
+  --ring: 0 0 0 2px var(--accent-2);
+}

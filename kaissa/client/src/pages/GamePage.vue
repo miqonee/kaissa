@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Chess, type Square } from 'chess.js';
 import type {
@@ -26,8 +26,9 @@ const chat = ref<ChatMessage[]>([]);
 const chatText = ref('');
 const chatBox = ref<HTMLElement | null>(null);
 
-/** локальные экземпляры chess.js для подсветки ходов на клиентах */
-const localChess = reactive<[Chess | null, Chess | null]>([null, null]);
+/** Нереактивные экземпляры chess.js: генерация ходов мутирует внутреннее
+ *  состояние, поэтому держим их вне реактивности Vue. */
+const engines: (Chess | null)[] = [null, null];
 /** выбранная фигура для дропа (только своя доска) */
 const selectedDrop = ref<PieceType | null>(null);
 /** диалог промоушена */
@@ -67,7 +68,7 @@ function fenOf(b: number): string {
 function orientationOf(b: 0 | 1): 'white' | 'black' {
   if (!state.value) return 'white';
   // если я участник этой доски и мой цвет чёрный — доска чёрными вниз
-  if (isParticipant && myParticipant.value?.boardIndex === b && myParticipant.value.color === 'b') return 'black';
+  if (isParticipant.value && myParticipant.value?.boardIndex === b && myParticipant.value.color === 'b') return 'black';
   // зритель: доска 0 белыми вниз, доска 1 — тоже белыми (партнёрские доски согласованы)
   return 'white';
 }
@@ -87,15 +88,51 @@ function movableOn(b: 0 | 1): 'white' | 'black' | null {
   return myParticipant.value?.color === 'w' ? 'white' : 'black';
 }
 
-/** dests для выбранной фигуры (ходы генерирует локальный chess.js) */
-function destsFor(b: 0 | 1, square: string): string[] {
-  const c = localChess[b];
-  if (!c) return [];
-  try {
-    return c.moves({ square: square as Square, verbose: true }).map((m) => m.to);
-  } catch {
-    return [];
+/** Легальные ходы по доскам — считаются один раз на новое состояние */
+const destsByBoard = computed<Record<number, Record<string, string[]>>>(() => {
+  const out: Record<number, Record<string, string[]>> = { 0: {}, 1: {} };
+  const st = state.value;
+  if (!st || st.status !== 'active') return out;
+  const boards = st.mode === 'bughouse' ? 2 : 1;
+  for (let b = 0; b < boards; b++) {
+    if (!myTurnOn(b as 0 | 1)) continue;
+    try {
+      const c = new Chess(st.fens[b]);
+      for (const m of c.moves({ verbose: true })) {
+        (out[b][m.from] ??= []).push(m.to);
+      }
+    } catch {
+      /* позиция ещё не пришла */
+    }
   }
+  return out;
+});
+
+/** Клетки королей под шахом по доскам */
+const checkByBoard = computed<Record<number, string | null>>(() => {
+  const out: Record<number, string | null> = { 0: null, 1: null };
+  const st = state.value;
+  if (!st) return out;
+  const boards = st.mode === 'bughouse' ? 2 : 1;
+  for (let b = 0; b < boards; b++) {
+    try {
+      const c = new Chess(st.fens[b]);
+      if (!c.isCheck()) continue;
+      const king = c.findPiece({ type: 'k', color: c.turn() });
+      out[b] = king.length ? String(king[0]) : null;
+    } catch {
+      /* игнорируем */
+    }
+  }
+  return out;
+});
+
+/** Последний ход по доскам (для подсветки) — пополняется из событий */
+const lastMoves = ref<Record<number, (string | null)[]>>({ 0: [null, null], 1: [null, null] });
+
+function lastMoveOf(b: 0 | 1): (string | null)[] | null {
+  const lm = lastMoves.value[b];
+  return lm && (lm[0] || lm[1]) ? lm : null;
 }
 
 /** чей карман показывать у доски b (свои карманы интерактивны) */
@@ -152,8 +189,12 @@ function fmtClock(ms: number | null): string {
 // ---------- Действия ----------
 
 function onMove(b: 0 | 1, payload: { from: string; to: string }): void {
-  const c = localChess[b];
-  if (!c) return;
+  let c: Chess;
+  try {
+    c = new Chess(fenOf(b));
+  } catch {
+    return;
+  }
   // промоушен?
   const piece = c.get(payload.from as Square);
   const movingColor = c.turn();
@@ -199,17 +240,13 @@ function sendChat(): void {
   chatText.value = '';
 }
 
-/** Обновить локальные chess.js из FEN */
+/** Обновить нереактивные движки из FEN */
 function syncLocal(b: 0 | 1): void {
   const fen = fenOf(b);
-  if (!fen) {
-    localChess[b] = null;
-    return;
-  }
   try {
-    localChess[b] = new Chess(fen);
+    engines[b] = fen ? new Chess(fen) : null;
   } catch {
-    localChess[b] = null;
+    engines[b] = null;
   }
 }
 
@@ -239,8 +276,11 @@ onMounted(() => {
   });
   socket.on('game:move', (mv) => {
     if (mv.gameId !== gameId) return;
-    // локально применяем к state.fens через сервер FEN? сервер не прислал fenAfter в событии
-    // — обновим состояние: запросим полный state
+    lastMoves.value = {
+      ...lastMoves.value,
+      [mv.boardIndex]: mv.dropPiece ? [mv.to, mv.to] : [mv.from, mv.to],
+    };
+    // сервер — источник истины: подтягиваем полное состояние
     socket.emit('game:watch', gameId);
     applyServerMove(mv);
   });
@@ -401,8 +441,11 @@ function boardPlayers(b: 0 | 1): { top: GameParticipantInfo | undefined; bottom:
             :fen="fenOf(bc.index)"
             :orientation="orientationOf(bc.index)"
             :movable-color="movableOn(bc.index)"
+            :dests="destsByBoard[bc.index]"
+            :check-square="checkByBoard[bc.index]"
+            :last-move="lastMoveOf(bc.index)"
+            :drop-piece="myTurnOn(bc.index) ? selectedDrop : null"
             :coordinates="true"
-            :last-move="null"
             @move="onMove(bc.index, $event)"
             @drop="onDrop(bc.index, $event)"
           />

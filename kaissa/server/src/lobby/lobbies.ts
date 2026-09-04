@@ -74,7 +74,7 @@ export class Lobby {
       mode: this.mode,
       timeControl: this.timeControl,
       players,
-      code: this.private ? '' : this.code,
+      code: this.code,
       started: this.started,
     };
   }

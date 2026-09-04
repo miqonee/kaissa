@@ -3,6 +3,7 @@ import { currentUser, requireAuth, toPublic } from '../auth/auth.js';
 import { prisma } from '../prisma.js';
 import { gamesManager, lobbies } from '../state.js';
 import { presence } from '../socket/presence.js';
+import { buildPgn } from '../games/pgn.js';
 import type { GameSummary, LeaderboardRow, ProfilePayload } from 'shared';
 
 export const usersRouter = Router();
@@ -82,6 +83,67 @@ gamesRouter.get('/mine', requireAuth, async (req, res) => {
     include: { game: { include: { participants: { include: { user: true } } } } },
   });
   res.json({ games: parts.map((p) => dbGameToSummary(p.game)) });
+});
+
+/** Архив клуба: все завершённые партии */
+gamesRouter.get('/archive', requireAuth, async (req, res) => {
+  const take = Math.min(200, Math.max(1, parseInt(String(req.query.limit ?? '100'), 10) || 100));
+  const games = await prisma.game.findMany({
+    where: { status: { in: ['finished', 'abandoned'] } },
+    orderBy: { startedAt: 'desc' },
+    take,
+    include: { participants: { include: { user: true } } },
+  });
+  res.json({ games: games.map(dbGameToSummary) });
+});
+
+/** PGN партии: скачивание/анализ во внешних движках */
+gamesRouter.get('/:id/pgn', requireAuth, async (req, res) => {
+  const id = parseInt(String(req.params.id), 10);
+  if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
+  const game = await prisma.game.findUnique({
+    where: { id },
+    include: {
+      participants: { include: { user: true } },
+      moves: { orderBy: [{ ply: 'asc' }] },
+    },
+  });
+  if (!game) return void res.status(404).json({ error: 'Партия не найдена' });
+
+  const pgn = buildPgn(
+    {
+      id: game.id,
+      mode: game.mode as 'team' | 'bughouse',
+      result: game.result,
+      reason: game.reason,
+      baseMin: game.baseMin,
+      incSec: game.incSec,
+      noClock: game.noClock,
+      startedAt: game.startedAt,
+      endedAt: game.endedAt,
+      participants: game.participants.map((p) => ({
+        username: p.user.username,
+        team: p.team,
+        color: p.color,
+        boardIndex: p.boardIndex,
+        moveSlot: p.moveSlot,
+        ratingBefore: p.ratingBefore,
+      })),
+    },
+    game.moves.map((m) => ({
+      boardIndex: m.boardIndex,
+      ply: m.ply,
+      from: m.from,
+      to: m.to,
+      promotion: m.promotion,
+      dropPiece: m.dropPiece,
+    })),
+  );
+
+  if (String(req.query.download ?? '') === '1') {
+    res.setHeader('Content-Disposition', `attachment; filename="kaissa-game-${id}.pgn"`);
+  }
+  res.type('application/x-chess-pgn').send(pgn);
 });
 
 /** Одна партия (для replay) */

@@ -1,0 +1,345 @@
+/* ============================================================
+   «Каисса» — дизайн-система «шахматный клуб».
+   Тёплая бумага, тёмно-зелёное сукно, латунный акцент.
+   Никаких градиентов и glow: тонкие рамки, тихие тени.
+   ============================================================ */
+
+:root {
+  /* Бумага / фон */
+  --bg: #f4f1e8;
+  --bg-raised: #fbf9f3;
+  --bg-inset: #edeade;
+
+  /* Сукно (тёмные панели, топбар, кнопки-действия) */
+  --felt: #1f4438;
+  --felt-deep: #173630;
+  --felt-soft: #2a5a4b;
+
+  /* Латунь (акцент) */
+  --brass: #b08d3e;
+  --brass-strong: #96742d;
+  --brass-soft: #d6bd7e;
+
+  /* Текст */
+  --ink: #26231c;
+  --ink-soft: #55503f;
+  --ink-faint: #8a8570;
+  --paper: #fbf9f3;
+
+  /* Линии */
+  --line: #d9d4c2;
+  --line-strong: #b8b19a;
+
+  /* Статусы */
+  --ok: #2e7d4f;
+  --warn: #b3541e;
+  --bad: #a33327;
+  --info: #3a6ea5;
+
+  /* Радиусы */
+  --r-s: 6px;
+  --r-m: 10px;
+
+  /* Шрифты */
+  --font-display: 'Spectral', Georgia, serif;
+  --font-ui: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  /* Тени — очень тихие */
+  --shadow-s: 0 1px 2px rgba(38, 35, 28, 0.06);
+  --shadow-m: 0 2px 8px rgba(38, 35, 28, 0.08), 0 1px 2px rgba(38, 35, 28, 0.05);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+}
+
+h1 { font-size: 26px; }
+h2 { font-size: 20px; }
+h3 { font-size: 16px; font-family: var(--font-ui); font-weight: 600; }
+
+a { color: var(--felt); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+button {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--ink);
+  padding: 7px 14px;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+button:hover {
+  background: #fff;
+  border-color: var(--ink-soft);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--felt);
+  border-color: var(--felt-deep);
+  color: var(--paper);
+}
+
+button.primary:hover {
+  background: var(--felt-soft);
+}
+
+button.danger {
+  background: transparent;
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 40%, transparent);
+}
+
+button.danger:hover {
+  background: color-mix(in srgb, var(--bad) 8%, transparent);
+}
+
+input, select {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-s);
+  background: #fff;
+  color: var(--ink);
+  width: 100%;
+}
+
+input:focus, select:focus, button:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 0;
+  border-color: var(--brass-strong);
+}
+
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* ---------- Каркас страницы ---------- */
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  background: var(--felt);
+  color: var(--paper);
+  border-bottom: 3px solid var(--brass);
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 0 24px;
+  height: 54px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.topbar .brand {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--paper);
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar .brand:hover { text-decoration: none; }
+
+.topbar nav {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.topbar nav a {
+  color: color-mix(in srgb, var(--paper) 75%, transparent);
+  padding: 6px 12px;
+  border-radius: var(--r-s);
+  font-size: 14px;
+}
+
+.topbar nav a:hover {
+  color: var(--paper);
+  background: color-mix(in srgb, var(--paper) 10%, transparent);
+  text-decoration: none;
+}
+
+.topbar nav a.router-link-active {
+  color: var(--paper);
+  background: color-mix(in srgb, var(--paper) 14%, transparent);
+}
+
+.topbar .me {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.topbar .me .rating-chip {
+  background: color-mix(in srgb, var(--brass) 30%, transparent);
+  border: 1px solid var(--brass);
+  color: var(--brass-soft);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+main.page {
+  flex: 1;
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* ---------- Панели / карточки ---------- */
+
+.panel {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  box-shadow: var(--shadow-s);
+}
+
+.panel .panel-head {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel .panel-head .hint {
+  color: var(--ink-faint);
+  font-size: 13px;
+}
+
+.panel .panel-body {
+  padding: 16px;
+}
+
+/* ---------- Таблицы ---------- */
+
+table.club {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+table.club th {
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 600;
+}
+
+table.club td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+table.club tr:last-child td { border-bottom: none; }
+table.club tr:hover td { background: color-mix(in srgb, var(--brass) 6%, transparent); }
+
+/* ---------- Мелочи ---------- */
+
+.empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--ink-faint);
+  font-size: 14px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 2px 10px;
+  color: var(--ink-soft);
+  background: var(--bg-raised);
+}
+
+.badge.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.badge.off { color: var(--ink-faint); }
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+  display: inline-block;
+}
+
+.dot.on { background: var(--ok); }
+
+.field-label {
+  display: block;
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
+}
+
+.form-row {
+  margin-bottom: 14px;
+}
+
+.error-text {
+  color: var(--bad);
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+/* Chessground базовые размеры */
+.cg-wrap {
+  position: relative;
+}
+
+/* Скроллбар — тихий */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 6px; }
+::-webkit-scrollbar-track { background: transparent; }

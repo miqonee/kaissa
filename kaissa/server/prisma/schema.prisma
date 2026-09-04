@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  passwordHash String
+  rating       Int      @default(1200)
+  wins         Int      @default(0)
+  losses       Int      @default(0)
+  draws        Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  participations GameParticipant[]
+  ratingHistory  RatingHistory[]
+  moves          GameMove[]
+
+  @@index([rating])
+}
+
+model RatingHistory {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  delta     Int
+  value     Int
+  gameId    Int?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model Game {
+  id             Int       @id @default(autoincrement())
+  mode           String    // 'team' | 'bughouse'
+  status         String    @default("active") // active | finished | abandoned
+  result         String    @default("*")     // '1-0' | '0-1' | '*'
+  reason         String?    // checkmate | resign | timeout | stalemate | material | repetition | fifty | abandoned
+  baseMin        Int       @default(0)
+  incSec         Int       @default(0)
+  noClock        Boolean   @default(false)
+  startedAt      DateTime  @default(now())
+  endedAt        DateTime?
+
+  participants   GameParticipant[]
+  moves          GameMove[]
+
+  @@index([status, startedAt])
+}
+
+model GameParticipant {
+  id            Int     @id @default(autoincrement())
+  gameId        Int
+  userId        Int
+  team          Int     // 1 | 2
+  color         String  // 'w' | 'b'
+  boardIndex    Int     // 0 для team, 0/1 для bughouse
+  moveSlot      Int     @default(0) // порядок хода в team-режиме
+  ratingBefore  Int
+  ratingAfter   Int?
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, userId])
+  @@index([userId, gameId])
+}
+
+model GameMove {
+  id          Int    @id @default(autoincrement())
+  gameId      Int
+  boardIndex  Int
+  ply         Int
+  userId      Int
+  from        String
+  to          String
+  promotion   String?
+  dropPiece   String?
+  fenAfter    String
+  clocksAfter String? // JSON "[wMs,bMs]" или null при игре без часов
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([gameId, boardIndex, ply])
+}

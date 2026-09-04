@@ -23,6 +23,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://kaissa:kaissa-secret-change-me@db:5432/kaissa?schema=public}
       JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-string}
       ABANDON_SECONDS: ${ABANDON_SECONDS:-20}
+      ADMIN_USERNAMES: ${ADMIN_USERNAMES:-admin,ivan1}
       CORS_ORIGIN: "*"
     depends_on:
       db:

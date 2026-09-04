@@ -146,6 +146,76 @@ gamesRouter.get('/:id/pgn', requireAuth, async (req, res) => {
   res.type('application/x-chess-pgn').send(pgn);
 });
 
+/** Прокси для анализа на Lichess через их API https://lichess.org/api/import */
+gamesRouter.post('/:id/lichess-import', requireAuth, async (req, res) => {
+  const id = parseInt(String(req.params.id), 10);
+  if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
+  const game = await prisma.game.findUnique({
+    where: { id },
+    include: {
+      participants: { include: { user: true } },
+      moves: { orderBy: [{ ply: 'asc' }] },
+    },
+  });
+  if (!game) return void res.status(404).json({ error: 'Партия не найдена' });
+
+  const pgn = buildPgn(
+    {
+      id: game.id,
+      mode: game.mode as 'team' | 'bughouse',
+      result: game.result,
+      reason: game.reason,
+      baseMin: game.baseMin,
+      incSec: game.incSec,
+      noClock: game.noClock,
+      startedAt: game.startedAt,
+      endedAt: game.endedAt,
+      participants: game.participants.map((p) => ({
+        username: p.user.username,
+        team: p.team,
+        color: p.color,
+        boardIndex: p.boardIndex,
+        moveSlot: p.moveSlot,
+        ratingBefore: p.ratingBefore,
+      })),
+    },
+    game.moves.map((m) => ({
+      boardIndex: m.boardIndex,
+      ply: m.ply,
+      from: m.from,
+      to: m.to,
+      promotion: m.promotion,
+      dropPiece: m.dropPiece,
+    })),
+  );
+
+  try {
+    const boardIdx = parseInt(String(req.query.board ?? '0'), 10);
+    // Для багхауса в PGN две партии, разделенные \n\n[Event
+    let pgnToSend = pgn;
+    if (game.mode === 'bughouse') {
+      const parts = pgn.split(/\n(?=\[Event )/);
+      pgnToSend = parts[boardIdx] || parts[0];
+    }
+    const form = new URLSearchParams();
+    form.append('pgn', pgnToSend);
+
+    const lichessRes = await fetch('https://lichess.org/api/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+    });
+    if (!lichessRes.ok) {
+      const errTxt = await lichessRes.text();
+      return void res.status(502).json({ error: 'Lichess API import error', details: errTxt });
+    }
+    const lichessData = (await lichessRes.json()) as { url: string };
+    res.json({ url: lichessData.url });
+  } catch (e: any) {
+    res.status(500).json({ error: 'Ошибка отправки на Lichess: ' + e.message });
+  }
+});
+
 /** Одна партия (для replay) */
 gamesRouter.get('/:id', requireAuth, async (req, res) => {
   const id = parseInt(String(req.params.id), 10);

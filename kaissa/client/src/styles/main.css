@@ -1,118 +1,182 @@
 /* ============================================================
-   «Каисса» — дизайн-система «шахматный клуб».
-   Тёплая бумага, тёмно-зелёное сукно, латунный акцент.
-   Никаких градиентов и glow: тонкие рамки, тихие тени.
+   «Каисса» — дизайн-система шахматного клуба.
+   Поддержка темной темы (по умолчанию, Lichess style) и светлой.
    ============================================================ */
 
-:root {
-  /* Бумага / фон */
-  --bg: #f4f1e8;
+:root, [data-theme="light"] {
+  --bg: #edeade;
+  --bg-page: #f4f1e8;
   --bg-raised: #fbf9f3;
-  --bg-inset: #edeade;
+  --bg-inset: #e5e2d3;
+  --bg-card: #fbf9f3;
 
-  /* Сукно (тёмные панели, топбар, кнопки-действия) */
-  --felt: #1f4438;
-  --felt-deep: #173630;
-  --felt-soft: #2a5a4b;
+  --felt: #244b3e;
+  --felt-deep: #1a382e;
+  --felt-soft: #2e5f4f;
 
-  /* Латунь (акцент) */
-  --brass: #b08d3e;
+  --brass: #b89344;
   --brass-strong: #96742d;
-  --brass-soft: #d6bd7e;
+  --brass-soft: #d8c28b;
 
-  /* Текст */
-  --ink: #26231c;
+  --ink: #1f1c16;
   --ink-soft: #55503f;
-  --ink-faint: #8a8570;
+  --ink-faint: #857f6a;
   --paper: #fbf9f3;
 
-  /* Линии */
-  --line: #d9d4c2;
+  --line: #d8d3bf;
   --line-strong: #b8b19a;
 
-  /* Статусы */
   --ok: #2e7d4f;
-  --warn: #b3541e;
-  --bad: #a33327;
-  --info: #3a6ea5;
+  --warn: #b85d19;
+  --bad: #b3362a;
+  --info: #356ba3;
 
-  /* Радиусы */
   --r-s: 6px;
   --r-m: 10px;
+  --r-l: 14px;
 
-  /* Шрифты */
   --font-display: 'Spectral', Georgia, serif;
-  --font-ui: 'IBM Plex Sans', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --font-ui: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
 
-  /* Тени — очень тихие */
-  --shadow-s: 0 1px 2px rgba(38, 35, 28, 0.06);
-  --shadow-m: 0 2px 8px rgba(38, 35, 28, 0.08), 0 1px 2px rgba(38, 35, 28, 0.05);
+  --shadow-s: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-m: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-l: 0 12px 32px rgba(0, 0, 0, 0.16);
+
+  --board-light: #edd6b1;
+  --board-dark: #b88b4a;
+}
+
+[data-theme="dark"] {
+  --bg: #161512;
+  --bg-page: #161512;
+  --bg-raised: #262421;
+  --bg-inset: #1d1b18;
+  --bg-card: #201e1a;
+
+  --felt: #1a382e;
+  --felt-deep: #12241e;
+  --felt-soft: #244b3e;
+
+  --brass: #c9a654;
+  --brass-strong: #b59240;
+  --brass-soft: #e2c98a;
+
+  --ink: #e8e6e3;
+  --ink-soft: #b0aba1;
+  --ink-faint: #757168;
+  --paper: #fbf9f3;
+
+  --line: #383530;
+  --line-strong: #4f4b44;
+
+  --ok: #4ea86d;
+  --warn: #d97724;
+  --bad: #d94a3d;
+  --info: #4a8cd4;
+
+  --shadow-s: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-m: 0 4px 14px rgba(0, 0, 0, 0.5);
+  --shadow-l: 0 16px 36px rgba(0, 0, 0, 0.7);
+
+  --board-light: #deb887;
+  --board-dark: #8c5d2e;
 }
 
 * {
   box-sizing: border-box;
 }
 
-html,
-body {
+html, body {
   margin: 0;
   padding: 0;
 }
 
 body {
-  background: var(--bg);
+  background: var(--bg-page);
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
 }
 
-h1, h2, h3 {
+h1, h2, h3, h4 {
   font-family: var(--font-display);
   font-weight: 600;
   color: var(--ink);
   margin: 0;
+  letter-spacing: -0.01em;
 }
 
-h1 { font-size: 26px; }
-h2 { font-size: 20px; }
-h3 { font-size: 16px; font-family: var(--font-ui); font-weight: 600; }
+h1 { font-size: 28px; }
+h2 { font-size: 21px; }
+h3 { font-size: 17px; font-family: var(--font-ui); font-weight: 600; }
+h4 { font-size: 14px; font-family: var(--font-ui); font-weight: 600; }
 
-a { color: var(--felt); text-decoration: none; }
-a:hover { text-decoration: underline; }
+a {
+  color: var(--brass);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+a:hover {
+  color: var(--brass-soft);
+  text-decoration: underline;
+}
 
 button {
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   border-radius: var(--r-s);
   border: 1px solid var(--line-strong);
   background: var(--bg-raised);
   color: var(--ink);
   padding: 7px 14px;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.15s, border-color 0.15s, transform 0.05s;
 }
 
 button:hover {
-  background: #fff;
+  background: var(--bg-inset);
   border-color: var(--ink-soft);
 }
 
+button:active {
+  transform: translateY(1px);
+}
+
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
+  transform: none;
 }
 
 button.primary {
   background: var(--felt);
-  border-color: var(--felt-deep);
-  color: var(--paper);
+  border-color: var(--felt-soft);
+  color: #fff;
 }
 
-button.primary:hover {
+button.primary:hover:not(:disabled) {
   background: var(--felt-soft);
+  border-color: var(--brass);
+}
+
+button.brass {
+  background: var(--brass-strong);
+  border-color: var(--brass);
+  color: #fff;
+  font-weight: 600;
+}
+
+button.brass:hover:not(:disabled) {
+  background: var(--brass);
 }
 
 button.danger {
@@ -121,30 +185,61 @@ button.danger {
   border-color: color-mix(in srgb, var(--bad) 40%, transparent);
 }
 
-button.danger:hover {
-  background: color-mix(in srgb, var(--bad) 8%, transparent);
+button.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
 }
 
-input, select {
+button.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-soft);
+}
+button.ghost:hover {
+  background: var(--bg-raised);
+  color: var(--ink);
+}
+
+button.small {
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
+button.big {
+  padding: 10px 22px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+input, select, textarea {
   font-family: var(--font-ui);
   font-size: 14px;
-  padding: 8px 10px;
+  padding: 8px 11px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r-s);
-  background: #fff;
+  background: var(--bg-inset);
   color: var(--ink);
   width: 100%;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-input:focus, select:focus, button:focus-visible {
-  outline: 2px solid var(--brass);
-  outline-offset: 0;
-  border-color: var(--brass-strong);
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--brass);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brass) 25%, transparent);
 }
 
-.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
 
-/* ---------- Каркас страницы ---------- */
+.dim {
+  color: var(--ink-faint);
+}
+
+/* ============================================================
+   Каркас приложения и Topbar (Lichess style)
+   ============================================================ */
 
 .app-shell {
   min-height: 100vh;
@@ -153,140 +248,195 @@ input:focus, select:focus, button:focus-visible {
 }
 
 .topbar {
-  background: var(--felt);
-  color: var(--paper);
-  border-bottom: 3px solid var(--brass);
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
-  gap: 24px;
-  padding: 0 24px;
-  height: 54px;
+  gap: 20px;
+  padding: 0 20px;
+  height: 52px;
   position: sticky;
   top: 0;
   z-index: 50;
 }
 
-.topbar .brand {
-  font-family: var(--font-display);
-  font-size: 21px;
-  font-weight: 700;
-  color: var(--paper);
-  letter-spacing: 0.02em;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+[data-theme="light"] .topbar {
+  background: var(--felt);
+  color: #fff;
+  border-bottom: 2px solid var(--brass);
 }
 
-.topbar .brand:hover { text-decoration: none; }
+.topbar .brand {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: 0.03em;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+[data-theme="light"] .topbar .brand {
+  color: #fff;
+}
+.topbar .brand:hover {
+  text-decoration: none;
+}
 
 .topbar nav {
   display: flex;
-  gap: 4px;
+  gap: 3px;
   flex: 1;
 }
 
 .topbar nav a {
-  color: color-mix(in srgb, var(--paper) 75%, transparent);
+  color: var(--ink-soft);
   padding: 6px 12px;
   border-radius: var(--r-s);
-  font-size: 14px;
+  font-size: 13.5px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+[data-theme="light"] .topbar nav a {
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .topbar nav a:hover {
-  color: var(--paper);
-  background: color-mix(in srgb, var(--paper) 10%, transparent);
+  color: var(--ink);
+  background: var(--bg-inset);
   text-decoration: none;
+}
+[data-theme="light"] .topbar nav a:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .topbar nav a.router-link-active {
-  color: var(--paper);
-  background: color-mix(in srgb, var(--paper) 14%, transparent);
+  color: var(--brass);
+  background: var(--bg-inset);
+}
+[data-theme="light"] .topbar nav a.router-link-active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .topbar .me {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 14px;
+  gap: 10px;
+  font-size: 13.5px;
 }
 
-.topbar .me .rating-chip {
-  background: color-mix(in srgb, var(--brass) 30%, transparent);
+.topbar .rating-chip {
+  background: color-mix(in srgb, var(--brass) 20%, transparent);
   border: 1px solid var(--brass);
-  color: var(--brass-soft);
-  padding: 2px 8px;
+  color: var(--brass);
+  padding: 1px 7px;
   border-radius: 999px;
-  font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 600;
+}
+[data-theme="light"] .topbar .rating-chip {
+  color: var(--brass-soft);
+}
+
+.theme-toggle {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  padding: 6px 9px;
+  border-radius: var(--r-s);
+}
+.theme-toggle:hover {
+  background: var(--bg-inset);
+  color: var(--ink);
 }
 
 main.page {
   flex: 1;
   width: 100%;
-  max-width: 1180px;
+  max-width: 1280px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 24px 20px 48px;
 }
 
-/* ---------- Панели / карточки ---------- */
+/* ============================================================
+   Панели и карточки
+   ============================================================ */
 
 .panel {
-  background: var(--bg-raised);
+  background: var(--bg-card);
   border: 1px solid var(--line);
   border-radius: var(--r-m);
   box-shadow: var(--shadow-s);
+  overflow: hidden;
 }
 
 .panel .panel-head {
-  padding: 12px 16px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--line);
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  background: color-mix(in srgb, var(--bg-card) 95%, var(--bg-inset));
+}
+
+.panel .panel-head h2, .panel .panel-head h3 {
+  font-size: 17px;
 }
 
 .panel .panel-head .hint {
   color: var(--ink-faint);
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .panel .panel-body {
-  padding: 16px;
+  padding: 18px;
 }
 
-/* ---------- Таблицы ---------- */
-
+/* Таблицы */
 table.club {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 13.5px;
 }
 
 table.club th {
   text-align: left;
-  font-size: 12px;
+  font-size: 11.5px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: var(--ink-faint);
-  padding: 8px 12px;
+  padding: 9px 12px;
   border-bottom: 1px solid var(--line);
   font-weight: 600;
 }
 
 table.club td {
-  padding: 10px 12px;
+  padding: 11px 12px;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
 }
 
-table.club tr:last-child td { border-bottom: none; }
-table.club tr:hover td { background: color-mix(in srgb, var(--brass) 6%, transparent); }
+table.club tr:last-child td {
+  border-bottom: none;
+}
 
-/* ---------- Мелочи ---------- */
+table.club tr:hover td {
+  background: color-mix(in srgb, var(--brass) 5%, transparent);
+}
 
 .empty {
-  padding: 32px 16px;
+  padding: 40px 20px;
   text-align: center;
   color: var(--ink-faint);
   font-size: 14px;
@@ -295,33 +445,48 @@ table.club tr:hover td { background: color-mix(in srgb, var(--brass) 6%, transpa
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
-  font-size: 12px;
-  padding: 2px 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 2px 9px;
   color: var(--ink-soft);
-  background: var(--bg-raised);
+  background: var(--bg-inset);
 }
 
-.badge.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
-.badge.off { color: var(--ink-faint); }
+.badge.on {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+}
+
+.badge.admin {
+  color: var(--brass);
+  border-color: var(--brass);
+  background: color-mix(in srgb, var(--brass) 12%, transparent);
+}
 
 .dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--ink-faint);
   display: inline-block;
+  flex-shrink: 0;
 }
 
-.dot.on { background: var(--ok); }
+.dot.on {
+  background: var(--ok);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--ok) 60%, transparent);
+}
 
 .field-label {
   display: block;
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 500;
   color: var(--ink-soft);
-  margin-bottom: 4px;
+  margin-bottom: 5px;
 }
 
 .form-row {
@@ -335,69 +500,135 @@ table.club tr:hover td { background: color-mix(in srgb, var(--brass) 6%, transpa
 }
 
 /* ============================================================
-   Chessground: тема «тёплое дерево».
-   Селекторы — под кастомные элементы chessground
-   (cg-container / cg-board / square / piece / coords).
+   Модальные окна
+   ============================================================ */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.modal {
+  background: var(--bg-card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-l);
+  box-shadow: var(--shadow-l);
+  width: 100%;
+  max-width: 620px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-head {
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-head h2 {
+  font-size: 20px;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  color: var(--ink-faint);
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+}
+.modal-close:hover {
+  color: var(--ink);
+}
+
+.modal-body {
+  padding: 22px;
+}
+
+.modal-foot {
+  padding: 14px 22px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  background: color-mix(in srgb, var(--bg-card) 96%, var(--bg-inset));
+}
+
+/* ============================================================
+   Chessground тема: клетки + подсветка
    ============================================================ */
 
 .cg-wrap {
   width: 100%;
   aspect-ratio: 1;
   box-sizing: border-box;
+  box-shadow: var(--shadow-m);
 }
 
 cg-board {
-  background-color: #e9d3ab;
-  /* Шахматная сетка 8×8: каждая «плитка» 25% содержит 2×2 клетки */
-  background-image: repeating-conic-gradient(#b58767 0% 25%, #e9d3ab 0% 50%);
+  background-color: var(--board-light);
+  background-image: repeating-conic-gradient(var(--board-dark) 0% 25%, var(--board-light) 0% 50%);
   background-size: 25% 25%;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 cg-board square.last-move {
-  background-color: rgba(176, 141, 62, 0.42);
+  background-color: rgba(200, 165, 60, 0.42);
 }
 
 cg-board square.selected {
-  background-color: rgba(176, 141, 62, 0.58);
+  background-color: rgba(200, 165, 60, 0.65);
 }
 
 cg-board square.move-dest {
-  background: radial-gradient(rgba(38, 35, 28, 0.3) 20%, rgba(38, 35, 28, 0) 22%);
+  background: radial-gradient(rgba(30, 25, 20, 0.35) 22%, rgba(0, 0, 0, 0) 24%);
+}
+[data-theme="dark"] cg-board square.move-dest {
+  background: radial-gradient(rgba(255, 255, 255, 0.4) 22%, rgba(0, 0, 0, 0) 24%);
 }
 
 cg-board square.move-dest:hover {
-  background: rgba(176, 141, 62, 0.4);
+  background: rgba(200, 165, 60, 0.45);
 }
 
 cg-board square.oc.move-dest {
-  background: radial-gradient(transparent 0%, transparent 78%, rgba(163, 51, 39, 0.45) 79%);
+  background: radial-gradient(transparent 0%, transparent 76%, rgba(217, 74, 61, 0.5) 78%);
 }
 
 cg-board square.check {
-  background: radial-gradient(ellipse at center, rgba(163, 51, 39, 0.85) 0%, rgba(163, 51, 39, 0.35) 55%, rgba(163, 51, 39, 0) 85%);
+  background: radial-gradient(ellipse at center, rgba(217, 74, 61, 0.9) 0%, rgba(217, 74, 61, 0.4) 55%, rgba(0, 0, 0, 0) 85%);
 }
 
-/* Координаты */
 .cg-wrap coords {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 9.5px;
   font-weight: 600;
-  letter-spacing: 0.02em;
 }
 
 .orientation-white .ranks coord:nth-child(odd),
 .orientation-white .files coord:nth-child(even),
 .orientation-black .ranks coord:nth-child(even),
 .orientation-black .files coord:nth-child(odd) {
-  color: rgba(38, 35, 28, 0.6);
+  color: var(--board-dark);
 }
 
 .orientation-white .ranks coord:nth-child(even),
 .orientation-white .files coord:nth-child(odd),
 .orientation-black .ranks coord:nth-child(odd),
 .orientation-black .files coord:nth-child(even) {
-  color: rgba(251, 249, 243, 0.9);
+  color: var(--board-light);
 }
 
 /* ============================================================
@@ -407,67 +638,69 @@ cg-board square.check {
 .pocket {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 4px;
+  gap: 5px;
   background: var(--bg-inset);
   border: 1px solid var(--line);
   border-radius: var(--r-s);
-  padding: 5px;
+  padding: 6px;
   width: 100%;
-  box-sizing: border-box;
 }
 
 .pocket .slot {
   aspect-ratio: 1;
-  background: #fff;
+  background: var(--bg-raised);
   border: 1px solid var(--line);
   border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
+  transition: all 0.12s;
 }
 
 .pocket .slot.draggable {
   cursor: pointer;
 }
-
 .pocket .slot.draggable:hover {
-  border-color: var(--brass-strong);
-  background: #fdf6e3;
+  border-color: var(--brass);
+  background: color-mix(in srgb, var(--brass) 15%, var(--bg-raised));
+  transform: translateY(-1px);
 }
 
 .pocket .slot.selected-drop {
-  border-color: var(--brass-strong);
-  box-shadow: inset 0 0 0 2px var(--brass);
-  background: #fdf6e3;
+  border-color: var(--brass);
+  box-shadow: 0 0 0 2px var(--brass);
+  background: color-mix(in srgb, var(--brass) 22%, var(--bg-raised));
 }
 
 .pocket .slot img {
-  width: 84%;
-  height: 84%;
+  width: 82%;
+  height: 82%;
   pointer-events: none;
 }
 
 .pocket .slot .count {
   position: absolute;
-  right: 2px;
-  bottom: 1px;
+  right: 3px;
+  bottom: 2px;
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
-  color: var(--ink-soft);
-  background: rgba(251, 249, 243, 0.85);
+  color: var(--ink);
+  background: var(--bg-card);
+  border: 1px solid var(--line);
   border-radius: 3px;
-  padding: 0 3px;
+  padding: 0 4px;
+  line-height: 1.2;
 }
 
 .pocket .slot.empty-slot {
   background: transparent;
   border-style: dashed;
+  opacity: 0.4;
 }
 
-
-/* Скроллбар — тихий */
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 6px; }
+/* Скроллбары */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }

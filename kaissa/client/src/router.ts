@@ -12,6 +12,7 @@ export const router = createRouter({
     { path: '/replay/:id', name: 'replay', component: () => import('./pages/ReplayPage.vue') },
     { path: '/players/:username', name: 'profile', component: () => import('./pages/ProfilePage.vue') },
     { path: '/leaderboard', name: 'leaderboard', component: () => import('./pages/LeaderboardPage.vue') },
+    { path: '/admin', name: 'admin', component: () => import('./pages/AdminPage.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 });

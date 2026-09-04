@@ -1,15 +1,15 @@
 FROM node:22-alpine AS build
 WORKDIR /app
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 
-# 1) Собираем shared-пакет
-COPY shared/package.json shared/tsconfig.json shared/index.ts ./shared/
-RUN cd shared && npm install && npm run build
+# Копируем готовый shared
+COPY shared ./shared
 
-# 2) Зависимости клиента
+# Зависимости клиента
 COPY client/package.json ./client/
-RUN cd client && npm install
+RUN cd client && npm config set strict-ssl false && npm install
 
-# 3) Сборка SPA
+# Сборка SPA
 COPY client ./client
 RUN cd client && npm run build
 

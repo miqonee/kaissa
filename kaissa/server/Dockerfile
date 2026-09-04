@@ -1,15 +1,11 @@
 FROM node:22-alpine AS build
 WORKDIR /app
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 
-# 1) Собираем shared-пакет (file-зависимость сервера)
-COPY shared/package.json shared/tsconfig.json shared/index.ts ./shared/
-RUN cd shared && npm install && npm run build
-
-# 2) Зависимости сервера (включая копию shared с dist)
+COPY shared ./shared
 COPY server/package.json ./server/
-RUN cd server && npm install
+RUN cd server && npm config set strict-ssl false && npm install
 
-# 3) Сборка сервера
 COPY server/tsconfig.json server/tsconfig.build.json ./server/
 COPY server/prisma ./server/prisma
 COPY server/src ./server/src
@@ -18,17 +14,16 @@ RUN cd server && npx prisma generate && npm run build
 FROM node:22-alpine
 WORKDIR /app/server
 ENV NODE_ENV=production
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 
-# shared уже собран (с dist)
-COPY --from=build /app/shared /app/shared
-
-# зависимости сервера (prisma CLI — в dependencies для migrate deploy)
+COPY shared /app/shared
 COPY server/package.json ./
-RUN npm install --omit=dev
+RUN npm config set strict-ssl false && npm install --omit=dev
 
+# Копируем уже сгенерированный Prisma Client и query engine из build-стадии
+COPY --from=build /app/server/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build /app/server/node_modules/@prisma ./node_modules/@prisma
 COPY server/prisma ./prisma
-RUN npx prisma generate
-
 COPY --from=build /app/server/dist ./dist
 
 EXPOSE 4000

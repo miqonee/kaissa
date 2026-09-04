@@ -25,6 +25,15 @@ const allReady = computed(() => lobby.value?.players.length === 4 && lobby.value
 const offlinePlayers = computed(() => lobby.value?.players.filter((p) => !p.online) ?? []);
 const link = computed(() => `${location.origin}/lobby/${lobbyId.value}`);
 
+const toastText = ref('');
+let toastTimer: number | undefined;
+
+function showNotification(text: string) {
+  toastText.value = text;
+  clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => (toastText.value = ''), 2500);
+}
+
 function scrollChat(): void {
   setTimeout(() => {
     if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
@@ -54,13 +63,6 @@ onMounted(() => {
   socket.on('lobby:closed', (reason) => {
     error.value = reason;
   });
-  socket.on('user:notif', (n) => {
-    if (n.type === 'lobby_invite') {
-      // Пользователь в другом лобби; показываем toast
-      toastText.value = `Вас зовут в «${n.lobbyName}»`;
-      toastAction.value = () => router.push(`/lobby/${n.lobbyId}`);
-    }
-  });
 });
 
 onBeforeUnmount(() => {
@@ -69,7 +71,6 @@ onBeforeUnmount(() => {
   socket.off('lobby:chat');
   socket.off('lobby:started');
   socket.off('lobby:closed');
-  socket.off('user:notif');
 });
 
 function setReady(): void {
@@ -77,7 +78,9 @@ function setReady(): void {
 }
 
 function kick(userId: number): void {
-  if (confirm('Исключить игрока?')) socket.emit('lobby:kick', userId);
+  if (confirm('Исключить этого игрока из стола?')) {
+    socket.emit('lobby:kick', userId);
+  }
 }
 
 function summon(): void {
@@ -85,15 +88,14 @@ function summon(): void {
     void Notification.requestPermission();
   }
   socket.emit('lobby:summon');
-  toastText.value = 'Участники призваны';
-  setTimeout(() => (toastText.value = ''), 2500);
+  showNotification('Участникам отправлено браузерное уведомление');
 }
 
 function start(): void {
   socket.emit('lobby:start', (ack) => {
     if (!ack.ok) {
       error.value = ack.error ?? 'Не удалось начать';
-      setTimeout(() => (error.value = ''), 3000);
+      setTimeout(() => (error.value = ''), 3500);
     }
   });
 }
@@ -107,197 +109,486 @@ function sendChat(): void {
 
 function copyLink(): void {
   void navigator.clipboard.writeText(link.value);
-  toastText.value = 'Ссылка скопирована';
-  setTimeout(() => (toastText.value = ''), 2000);
+  showNotification('Прямая ссылка скопирована');
 }
 
-const toastText = ref('');
-const toastAction = ref<(() => void) | null>(null);
+function copyCode(): void {
+  if (!lobby.value?.code) return;
+  void navigator.clipboard.writeText(lobby.value.code);
+  showNotification(`Код ${lobby.value.code} скопирован`);
+}
 
 function modeLabel(m: string): string {
-  return m === 'bughouse' ? 'Багхаус' : 'Одна доска 2×2';
+  return m === 'bughouse' ? 'Багхаус (2 доски)' : '2×2 (одна доска)';
 }
 </script>
 
 <template>
-  <div v-if="error && !lobby" class="empty">{{ error }}</div>
+  <div v-if="error && !lobby" class="empty">
+    <p>{{ error }}</p>
+    <router-link to="/" class="primary">На главную</router-link>
+  </div>
+
   <div v-else-if="lobby" class="lobby-page">
+    <!-- Блок заголовка стола с КРУПНЫМ кодом для подключения -->
+    <div class="lobby-hero panel">
+      <div class="hero-left">
+        <div class="hero-title-row">
+          <h1>{{ lobby.name }}</h1>
+          <span class="badge">{{ modeLabel(lobby.mode) }}</span>
+          <span class="badge mono">{{ timeControlLabel(lobby.timeControl) }}</span>
+        </div>
+        <p class="dim hero-desc">
+          Соберите 4 игроков за столом. При старте команды распределятся по рейтингу поровну (1+4 против 2+3).
+        </p>
+      </div>
+
+      <!-- Крупный код для входа -->
+      <div class="code-box">
+        <span class="code-label">Код стола для входа:</span>
+        <div class="code-display" @click="copyCode" title="Кликните, чтобы скопировать">
+          <span class="code-text mono">{{ lobby.code || '------' }}</span>
+          <span class="copy-icon">📋</span>
+        </div>
+        <div class="code-actions">
+          <button class="small ghost" @click="copyCode">Скопировать код</button>
+          <button class="small ghost" @click="copyLink">Скопировать ссылку</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Основная раскладка: Игроки слева + Чат справа -->
     <div class="lobby-layout">
-      <!-- Игроки -->
+      <!-- 4 слота игроков -->
       <section class="panel players-panel">
         <div class="panel-head">
-          <h2>{{ lobby.name }}</h2>
-          <div class="head-badges">
-            <span class="badge">{{ modeLabel(lobby.mode) }}</span>
-            <span class="badge mono">{{ timeControlLabel(lobby.timeControl) }}</span>
-          </div>
+          <h2>Игроки за столом</h2>
+          <span class="hint">{{ lobby.players.length }} из 4 за столом</span>
         </div>
+
         <div class="panel-body">
           <div class="slots">
-            <div v-for="(p, i) in lobby.players" :key="p.userId" class="slot-row" :class="{ ready: p.ready }">
-              <span class="slot-num mono">{{ i + 1 }}</span>
-              <span class="dot" :class="{ on: p.online }" :title="p.online ? 'онлайн' : 'офлайн'"></span>
-              <span class="slot-name">
-                {{ p.username }}
-                <span v-if="p.host" class="host-mark" title="хост">★</span>
-              </span>
-              <span class="slot-rating mono">{{ p.rating }}</span>
-              <span class="badge" :class="p.ready ? 'on' : 'off'">{{ p.ready ? 'готов' : 'ждём' }}</span>
-              <button v-if="isHost && p.userId !== me?.id" class="small danger" @click="kick(p.userId)">×</button>
+            <div
+              v-for="(p, i) in lobby.players"
+              :key="p.userId"
+              class="slot-card"
+              :class="{ 'is-ready': p.ready, 'is-me': p.userId === me?.id }"
+            >
+              <div class="slot-idx mono">{{ i + 1 }}</div>
+              <div class="slot-avatar">
+                <span class="dot" :class="{ on: p.online }" :title="p.online ? 'В сети' : 'Не в сети'"></span>
+              </div>
+              <div class="slot-info">
+                <div class="slot-name-row">
+                  <span class="slot-name">{{ p.username }}</span>
+                  <span v-if="p.host" class="host-crown" title="Создатель стола">★ Хост</span>
+                </div>
+                <span class="slot-rating mono dim">Рейтинг: {{ p.rating }}</span>
+              </div>
+
+              <div class="slot-status">
+                <span class="ready-badge" :class="p.ready ? 'ready' : 'waiting'">
+                  {{ p.ready ? 'Готов ✓' : 'Ждём…' }}
+                </span>
+                <button
+                  v-if="isHost && p.userId !== me?.id"
+                  class="small danger"
+                  title="Исключить"
+                  @click="kick(p.userId)"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
-            <div v-for="i in 4 - lobby.players.length" :key="'empty' + i" class="slot-row empty-slot-row">
-              <span class="slot-num mono">{{ lobby.players.length + i }}</span>
-              <span class="slot-name dim">свободное место</span>
+
+            <!-- Пустые слоты -->
+            <div
+              v-for="i in 4 - lobby.players.length"
+              :key="'empty' + i"
+              class="slot-card empty-slot"
+            >
+              <div class="slot-idx mono">{{ lobby.players.length + i }}</div>
+              <div class="slot-info">
+                <span class="slot-name dim">Ожидание игрока…</span>
+                <span class="dim small-hint">Отправьте код <strong>{{ lobby.code }}</strong></span>
+              </div>
             </div>
           </div>
 
-          <div class="invite-row">
-            <button @click="copyLink">Скопировать ссылку</button>
+          <!-- Нижняя панель действий со столом -->
+          <div class="lobby-tools">
             <button
               v-if="offlinePlayers.length"
-              class="summon"
+              class="brass"
               @click="summon"
-              title="Отправить уведомление офлайн-участникам"
+              title="Отправить браузерное уведомление офлайн-игрокам"
             >
-              Призвать ({{ offlinePlayers.length }})
+              🔔 Призвать игроков ({{ offlinePlayers.length }} не в сети)
             </button>
           </div>
         </div>
       </section>
 
-      <!-- Чат -->
+      <!-- Чат лобби -->
       <section class="panel chat-panel">
-        <div class="panel-head"><h3>Чат лобби</h3></div>
+        <div class="panel-head">
+          <h3>Чат стола</h3>
+          <span class="hint">{{ chat.length }} сообщений</span>
+        </div>
         <div class="panel-body chat-body">
           <div ref="chatBox" class="chat-log">
             <div v-for="m in chat" :key="m.id" class="chat-msg">
-              <span class="chat-user">{{ m.username }}:</span> {{ m.text }}
+              <span class="chat-user">{{ m.username }}:</span>
+              <span class="chat-text">{{ m.text }}</span>
             </div>
-            <div v-if="!chat.length" class="dim small-hint">Сообщений пока нет.</div>
+            <div v-if="!chat.length" class="empty-chat dim">
+              Сообщений пока нет. Напишите что-нибудь игрокам!
+            </div>
           </div>
-          <form class="chat-input" @submit.prevent="sendChat">
-            <input v-model="chatText" placeholder="Сообщение…" maxlength="300" />
-            <button class="primary">→</button>
+          <form class="chat-input-row" @submit.prevent="sendChat">
+            <input v-model="chatText" placeholder="Написать в стол…" maxlength="300" />
+            <button type="submit" class="primary">Отправить</button>
           </form>
         </div>
       </section>
     </div>
 
-    <!-- Старт -->
-    <div class="start-bar">
-      <p class="dim" v-if="lobby.players.length < 4">Ждём игроков: {{ lobby.players.length }} из 4. Отправьте им ссылку или код.</p>
-      <p class="dim" v-else-if="!allReady">Все должны нажать «Готов».</p>
-      <p class="dim" v-else>Команды будут сформированы по рейтингу автоматически.</p>
-      <button v-if="isHost" class="primary big" :disabled="!allReady" @click="start">Начать игру</button>
-      <span v-else class="dim small-hint">Хост начнёт игру, когда все будут готовы.</span>
-      <button class="ready-btn" :class="{ 'ready-on': iAmReady }" @click="setReady">
-        {{ iAmReady ? 'Готов ✓' : 'Я готов' }}
-      </button>
+    <!-- Нижняя полоса управления готовностью и стартом (Lichess style) -->
+    <div class="start-bar panel">
+      <div class="start-info">
+        <p v-if="lobby.players.length < 4" class="dim">
+          Для начала матча нужно 4 игрока. Сейчас: {{ lobby.players.length }}/4.
+        </p>
+        <p v-else-if="!allReady" class="dim">
+          Все игроки должны подтвердить готовность.
+        </p>
+        <p v-else class="ok-hint">
+          Все готовы! Хост может запускать партию.
+        </p>
+      </div>
+
+      <div class="start-btns">
+        <button
+          class="ready-toggle-btn"
+          :class="{ active: iAmReady }"
+          @click="setReady"
+        >
+          {{ iAmReady ? 'Я готов ✓' : 'Нажать «Готов»' }}
+        </button>
+
+        <button
+          v-if="isHost"
+          class="primary big"
+          :disabled="!allReady"
+          @click="start"
+        >
+          Начать игру
+        </button>
+      </div>
     </div>
 
+    <!-- Всплывающее уведомление -->
     <div v-if="toastText" class="toast">{{ toastText }}</div>
   </div>
-  <div v-else class="empty">Загрузка лобби…</div>
+
+  <div v-else class="empty">Загрузка стола…</div>
 </template>
 
 <style scoped>
-.lobby-layout {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
+.lobby-page {
+  display: flex;
+  flex-direction: column;
   gap: 20px;
 }
 
-@media (max-width: 900px) {
-  .lobby-layout { grid-template-columns: 1fr; }
+.lobby-hero {
+  padding: 22px 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  border-color: color-mix(in srgb, var(--brass) 30%, var(--line));
 }
 
-.head-badges { display: flex; gap: 8px; }
-
-.slots { display: flex; flex-direction: column; gap: 8px; }
-
-.slot-row {
+.hero-title-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-s);
-  background: #fff;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
 }
 
-.slot-row.ready { border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.hero-title-row h1 {
+  font-size: 24px;
+}
 
-.slot-num { color: var(--ink-faint); width: 14px; }
-.slot-name { font-weight: 500; flex: 1; }
-.slot-rating { color: var(--ink-soft); }
-.host-mark { color: var(--brass-strong); margin-left: 2px; }
+.hero-desc {
+  margin: 0;
+  max-width: 580px;
+}
 
-.empty-slot-row { border-style: dashed; background: transparent; }
-.empty-slot-row .slot-name { font-weight: 400; }
-
-.invite-row {
+/* Код лобби */
+.code-box {
   display: flex;
-  gap: 10px;
-  margin-top: 14px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+@media (max-width: 768px) {
+  .code-box {
+    align-items: flex-start;
+  }
 }
 
-button.summon {
-  background: var(--brass);
-  border-color: var(--brass-strong);
-  color: #fff;
-  font-weight: 500;
-}
-
-button.summon:hover { background: var(--brass-strong); }
-
-/* Чат */
-.chat-body { display: flex; flex-direction: column; height: 320px; }
-.chat-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px; }
-
-.chat-msg { font-size: 14px; }
-.chat-user { font-weight: 600; color: var(--felt); }
-
-.chat-input { display: flex; gap: 8px; margin-top: 10px; }
-
-.dim { color: var(--ink-faint); font-size: 14px; }
-.small-hint { font-size: 13px; }
-
-/* Старт-бар */
-.start-bar {
-  margin-top: 20px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  justify-content: center;
-  padding: 14px;
-  background: var(--bg-raised);
-  border: 1px solid var(--line);
-  border-radius: var(--r-m);
-}
-
-button.big { padding: 10px 24px; font-size: 15px; }
-
-.ready-btn {
-  border-color: var(--line-strong);
+.code-label {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
   font-weight: 600;
 }
 
-.ready-btn.ready-on {
-  background: color-mix(in srgb, var(--ok) 12%, #fff);
-  border-color: var(--ok);
+.code-display {
+  background: var(--bg-inset);
+  border: 2px dashed var(--brass);
+  padding: 8px 18px;
+  border-radius: var(--r-m);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.15s;
+}
+
+.code-display:hover {
+  background: color-mix(in srgb, var(--brass) 12%, var(--bg-inset));
+  border-color: var(--brass-strong);
+  transform: scale(1.02);
+}
+
+.code-text {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  color: var(--brass);
+}
+
+.copy-icon {
+  font-size: 16px;
+  opacity: 0.7;
+}
+
+.code-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Сетка страницы */
+.lobby-layout {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .lobby-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Слоты */
+.slots {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.slot-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--bg-inset);
+  transition: all 0.15s;
+}
+
+.slot-card.is-ready {
+  border-color: color-mix(in srgb, var(--ok) 45%, var(--line));
+  background: color-mix(in srgb, var(--ok) 6%, var(--bg-inset));
+}
+
+.slot-card.is-me {
+  box-shadow: inset 0 0 0 1.5px var(--brass);
+}
+
+.slot-idx {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink-faint);
+  width: 20px;
+}
+
+.slot-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.slot-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slot-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.host-crown {
+  color: var(--brass);
+  font-size: 11.5px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--brass) 15%, transparent);
+  padding: 1px 7px;
+  border-radius: 4px;
+}
+
+.slot-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ready-badge {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid;
+}
+
+.ready-badge.ready {
   color: var(--ok);
+  border-color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.ready-badge.waiting {
+  color: var(--ink-faint);
+  border-color: var(--line-strong);
+  background: transparent;
+}
+
+.empty-slot {
+  border-style: dashed;
+  background: transparent;
+  opacity: 0.6;
+}
+
+.lobby-tools {
+  margin-top: 16px;
+  display: flex;
+  gap: 10px;
+}
+
+/* Чат */
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-body {
+  height: 380px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-log {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.chat-msg {
+  font-size: 13.5px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.chat-user {
+  font-weight: 600;
+  color: var(--brass);
+  margin-right: 6px;
+}
+
+.empty-chat {
+  margin: auto;
+  font-size: 13px;
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Старт-бар */
+.start-bar {
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.start-info p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.ok-hint {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.start-btns {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ready-toggle-btn {
+  padding: 9px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  border-color: var(--line-strong);
+}
+
+.ready-toggle-btn.active {
+  background: color-mix(in srgb, var(--ok) 16%, var(--bg-raised));
+  color: var(--ok);
+  border-color: var(--ok);
 }
 
 .toast {
   position: fixed;
-  bottom: 20px;
+  bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--felt-deep);
-  color: var(--paper);
+  background: var(--bg-raised);
+  color: var(--ink);
+  border: 1px solid var(--brass);
   border-radius: var(--r-m);
-  padding: 10px 18px;
-  z-index: 100;
+  padding: 12px 20px;
+  box-shadow: var(--shadow-l);
+  z-index: 2000;
   font-size: 14px;
 }
 </style>

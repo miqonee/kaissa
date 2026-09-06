@@ -108,7 +108,8 @@ function config() {
         }
       },
     },
-    animation: { enabled: !props.mini, duration: 130 },
+    // Плавное скольжение фигур: 200 мс — чётко читается ход и не затягивается
+    animation: { enabled: !props.mini, duration: 200 },
     highlight: { lastMove: true, check: true },
     drawable: { enabled: false, visible: false },
   };
@@ -120,7 +121,15 @@ onMounted(() => {
 });
 
 watch(
-  () => [props.fen, props.orientation, props.movableColor, props.dests, props.lastMove, props.checkSquare, props.dropPiece],
+  () => [
+    props.fen,
+    props.orientation,
+    props.movableColor,
+    props.dests,
+    props.lastMove,
+    props.checkSquare,
+    props.dropPiece,
+  ],
   () => cg?.set(config() as never),
   { deep: true },
 );

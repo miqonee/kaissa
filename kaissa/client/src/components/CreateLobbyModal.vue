@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { ref } from 'vue';
 import { MODE_INFO, type GameMode, type TimeControl } from 'shared';
+import AppIcon from './AppIcon.vue';
 
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -42,7 +43,9 @@ function submit() {
     <div class="modal create-modal">
       <div class="modal-head">
         <h2>Создание лобби</h2>
-        <button class="modal-close" @click="emit('close')">✕</button>
+        <button class="modal-close" @click="emit('close')" aria-label="Закрыть">
+          <AppIcon name="close" :size="18" />
+        </button>
       </div>
 
       <div class="modal-body">
@@ -69,7 +72,9 @@ function submit() {
             >
               <div class="mode-card-head">
                 <span class="mode-title">{{ info.title }}</span>
-                <span v-if="selectedMode === info.mode" class="mode-check">✓</span>
+                <span v-if="selectedMode === info.mode" class="mode-check">
+                  <AppIcon name="check" :size="13" :stroke-width="2.6" />
+                </span>
               </div>
               <p class="mode-short">{{ info.short }}</p>
               <ul class="mode-rules">
@@ -137,10 +142,10 @@ function submit() {
 }
 
 .mode-card {
-  border: 1.5px solid var(--line-strong);
+  border: 1.5px solid var(--line-2);
   border-radius: var(--r-m);
   padding: 14px;
-  background: var(--bg-inset);
+  background: var(--surface-inset);
   cursor: pointer;
   transition: all 0.15s;
   display: flex;
@@ -148,14 +153,14 @@ function submit() {
 }
 
 .mode-card:hover {
-  border-color: var(--brass);
-  background: color-mix(in srgb, var(--brass) 6%, var(--bg-inset));
+  border-color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 6%, var(--surface-inset));
 }
 
 .mode-card.active {
-  border-color: var(--brass);
-  box-shadow: 0 0 0 2px var(--brass);
-  background: var(--bg-raised);
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 2px var(--accent-2);
+  background: var(--surface-2);
 }
 
 .mode-card-head {
@@ -173,21 +178,19 @@ function submit() {
 }
 
 .mode-check {
-  background: var(--brass);
-  color: #fff;
+  background: var(--accent-2);
+  color: var(--accent-ink);
   width: 20px;
   height: 20px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  font-weight: bold;
 }
 
 .mode-short {
   font-size: 12.5px;
-  color: var(--ink-soft);
+  color: var(--ink-2);
   margin: 0 0 10px;
   line-height: 1.4;
 }
@@ -196,7 +199,7 @@ function submit() {
   margin: 0;
   padding-left: 16px;
   font-size: 11.5px;
-  color: var(--ink-faint);
+  color: var(--ink-3);
   line-height: 1.45;
   display: flex;
   flex-direction: column;
@@ -212,21 +215,21 @@ function submit() {
 .tc-btn {
   padding: 8px 10px;
   border-radius: var(--r-s);
-  border: 1px solid var(--line-strong);
-  background: var(--bg-inset);
-  color: var(--ink-soft);
+  border: 1px solid var(--line-2);
+  background: var(--surface-inset);
+  color: var(--ink-2);
   font-size: 13px;
   font-weight: 500;
 }
 
 .tc-btn:hover {
-  border-color: var(--brass);
+  border-color: var(--accent-2);
   color: var(--ink);
 }
 
 .tc-btn.active {
-  border-color: var(--brass);
-  background: color-mix(in srgb, var(--brass) 16%, var(--bg-raised));
+  border-color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 16%, var(--surface-2));
   color: var(--ink);
   font-weight: 600;
 }

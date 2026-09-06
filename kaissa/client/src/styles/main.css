@@ -1,371 +1,205 @@
 /* ============================================================
-   «Каисса» — дизайн-система шахматного клуба.
-   Поддержка темной темы (по умолчанию, Lichess style) и светлой.
+   «Каисса» — точка входа стилей.
+   Порядок важен: токены → база → компоненты.
+   Файл подключён в main.ts ПОСЛЕ стилей chessground, поэтому
+   переопределения доски (см. раздел «Chessground») побеждают.
    ============================================================ */
 
-:root, [data-theme="light"] {
-  --bg: #edeade;
-  --bg-page: #f4f1e8;
-  --bg-raised: #fbf9f3;
-  --bg-inset: #e5e2d3;
-  --bg-card: #fbf9f3;
+@import './tokens.css';
+@import './base.css';
 
-  --felt: #244b3e;
-  --felt-deep: #1a382e;
-  --felt-soft: #2e5f4f;
+/* ============================================================
+   Кнопки
+   ============================================================ */
 
-  --brass: #b89344;
-  --brass-strong: #96742d;
-  --brass-soft: #d8c28b;
-
-  --ink: #1f1c16;
-  --ink-soft: #55503f;
-  --ink-faint: #857f6a;
-  --paper: #fbf9f3;
-
-  --line: #d8d3bf;
-  --line-strong: #b8b19a;
-
-  --ok: #2e7d4f;
-  --warn: #b85d19;
-  --bad: #b3362a;
-  --info: #356ba3;
-
-  --r-s: 6px;
-  --r-m: 10px;
-  --r-l: 14px;
-
-  --font-display: 'Spectral', Georgia, serif;
-  --font-ui: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'IBM Plex Mono', monospace;
-
-  --shadow-s: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --shadow-m: 0 4px 12px rgba(0, 0, 0, 0.1);
-  --shadow-l: 0 12px 32px rgba(0, 0, 0, 0.16);
-
-  --board-light: #edd6b1;
-  --board-dark: #b88b4a;
-}
-
-[data-theme="dark"] {
-  --bg: #161512;
-  --bg-page: #161512;
-  --bg-raised: #262421;
-  --bg-inset: #1d1b18;
-  --bg-card: #201e1a;
-
-  --felt: #1a382e;
-  --felt-deep: #12241e;
-  --felt-soft: #244b3e;
-
-  --brass: #c9a654;
-  --brass-strong: #b59240;
-  --brass-soft: #e2c98a;
-
-  --ink: #e8e6e3;
-  --ink-soft: #b0aba1;
-  --ink-faint: #757168;
-  --paper: #fbf9f3;
-
-  --line: #383530;
-  --line-strong: #4f4b44;
-
-  --ok: #4ea86d;
-  --warn: #d97724;
-  --bad: #d94a3d;
-  --info: #4a8cd4;
-
-  --shadow-s: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --shadow-m: 0 4px 14px rgba(0, 0, 0, 0.5);
-  --shadow-l: 0 16px 36px rgba(0, 0, 0, 0.7);
-
-  --board-light: #deb887;
-  --board-dark: #8c5d2e;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html, body {
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  background: var(--bg-page);
-  color: var(--ink);
-  font-family: var(--font-ui);
-  font-size: 14px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  min-height: 100vh;
-}
-
-h1, h2, h3, h4 {
-  font-family: var(--font-display);
-  font-weight: 600;
-  color: var(--ink);
-  margin: 0;
-  letter-spacing: -0.01em;
-}
-
-h1 { font-size: 28px; }
-h2 { font-size: 21px; }
-h3 { font-size: 17px; font-family: var(--font-ui); font-weight: 600; }
-h4 { font-size: 14px; font-family: var(--font-ui); font-weight: 600; }
-
-a {
-  color: var(--brass);
-  text-decoration: none;
-  transition: color 0.15s;
-}
-a:hover {
-  color: var(--brass-soft);
-  text-decoration: underline;
-}
-
-button {
+button,
+.button,
+a.button {
   font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 500;
+  line-height: 1.3;
   cursor: pointer;
   border-radius: var(--r-s);
-  border: 1px solid var(--line-strong);
-  background: var(--bg-raised);
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
   color: var(--ink);
   padding: 7px 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  transition: background 0.15s, border-color 0.15s, transform 0.05s;
+  gap: var(--gap-xs);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast),
+    transform 0.05s;
 }
 
-button:hover {
-  background: var(--bg-inset);
-  border-color: var(--ink-soft);
+button:hover,
+.button:hover,
+a.button:hover {
+  background: var(--surface-inset);
+  border-color: var(--ink-3);
+  text-decoration: none;
+  color: var(--ink);
 }
 
-button:active {
+button:active,
+.button:active {
   transform: translateY(1px);
 }
 
-button:disabled {
+button:disabled,
+.button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
   transform: none;
 }
 
-button.primary {
+/* Основная: сукно */
+button.primary,
+.button.primary {
   background: var(--felt);
-  border-color: var(--felt-soft);
+  border-color: var(--felt-2);
   color: #fff;
 }
 
-button.primary:hover:not(:disabled) {
-  background: var(--felt-soft);
-  border-color: var(--brass);
+button.primary:hover:not(:disabled),
+.button.primary:hover:not(:disabled) {
+  background: var(--felt-2);
+  border-color: var(--accent-2);
+  color: #fff;
 }
 
-button.brass {
-  background: var(--brass-strong);
-  border-color: var(--brass);
-  color: #fff;
+/* Акцент: латунь */
+button.brass,
+.button.brass {
+  background: var(--accent);
+  border-color: var(--accent-2);
+  color: var(--accent-ink);
   font-weight: 600;
 }
 
-button.brass:hover:not(:disabled) {
-  background: var(--brass);
+button.brass:hover:not(:disabled),
+.button.brass:hover:not(:disabled) {
+  background: var(--accent-2);
+  border-color: var(--accent-3);
+  color: var(--accent-ink);
 }
 
-button.danger {
+[data-theme='dark'] button.brass,
+[data-theme='dark'] .button.brass {
+  color: #16150f;
+}
+
+button.danger,
+.button.danger {
   background: transparent;
   color: var(--bad);
   border-color: color-mix(in srgb, var(--bad) 40%, transparent);
 }
 
-button.danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bad) 12%, transparent);
+button.danger:hover:not(:disabled),
+.button.danger:hover:not(:disabled) {
+  background: var(--bad-soft);
+  border-color: var(--bad);
+  color: var(--bad);
 }
 
-button.ghost {
+button.ghost,
+.button.ghost {
   background: transparent;
   border-color: transparent;
-  color: var(--ink-soft);
+  color: var(--ink-2);
 }
-button.ghost:hover {
-  background: var(--bg-raised);
+
+button.ghost:hover:not(:disabled),
+.button.ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--line);
   color: var(--ink);
 }
 
-button.small {
-  padding: 4px 9px;
+button.small,
+.button.small {
+  padding: 4px 10px;
   font-size: 12px;
+  border-radius: var(--r-xs);
+  gap: 4px;
 }
 
-button.big {
+button.big,
+.button.big {
   padding: 10px 22px;
   font-size: 15px;
   font-weight: 600;
 }
 
-input, select, textarea {
-  font-family: var(--font-ui);
-  font-size: 14px;
-  padding: 8px 11px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-s);
-  background: var(--bg-inset);
-  color: var(--ink);
+button.block,
+.button.block {
   width: 100%;
-  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-input:focus, select:focus, textarea:focus {
-  outline: none;
-  border-color: var(--brass);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brass) 25%, transparent);
-}
-
-.mono {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-.dim {
-  color: var(--ink-faint);
+/* Кнопка-иконка в интерфейсе (не в топбаре) */
+button.icon-only,
+.button.icon-only {
+  padding: 6px;
+  width: 32px;
+  height: 32px;
+  justify-content: center;
 }
 
 /* ============================================================
-   Каркас приложения и Topbar (Lichess style)
+   Формы
    ============================================================ */
 
-.app-shell {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.topbar {
-  background: var(--bg-raised);
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 0 20px;
-  height: 52px;
-  position: sticky;
-  top: 0;
-  z-index: 50;
-}
-
-[data-theme="light"] .topbar {
-  background: var(--felt);
-  color: #fff;
-  border-bottom: 2px solid var(--brass);
-}
-
-.topbar .brand {
-  font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--ink);
-  letter-spacing: 0.03em;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-[data-theme="light"] .topbar .brand {
-  color: #fff;
-}
-.topbar .brand:hover {
-  text-decoration: none;
-}
-
-.topbar nav {
-  display: flex;
-  gap: 3px;
-  flex: 1;
-}
-
-.topbar nav a {
-  color: var(--ink-soft);
-  padding: 6px 12px;
+input,
+select,
+textarea {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  padding: 8px 11px;
+  border: 1px solid var(--line-2);
   border-radius: var(--r-s);
-  font-size: 13.5px;
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-[data-theme="light"] .topbar nav a {
-  color: rgba(255, 255, 255, 0.78);
-}
-
-.topbar nav a:hover {
+  background: var(--surface-inset);
   color: var(--ink);
-  background: var(--bg-inset);
-  text-decoration: none;
-}
-[data-theme="light"] .topbar nav a:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.topbar nav a.router-link-active {
-  color: var(--brass);
-  background: var(--bg-inset);
-}
-[data-theme="light"] .topbar nav a.router-link-active {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.topbar .me {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13.5px;
-}
-
-.topbar .rating-chip {
-  background: color-mix(in srgb, var(--brass) 20%, transparent);
-  border: 1px solid var(--brass);
-  color: var(--brass);
-  padding: 1px 7px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-}
-[data-theme="light"] .topbar .rating-chip {
-  color: var(--brass-soft);
-}
-
-.theme-toggle {
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--ink-soft);
-  padding: 6px 9px;
-  border-radius: var(--r-s);
-}
-.theme-toggle:hover {
-  background: var(--bg-inset);
-  color: var(--ink);
-}
-
-main.page {
-  flex: 1;
   width: 100%;
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 24px 20px 48px;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-2) 25%, transparent);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--ink-3);
+}
+
+.field-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  margin-bottom: 5px;
+}
+
+.form-row {
+  margin-bottom: var(--gap-m);
+}
+
+.form-row:last-child {
+  margin-bottom: 0;
+}
+
+.error-text {
+  color: var(--bad);
+  font-size: 13px;
+  margin-top: var(--gap-xs);
 }
 
 /* ============================================================
@@ -373,7 +207,7 @@ main.page {
    ============================================================ */
 
 .panel {
-  background: var(--bg-card);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-m);
   box-shadow: var(--shadow-s);
@@ -381,29 +215,37 @@ main.page {
 }
 
 .panel .panel-head {
-  padding: 12px 18px;
+  padding: 12px var(--gap-m);
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  background: color-mix(in srgb, var(--bg-card) 95%, var(--bg-inset));
+  gap: var(--gap-s);
+  background: var(--surface-2);
+  flex-wrap: wrap;
 }
 
-.panel .panel-head h2, .panel .panel-head h3 {
-  font-size: 17px;
+.panel .panel-head h2,
+.panel .panel-head h3 {
+  font-size: 16px;
 }
 
-.panel .panel-head .hint {
-  color: var(--ink-faint);
+.panel .panel-head .hint,
+.panel .panel-head .sub {
+  color: var(--ink-3);
   font-size: 12.5px;
 }
 
 .panel .panel-body {
-  padding: 18px;
+  padding: var(--gap-m);
 }
 
-/* Таблицы */
+.panel .panel-body.tight {
+  padding: var(--gap-s);
+}
+
+/* ---------------- Таблицы ---------------- */
+
 table.club {
   width: 100%;
   border-collapse: collapse;
@@ -415,10 +257,11 @@ table.club th {
   font-size: 11.5px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--ink-faint);
+  color: var(--ink-3);
   padding: 9px 12px;
   border-bottom: 1px solid var(--line);
   font-weight: 600;
+  white-space: nowrap;
 }
 
 table.club td {
@@ -427,51 +270,89 @@ table.club td {
   vertical-align: middle;
 }
 
-table.club tr:last-child td {
+table.club tbody tr:last-child td {
   border-bottom: none;
 }
 
-table.club tr:hover td {
-  background: color-mix(in srgb, var(--brass) 5%, transparent);
+table.club tbody tr.row-link {
+  cursor: pointer;
+  transition: background var(--t-fast);
 }
 
-.empty {
-  padding: 40px 20px;
-  text-align: center;
-  color: var(--ink-faint);
-  font-size: 14px;
+table.club tbody tr.row-link:hover td {
+  background: var(--surface-hover);
 }
+
+table.club tbody tr.row-link:focus-visible {
+  outline: none;
+  box-shadow: inset var(--ring);
+}
+
+td.num,
+th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+td.actions,
+th.actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+td strong.player-name {
+  font-weight: 600;
+}
+
+/* ---------------- Бейджи и точки ---------------- */
 
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line-2);
   border-radius: 999px;
   font-size: 11.5px;
   font-weight: 500;
   padding: 2px 9px;
-  color: var(--ink-soft);
-  background: var(--bg-inset);
+  color: var(--ink-2);
+  background: var(--surface-inset);
+  white-space: nowrap;
 }
 
 .badge.on {
   color: var(--ok);
   border-color: color-mix(in srgb, var(--ok) 40%, transparent);
-  background: color-mix(in srgb, var(--ok) 10%, transparent);
+  background: var(--ok-soft);
+}
+
+.badge.accent {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-soft);
 }
 
 .badge.admin {
-  color: var(--brass);
-  border-color: var(--brass);
-  background: color-mix(in srgb, var(--brass) 12%, transparent);
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.badge.bad {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 40%, transparent);
+  background: var(--bad-soft);
+}
+
+.badge.dim {
+  color: var(--ink-3);
 }
 
 .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--ink-faint);
+  background: var(--ink-3);
   display: inline-block;
   flex-shrink: 0;
 }
@@ -481,22 +362,74 @@ table.club tr:hover td {
   box-shadow: 0 0 6px color-mix(in srgb, var(--ok) 60%, transparent);
 }
 
-.field-label {
-  display: block;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--ink-soft);
-  margin-bottom: 5px;
+/* Цвет стороны (белые/чёрные) — единый вид во всём приложении */
+.color-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: var(--r-xs);
+  white-space: nowrap;
 }
 
-.form-row {
-  margin-bottom: 14px;
+.color-tag::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
 }
 
-.error-text {
-  color: var(--bad);
-  font-size: 13px;
-  margin-top: 6px;
+.color-tag.w {
+  background: #fdfaf3;
+  color: #1d1b16;
+  border: 1px solid #c9c0a6;
+}
+
+.color-tag.w::before {
+  background: #fdfaf3;
+}
+
+.color-tag.b {
+  background: #22201c;
+  color: #f3efe6;
+  border: 1px solid #14120f;
+}
+
+.color-tag.b::before {
+  background: #22201c;
+}
+
+/* ---------------- Пустые состояния ---------------- */
+
+.empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 14px;
+}
+
+.empty .empty-title {
+  color: var(--ink-2);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+/* ---------------- Группы кнопок ---------------- */
+
+.btn-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-xs);
+  flex-wrap: wrap;
+}
+
+.btn-row.end {
+  justify-content: flex-end;
 }
 
 /* ============================================================
@@ -516,8 +449,8 @@ table.club tr:hover td {
 }
 
 .modal {
-  background: var(--bg-card);
-  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  border: 1px solid var(--line-2);
   border-radius: var(--r-l);
   box-shadow: var(--shadow-l);
   width: 100%;
@@ -529,32 +462,43 @@ table.club tr:hover td {
 }
 
 .modal-head {
-  padding: 16px 22px;
+  padding: 14px 22px;
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--gap-s);
+  flex-shrink: 0;
 }
 
 .modal-head h2 {
-  font-size: 20px;
+  font-size: 19px;
 }
 
 .modal-close {
   background: transparent;
   border: none;
-  font-size: 20px;
-  color: var(--ink-faint);
+  color: var(--ink-3);
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 6px;
+  border-radius: var(--r-s);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
 }
+
 .modal-close:hover {
+  background: var(--surface-inset);
   color: var(--ink);
 }
 
 .modal-body {
-  padding: 22px;
+  padding: var(--gap-l);
+}
+
+.modal-body.flush {
+  padding: 0;
 }
 
 .modal-foot {
@@ -562,19 +506,20 @@ table.club tr:hover td {
   border-top: 1px solid var(--line);
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  background: color-mix(in srgb, var(--bg-card) 96%, var(--bg-inset));
+  gap: var(--gap-s);
+  background: var(--surface-2);
+  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 /* ============================================================
-   Chessground тема: клетки + подсветка
+   Chessground: доска, координаты, подсветки
    ============================================================ */
 
 .cg-wrap {
   width: 100%;
   aspect-ratio: 1;
   box-sizing: border-box;
-  box-shadow: var(--shadow-m);
 }
 
 cg-board {
@@ -584,34 +529,88 @@ cg-board {
   border-radius: 4px;
 }
 
+/* Последний ход */
 cg-board square.last-move {
-  background-color: rgba(200, 165, 60, 0.42);
+  background-color: color-mix(in srgb, var(--accent-2) 42%, transparent);
 }
 
+/* Выбранная клетка */
 cg-board square.selected {
-  background-color: rgba(200, 165, 60, 0.65);
+  background-color: color-mix(in srgb, var(--accent-2) 62%, transparent);
 }
 
+/* Куда можно пойти */
 cg-board square.move-dest {
-  background: radial-gradient(rgba(30, 25, 20, 0.35) 22%, rgba(0, 0, 0, 0) 24%);
+  background: radial-gradient(rgba(30, 25, 20, 0.32) 22%, rgba(0, 0, 0, 0) 24%);
 }
-[data-theme="dark"] cg-board square.move-dest {
-  background: radial-gradient(rgba(255, 255, 255, 0.4) 22%, rgba(0, 0, 0, 0) 24%);
+
+[data-theme='dark'] cg-board square.move-dest {
+  background: radial-gradient(rgba(255, 255, 255, 0.38) 22%, rgba(0, 0, 0, 0) 24%);
 }
 
 cg-board square.move-dest:hover {
-  background: rgba(200, 165, 60, 0.45);
+  background: color-mix(in srgb, var(--accent-2) 45%, transparent);
 }
 
+/* Взятие */
 cg-board square.oc.move-dest {
   background: radial-gradient(transparent 0%, transparent 76%, rgba(217, 74, 61, 0.5) 78%);
 }
 
+/* ШАХ: мягкое свечение клетки короля.
+   Основной сигнал — радиальный градиент под фигурой;
+   обводка через box-shadow на square::after, чтобы не
+   конфликтовать с фоном. Информативнее рамки вокруг доски:
+   взгляд сразу находит короля. */
 cg-board square.check {
-  background: radial-gradient(ellipse at center, rgba(217, 74, 61, 0.9) 0%, rgba(217, 74, 61, 0.4) 55%, rgba(0, 0, 0, 0) 85%);
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in srgb, var(--bad) 72%, transparent) 0%,
+    color-mix(in srgb, var(--bad) 45%, transparent) 42%,
+    color-mix(in srgb, var(--bad) 18%, transparent) 68%,
+    rgba(0, 0, 0, 0) 88%
+  );
 }
 
-.cg-wrap coords {
+cg-board square.check::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  box-shadow:
+    inset 0 0 0 3px color-mix(in srgb, var(--bad) 85%, transparent),
+    0 0 14px color-mix(in srgb, var(--bad) 55%, transparent);
+  animation: check-pulse 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes check-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  cg-board square.check::after {
+    animation: none;
+    opacity: 0.9;
+  }
+}
+
+/* Рамка доски при шахе удалена: свечение клетки короля
+   (square.check выше) — основной и достаточный сигнал. */
+.board-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+}
+
+.cg-wrap coords,
+.cg-wrap-item coords {
   font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 600;
@@ -639,7 +638,7 @@ cg-board square.check {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 5px;
-  background: var(--bg-inset);
+  background: var(--surface-inset);
   border: 1px solid var(--line);
   border-radius: var(--r-s);
   padding: 6px;
@@ -648,29 +647,30 @@ cg-board square.check {
 
 .pocket .slot {
   aspect-ratio: 1;
-  background: var(--bg-raised);
+  background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--r-xs);
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
-  transition: all 0.12s;
+  transition: background var(--t-fast), border-color var(--t-fast), transform var(--t-fast);
 }
 
 .pocket .slot.draggable {
   cursor: pointer;
 }
+
 .pocket .slot.draggable:hover {
-  border-color: var(--brass);
-  background: color-mix(in srgb, var(--brass) 15%, var(--bg-raised));
+  border-color: var(--accent-2);
+  background: var(--accent-soft);
   transform: translateY(-1px);
 }
 
 .pocket .slot.selected-drop {
-  border-color: var(--brass);
-  box-shadow: 0 0 0 2px var(--brass);
-  background: color-mix(in srgb, var(--brass) 22%, var(--bg-raised));
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 2px var(--accent-2);
+  background: var(--accent-soft);
 }
 
 .pocket .slot img {
@@ -687,7 +687,7 @@ cg-board square.check {
   font-size: 11px;
   font-weight: 600;
   color: var(--ink);
-  background: var(--bg-card);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 3px;
   padding: 0 4px;
@@ -700,7 +700,25 @@ cg-board square.check {
   opacity: 0.4;
 }
 
-/* Скроллбары */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
+/* ============================================================
+   Toast
+   ============================================================ */
+
+.toast {
+  position: fixed;
+  bottom: var(--gap-l);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--accent-2);
+  border-radius: var(--r-m);
+  padding: 12px var(--gap-m);
+  display: flex;
+  align-items: center;
+  gap: var(--gap-s);
+  box-shadow: var(--shadow-l);
+  z-index: 2000;
+  font-size: 14px;
+  max-width: min(520px, calc(100vw - 32px));
+}

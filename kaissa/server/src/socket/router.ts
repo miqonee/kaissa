@@ -3,6 +3,7 @@ import type { Ack, ClientToServerEvents, ServerToClientEvents } from 'shared';
 import { gamesManager, lobbies } from '../state.js';
 import { presence } from './presence.js';
 import { socketAuth } from './authSocket.js';
+import { env } from '../env.js';
 
 // ============================================================
 // Socket-роутер: связывает события клиентов с менеджерами.
@@ -15,6 +16,17 @@ interface SocketCtx {
   lobbyId: string | null;
   /** id активной партии, где пользователь участник */
   gameId: number | null;
+}
+
+/** uid -> таймер льготного периода: отключение не сразу помечает игрока ушедшим */
+const graceTimers = new Map<number, ReturnType<typeof setTimeout>>();
+
+function cancelGrace(uid: number): void {
+  const t = graceTimers.get(uid);
+  if (t) {
+    clearTimeout(t);
+    graceTimers.delete(uid);
+  }
 }
 
 export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerToClientEvents>): void {
@@ -32,6 +44,7 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
     const ctx: SocketCtx = { ...auth, lobbyId: null, gameId: null };
 
     // Личные комнаты + presence
+    cancelGrace(ctx.uid);
     socket.join(presence.userRoom(ctx.uid));
     presence.onConnect(ctx.uid, socket.id);
 
@@ -154,15 +167,27 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
     });
 
     // ---------- Отключение ----------
+    // Льготный период: моргание сети/переход на другой Wi-Fi не должен
+    // выбрасывать игрока из лобби и помечать его «вышел из партии».
+    // Реальное отсутствие ABANDON_SECONDS секунд = игрок ушёл.
 
     socket.on('disconnect', () => {
       presence.onDisconnect(ctx.uid, socket.id);
-      if (ctx.lobbyId) {
-        lobbies.leave(ctx.lobbyId, ctx.uid);
-      }
-      if (ctx.gameId) {
-        gamesManager.onPlayerDisconnect(ctx.gameId, ctx.uid);
-      }
+      if (presence.isOnline(ctx.uid)) return; // осталась другая вкладка
+
+      cancelGrace(ctx.uid);
+      const timer = setTimeout(() => {
+        graceTimers.delete(ctx.uid);
+        if (presence.isOnline(ctx.uid)) return; // успел вернуться
+        if (ctx.lobbyId) {
+          lobbies.leave(ctx.lobbyId, ctx.uid);
+          ctx.lobbyId = null;
+        }
+        if (ctx.gameId) {
+          gamesManager.onPlayerDisconnect(ctx.gameId, ctx.uid);
+        }
+      }, env.abandonSeconds * 1000);
+      graceTimers.set(ctx.uid, timer);
     });
   });
 }

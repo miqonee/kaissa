@@ -1,5 +1,6 @@
 /* ============================================================
-   База: сброс, типографика, каркас страницы, топбар.
+   База: сброс, типографика, каркас страницы, топбар, утилиты.
+   Подключается через styles/main.css.
    ============================================================ */
 
 *,
@@ -19,7 +20,7 @@ body {
   background-color: var(--bg);
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: 15px;
+  font-size: 14.5px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -33,12 +34,12 @@ h4 {
   font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: -0.01em;
+  line-height: 1.25;
   color: var(--ink);
 }
 
 h1 {
-  font-size: 28px;
-  line-height: 1.2;
+  font-size: 26px;
 }
 h2 {
   font-size: 20px;
@@ -54,6 +55,10 @@ p {
   margin: 0 0 var(--gap-s);
 }
 
+p:last-child {
+  margin-bottom: 0;
+}
+
 a {
   color: var(--ink);
   text-decoration: none;
@@ -64,6 +69,19 @@ a {
 a:hover {
   border-bottom-color: var(--accent-2);
 }
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--r-xs);
+}
+
+/* ---------------- Утилиты ---------------- */
 
 .mono {
   font-family: var(--font-mono);
@@ -80,14 +98,29 @@ a:hover {
 }
 
 .tiny {
-  font-size: 12.5px;
+  font-size: 12px;
+}
+
+.small {
+  font-size: 13px;
 }
 
 .win {
   color: var(--ok);
 }
+
 .loss {
   color: var(--bad);
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 hr {
@@ -96,18 +129,8 @@ hr {
   margin: var(--gap-m) 0;
 }
 
-::selection {
-  background: var(--accent-soft);
-  color: var(--ink);
-}
+/* ---------------- Скроллбары ---------------- */
 
-:focus-visible {
-  outline: none;
-  box-shadow: var(--ring);
-  border-radius: var(--r-xs);
-}
-
-/* Скроллбары */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--line-2) transparent;
@@ -146,6 +169,12 @@ main.page {
   padding: var(--gap-l) var(--gap-m) var(--gap-xl);
 }
 
+@media (max-width: 640px) {
+  main.page {
+    padding: 10px 8px 24px;
+  }
+}
+
 /* ---------------- Топбар ---------------- */
 
 .topbar {
@@ -157,20 +186,9 @@ main.page {
   gap: var(--gap-l);
   height: 56px;
   padding: 0 var(--gap-m);
-  background: var(--felt);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.25);
-  box-shadow: 0 1px 0 var(--accent) inset, var(--shadow-s);
-}
-
-.topbar::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -3px;
-  height: 3px;
-  background: linear-gradient(to right, var(--accent) 0 60%, var(--accent-2) 60% 100%);
-  opacity: 0.9;
+  background: var(--topbar);
+  border-bottom: 1px solid var(--line);
+  box-shadow: var(--shadow-s);
 }
 
 .topbar-inner {
@@ -190,13 +208,16 @@ main.page {
   font-size: 21px;
   font-weight: 700;
   letter-spacing: 0.01em;
-  color: var(--felt-ink);
+  color: var(--ink);
   border: none;
+  text-decoration: none;
+  transition: opacity var(--t-fast);
 }
 
 .brand:hover {
   border: none;
-  color: #fff;
+  color: var(--ink);
+  opacity: 0.85;
 }
 
 .brand svg {
@@ -206,61 +227,70 @@ main.page {
 .topbar nav {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex: 1;
 }
 
 .topbar nav a {
-  padding: 7px 12px;
+  padding: 6px 12px;
   border-radius: var(--r-s);
-  font-size: 14px;
-  color: rgba(244, 241, 232, 0.72);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-2);
   border: none;
+  text-decoration: none;
+  transition: color var(--t-fast), background var(--t-fast);
 }
 
 .topbar nav a:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  background: var(--surface-2);
   border: none;
 }
 
 .topbar nav a.router-link-active {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.13);
-  box-shadow: inset 0 -2px 0 var(--accent-2);
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
 }
 
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: var(--gap-s);
+  gap: 8px;
 }
 
 .me-link {
   display: inline-flex;
   align-items: center;
-  gap: var(--gap-xs);
-  color: var(--felt-ink);
-  font-size: 14px;
-  border: none;
-  padding: 4px 8px;
+  gap: 8px;
+  height: 32px;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 500;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  padding: 0 10px;
   border-radius: var(--r-s);
+  text-decoration: none;
+  transition: background var(--t-fast), border-color var(--t-fast);
 }
 
 .me-link:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border: none;
+  background: var(--surface-inset);
+  border-color: var(--line-2);
 }
 
 .rating-chip {
   font-family: var(--font-mono);
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--accent-2);
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid rgba(224, 184, 102, 0.4);
-  border-radius: 999px;
-  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: var(--r-xs);
+  padding: 1px 6px;
+  line-height: 1.2;
 }
 
 .icon-btn {
@@ -270,19 +300,134 @@ main.page {
   width: 32px;
   height: 32px;
   border-radius: var(--r-s);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--felt-ink);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink-2);
   cursor: pointer;
-  transition: background var(--t-fast), border-color var(--t-fast);
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
 }
 
 .icon-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--surface-inset);
+  border-color: var(--line-2);
+  color: var(--ink);
 }
 
-/* Заголовок раздела */
+/* Кнопка выхода в шапке */
+.topbar-right .logout-btn {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--r-s);
+  font-size: 13px;
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid transparent;
+  transition: color var(--t-fast), background var(--t-fast), border-color var(--t-fast);
+}
+
+.topbar-right .logout-btn:hover {
+  color: var(--bad);
+  background: var(--bad-soft);
+  border-color: color-mix(in srgb, var(--bad) 30%, transparent);
+}
+
+/* Мобильная адаптация топбара: 2-рядная сетка,
+   строка 1: бренд + блок пользователя,
+   строка 2: компактная лента навигации со свайпом */
+@media (max-width: 720px) {
+  .topbar {
+    height: auto;
+    min-height: 50px;
+    padding: 6px var(--gap-s) 6px;
+    box-sizing: border-box;
+  }
+
+  .topbar-inner {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 4px 8px;
+  }
+
+  .brand {
+    grid-column: 1;
+    grid-row: 1;
+    font-size: 19px;
+  }
+
+  .topbar-right {
+    grid-column: 2;
+    grid-row: 1;
+    justify-content: flex-end;
+    gap: 5px;
+  }
+
+  .topbar-right .me-link {
+    padding: 0 7px;
+    font-size: 12.5px;
+  }
+
+  .me-name {
+    max-width: 75px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar-right .logout-btn {
+    padding: 0 6px;
+    font-size: 12px;
+  }
+
+  .topbar-right .icon-btn {
+    width: 30px;
+    height: 30px;
+  }
+
+  .conn-indicator {
+    height: 30px;
+    padding: 0 6px;
+  }
+
+  .conn-indicator .conn-text {
+    display: none;
+  }
+
+  .topbar nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 2px 0 0;
+    gap: 3px;
+  }
+
+  .topbar nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .topbar nav a {
+    white-space: nowrap;
+    padding: 4px 9px;
+    font-size: 12.5px;
+  }
+}
+
+@media (max-width: 420px) {
+  .me-name {
+    display: none;
+  }
+  .brand {
+    font-size: 17px;
+  }
+}
+
+/* ---------------- Заголовок раздела ---------------- */
+
 .page-head {
   display: flex;
   align-items: baseline;

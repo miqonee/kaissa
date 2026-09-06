@@ -3,8 +3,9 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { ChatMessage, LobbySummary } from 'shared';
 import { timeControlLabel } from 'shared';
-import { getSocket } from '../api/socket';
+import { getSocket, onSocketResync } from '../api/socket';
 import { useAuthStore } from '../stores/auth';
+import AppIcon from '../components/AppIcon.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -40,14 +41,22 @@ function scrollChat(): void {
   }, 30);
 }
 
-onMounted(() => {
+function joinLobby(): void {
   socket.emit('lobby:join', lobbyId.value, (ack) => {
     if (ack.ok && ack.data) {
       lobby.value = ack.data.lobby;
-    } else {
+    } else if (!lobby.value) {
       error.value = ack.error ?? 'Не удалось войти в лобби';
     }
   });
+}
+
+let offResync: (() => void) | null = null;
+
+onMounted(() => {
+  joinLobby();
+  // Реконнект сокета теряет комнату лобби — войти заново
+  offResync = onSocketResync(joinLobby);
 
   socket.on('lobby:state', (state) => {
     if (state.id !== lobbyId.value) return;
@@ -66,6 +75,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  offResync?.();
+  offResync = null;
   socket.emit('lobby:leave');
   socket.off('lobby:state');
   socket.off('lobby:chat');
@@ -148,11 +159,12 @@ function modeLabel(m: string): string {
         <span class="code-label">Код стола для входа:</span>
         <div class="code-display" @click="copyCode" title="Кликните, чтобы скопировать">
           <span class="code-text mono">{{ lobby.code || '------' }}</span>
-          <span class="copy-icon">📋</span>
+          <span class="copy-icon"><AppIcon name="copy" :size="16" /></span>
         </div>
         <div class="code-actions">
-          <button class="small ghost" @click="copyCode">Скопировать код</button>
-          <button class="small ghost" @click="copyLink">Скопировать ссылку</button>
+          <button class="small ghost" @click="copyLink">
+            <AppIcon name="copy" :size="14" /> Скопировать ссылку
+          </button>
         </div>
       </div>
     </div>
@@ -181,22 +193,25 @@ function modeLabel(m: string): string {
               <div class="slot-info">
                 <div class="slot-name-row">
                   <span class="slot-name">{{ p.username }}</span>
-                  <span v-if="p.host" class="host-crown" title="Создатель стола">★ Хост</span>
+                  <span v-if="p.host" class="host-crown" title="Создатель стола">
+                    <AppIcon name="crown" :size="12" /> Хост
+                  </span>
                 </div>
                 <span class="slot-rating mono dim">Рейтинг: {{ p.rating }}</span>
               </div>
 
               <div class="slot-status">
                 <span class="ready-badge" :class="p.ready ? 'ready' : 'waiting'">
-                  {{ p.ready ? 'Готов ✓' : 'Ждём…' }}
+                  <AppIcon v-if="p.ready" name="check" :size="12" /><span>{{ p.ready ? 'Готов' : 'Ждём…' }}</span>
                 </span>
                 <button
                   v-if="isHost && p.userId !== me?.id"
-                  class="small danger"
-                  title="Исключить"
+                  class="small danger icon-only"
+                  title="Исключить игрока"
+                  :aria-label="`Исключить ${p.username}`"
                   @click="kick(p.userId)"
                 >
-                  ✕
+                  <AppIcon name="close" :size="14" />
                 </button>
               </div>
             </div>
@@ -210,20 +225,19 @@ function modeLabel(m: string): string {
               <div class="slot-idx mono">{{ lobby.players.length + i }}</div>
               <div class="slot-info">
                 <span class="slot-name dim">Ожидание игрока…</span>
-                <span class="dim small-hint">Отправьте код <strong>{{ lobby.code }}</strong></span>
               </div>
             </div>
           </div>
 
-          <!-- Нижняя панель действий со столом -->
-          <div class="lobby-tools">
+          <!-- Нижняя панель: только когда есть кого призвать -->
+          <div v-if="offlinePlayers.length" class="lobby-tools">
             <button
-              v-if="offlinePlayers.length"
               class="brass"
               @click="summon"
               title="Отправить браузерное уведомление офлайн-игрокам"
             >
-              🔔 Призвать игроков ({{ offlinePlayers.length }} не в сети)
+              <AppIcon name="bell" :size="15" />
+              Призвать игроков ({{ offlinePlayers.length }} не в сети)
             </button>
           </div>
         </div>
@@ -273,7 +287,8 @@ function modeLabel(m: string): string {
           :class="{ active: iAmReady }"
           @click="setReady"
         >
-          {{ iAmReady ? 'Я готов ✓' : 'Нажать «Готов»' }}
+          <AppIcon v-if="iAmReady" name="check" :size="14" />
+          {{ iAmReady ? 'Я готов' : 'Нажать «Готов»' }}
         </button>
 
         <button
@@ -308,7 +323,7 @@ function modeLabel(m: string): string {
   align-items: center;
   gap: 24px;
   flex-wrap: wrap;
-  border-color: color-mix(in srgb, var(--brass) 30%, var(--line));
+  border-color: color-mix(in srgb, var(--accent-2) 30%, var(--line));
 }
 
 .hero-title-row {
@@ -345,13 +360,13 @@ function modeLabel(m: string): string {
   font-size: 11.5px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--ink-faint);
+  color: var(--ink-3);
   font-weight: 600;
 }
 
 .code-display {
-  background: var(--bg-inset);
-  border: 2px dashed var(--brass);
+  background: var(--surface-inset);
+  border: 2px dashed var(--accent-2);
   padding: 8px 18px;
   border-radius: var(--r-m);
   cursor: pointer;
@@ -362,8 +377,8 @@ function modeLabel(m: string): string {
 }
 
 .code-display:hover {
-  background: color-mix(in srgb, var(--brass) 12%, var(--bg-inset));
-  border-color: var(--brass-strong);
+  background: color-mix(in srgb, var(--accent-2) 12%, var(--surface-inset));
+  border-color: var(--accent);
   transform: scale(1.02);
 }
 
@@ -371,12 +386,12 @@ function modeLabel(m: string): string {
   font-size: 24px;
   font-weight: 800;
   letter-spacing: 0.22em;
-  color: var(--brass);
+  color: var(--accent-2);
 }
 
 .copy-icon {
-  font-size: 16px;
-  opacity: 0.7;
+  display: inline-flex;
+  color: var(--ink-3);
 }
 
 .code-actions {
@@ -384,17 +399,31 @@ function modeLabel(m: string): string {
   gap: 8px;
 }
 
-/* Сетка страницы */
+/* Сетка страницы: панели равной высоты */
 .lobby-layout {
   display: grid;
   grid-template-columns: 1.35fr 1fr;
   gap: 20px;
-  align-items: start;
+  align-items: stretch;
 }
 @media (max-width: 900px) {
   .lobby-layout {
     grid-template-columns: 1fr;
   }
+}
+
+.players-panel,
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.players-panel > .panel-body,
+.chat-panel > .panel-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Слоты */
@@ -411,23 +440,23 @@ function modeLabel(m: string): string {
   padding: 12px 16px;
   border: 1px solid var(--line);
   border-radius: var(--r-m);
-  background: var(--bg-inset);
+  background: var(--surface-inset);
   transition: all 0.15s;
 }
 
 .slot-card.is-ready {
   border-color: color-mix(in srgb, var(--ok) 45%, var(--line));
-  background: color-mix(in srgb, var(--ok) 6%, var(--bg-inset));
+  background: color-mix(in srgb, var(--ok) 6%, var(--surface-inset));
 }
 
 .slot-card.is-me {
-  box-shadow: inset 0 0 0 1.5px var(--brass);
+  box-shadow: inset 0 0 0 1.5px var(--accent-2);
 }
 
 .slot-idx {
   font-size: 16px;
   font-weight: 700;
-  color: var(--ink-faint);
+  color: var(--ink-3);
   width: 20px;
 }
 
@@ -448,26 +477,37 @@ function modeLabel(m: string): string {
 }
 
 .host-crown {
-  color: var(--brass);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
   font-size: 11.5px;
   font-weight: 700;
-  background: color-mix(in srgb, var(--brass) 15%, transparent);
-  padding: 1px 7px;
-  border-radius: 4px;
+  background: var(--accent-soft);
+  padding: 2px 8px;
+  border-radius: var(--r-xs);
 }
 
 .slot-status {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .ready-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   padding: 4px 12px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
   border: 1px solid;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1;
 }
 
 .ready-badge.ready {
@@ -477,8 +517,8 @@ function modeLabel(m: string): string {
 }
 
 .ready-badge.waiting {
-  color: var(--ink-faint);
-  border-color: var(--line-strong);
+  color: var(--ink-3);
+  border-color: var(--line-2);
   background: transparent;
 }
 
@@ -501,7 +541,9 @@ function modeLabel(m: string): string {
 }
 
 .chat-body {
-  height: 380px;
+  flex: 1;
+  height: auto;
+  min-height: 320px;
   display: flex;
   flex-direction: column;
 }
@@ -523,7 +565,7 @@ function modeLabel(m: string): string {
 
 .chat-user {
   font-weight: 600;
-  color: var(--brass);
+  color: var(--accent-2);
   margin-right: 6px;
 }
 
@@ -568,11 +610,15 @@ function modeLabel(m: string): string {
   padding: 9px 18px;
   font-size: 14px;
   font-weight: 600;
-  border-color: var(--line-strong);
+  border-color: var(--line-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .ready-toggle-btn.active {
-  background: color-mix(in srgb, var(--ok) 16%, var(--bg-raised));
+  background: color-mix(in srgb, var(--ok) 16%, var(--surface-2));
   color: var(--ok);
   border-color: var(--ok);
 }
@@ -582,9 +628,9 @@ function modeLabel(m: string): string {
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--bg-raised);
+  background: var(--surface-2);
   color: var(--ink);
-  border: 1px solid var(--brass);
+  border: 1px solid var(--accent-2);
   border-radius: var(--r-m);
   padding: 12px 20px;
   box-shadow: var(--shadow-l);

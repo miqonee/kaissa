@@ -54,6 +54,9 @@ async function main(): Promise<void> {
   const httpServer = createServer(app);
   const io = new SocketServer(httpServer, {
     cors: { origin: env.corsOrigin, credentials: true },
+    // Мягче к мобильным сетям: чаще пинг, дольше ждём ответ
+    pingInterval: 20_000,
+    pingTimeout: 25_000,
   });
   registerSocketHandlers(io);
 

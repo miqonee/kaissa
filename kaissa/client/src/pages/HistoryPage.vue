@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import type { GameSummary } from 'shared';
 import { timeControlLabel } from 'shared';
 import { api } from '../api/rest';
 import { useAuthStore } from '../stores/auth';
+import GameReplayModal from '../components/GameReplayModal.vue';
+import AppIcon from '../components/AppIcon.vue';
 
 const auth = useAuthStore();
+const router = useRouter();
 const tab = ref<'mine' | 'all'>('mine');
 const games = ref<GameSummary[]>([]);
 const loading = ref(true);
 const lichessLoading = ref<number | null>(null);
+const replayId = ref<number | null>(null);
 
 async function loadGames() {
   loading.value = true;
@@ -40,6 +45,7 @@ function meOf(g: GameSummary) {
 }
 
 function outcome(g: GameSummary): { text: string; cls: string } {
+  if (g.status === 'active') return { text: 'Идёт', cls: 'live' };
   if (g.status === 'abandoned' || g.result === '*') return { text: 'Брошена', cls: 'dim' };
   if (tab.value === 'all') {
     return { text: g.result === '1-0' ? 'Победа белых' : 'Победа черных', cls: '' };
@@ -64,7 +70,7 @@ function delta(g: GameSummary): number {
 
 function deltaText(g: GameSummary): string {
   const d = delta(g);
-  if (g.status === 'abandoned') return '';
+  if (g.status === 'abandoned' || g.status === 'active') return '';
   if (d === 0) return '0';
   return (d > 0 ? '+' : '') + d;
 }
@@ -83,6 +89,21 @@ function fmtDate(iso: string): string {
   });
 }
 
+function openReplay(g: GameSummary): void {
+  if (g.status === 'active') {
+    router.push(`/game/${g.id}`);
+  } else {
+    replayId.value = g.id;
+  }
+}
+
+function onRowKey(e: KeyboardEvent, g: GameSummary): void {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    openReplay(g);
+  }
+}
+
 async function analyzeOnLichess(gameId: number) {
   lichessLoading.value = gameId;
   try {
@@ -91,7 +112,6 @@ async function analyzeOnLichess(gameId: number) {
       window.open(res.url, '_blank');
     }
   } catch (e) {
-    // fallback
     window.open(`/api/games/${gameId}/pgn?download=1`, '_blank');
     window.open('https://lichess.org/paste', '_blank');
   } finally {
@@ -126,8 +146,8 @@ async function analyzeOnLichess(gameId: number) {
       <div v-if="loading" class="empty">Загрузка партий…</div>
 
       <div v-else-if="!games.length" class="empty">
-        <p>Партий пока не найдено.</p>
-        <router-link to="/" class="button primary">Перейти к столам</router-link>
+        <p class="empty-title">Партий пока не найдено.</p>
+        <router-link to="/" class="button primary small">Перейти к столам</router-link>
       </div>
 
       <div v-else class="table-wrap">
@@ -140,52 +160,66 @@ async function analyzeOnLichess(gameId: number) {
               <th>Команда 1 (белые)</th>
               <th>Команда 2 (черные)</th>
               <th>Итог</th>
-              <th v-if="tab === 'mine'">Рейтинг</th>
-              <th style="text-align: right;">Действия</th>
+              <th v-if="tab === 'mine'" class="num">Рейтинг</th>
+              <th class="actions">Действия</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="g in games" :key="g.id">
+            <tr
+              v-for="g in games"
+              :key="g.id"
+              class="row-link"
+              role="button"
+              tabindex="0"
+              :title="g.status === 'active' ? 'Партия идёт — смотреть онлайн' : 'Открыть плеер партии'"
+              @click="openReplay(g)"
+              @keydown="onRowKey($event, g)"
+            >
               <td class="mono dim">{{ fmtDate(g.startedAt) }}</td>
               <td>
                 <span class="badge">{{ modeLabel(g.mode) }}</span>
               </td>
               <td class="mono dim">{{ timeControlLabel(g.timeControl) }}</td>
-              <td style="font-weight: 500;">{{ formatTeams(g).t1 }}</td>
-              <td style="font-weight: 500;">{{ formatTeams(g).t2 }}</td>
+              <td class="nowrap">{{ formatTeams(g).t1 }}</td>
+              <td class="nowrap">{{ formatTeams(g).t2 }}</td>
               <td :class="outcome(g).cls" style="font-weight: 600;">
                 {{ outcome(g).text }}
               </td>
-              <td v-if="tab === 'mine'" class="mono" :class="deltaClass(g)" style="font-weight: 700;">
+              <td v-if="tab === 'mine'" class="mono num" :class="deltaClass(g)" style="font-weight: 700;">
                 {{ deltaText(g) }}
               </td>
-              <td style="text-align: right;">
+              <td class="actions">
                 <div class="actions-cell">
-                  <router-link
-                    v-if="g.status !== 'active'"
-                    :to="`/replay/${g.id}`"
+                  <button
                     class="button small ghost"
-                    title="Интерактивный плеер"
+                    :title="g.status === 'active' ? 'Смотреть онлайн' : 'Открыть плеер'"
+                    @click.stop="openReplay(g)"
                   >
-                    Плеер
-                  </router-link>
+                    <AppIcon :name="g.status === 'active' ? 'eye' : 'play'" :size="14" />
+                    {{ g.status === 'active' ? 'Онлайн' : 'Плеер' }}
+                  </button>
 
                   <a
+                    v-if="g.status !== 'active'"
                     :href="`/api/games/${g.id}/pgn?download=1`"
                     class="button small ghost"
                     title="Скачать PGN файл"
                     download
+                    @click.stop
                   >
+                    <AppIcon name="download" :size="14" />
                     PGN
                   </a>
 
                   <button
+                    v-if="g.status !== 'active'"
                     class="button small brass"
                     :disabled="lichessLoading === g.id"
-                    @click="analyzeOnLichess(g.id)"
+                    @click.stop="analyzeOnLichess(g.id)"
                     title="Импортировать и разобрать партию на Lichess"
                   >
-                    {{ lichessLoading === g.id ? '…' : 'Lichess ↗' }}
+                    <AppIcon name="external" :size="13" />
+                    {{ lichessLoading === g.id ? '…' : 'Lichess' }}
                   </button>
                 </div>
               </td>
@@ -194,6 +228,12 @@ async function analyzeOnLichess(gameId: number) {
         </table>
       </div>
     </div>
+
+    <GameReplayModal
+      v-if="replayId !== null"
+      :game-id="replayId"
+      @close="replayId = null"
+    />
   </div>
 </template>
 
@@ -201,18 +241,19 @@ async function analyzeOnLichess(gameId: number) {
 .history-page {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--gap-l);
 }
 
 .head-tabs {
   display: flex;
-  gap: 8px;
+  gap: var(--gap-xs);
+  flex-wrap: wrap;
 }
 
 .tab-btn {
   background: transparent;
   border: 1px solid transparent;
-  color: var(--ink-faint);
+  color: var(--ink-3);
   padding: 6px 14px;
   border-radius: var(--r-s);
   font-size: 14px;
@@ -220,23 +261,26 @@ async function analyzeOnLichess(gameId: number) {
 }
 .tab-btn:hover {
   color: var(--ink);
+  background: var(--surface-inset);
+  border-color: transparent;
 }
 .tab-btn.active {
-  background: var(--bg-raised);
-  border-color: var(--line-strong);
-  color: var(--brass);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent);
 }
 
 .table-wrap {
   overflow-x: auto;
 }
 
-.win { color: var(--ok); }
-.loss { color: var(--bad); }
-
 .actions-cell {
   display: inline-flex;
   gap: 6px;
   justify-content: flex-end;
+}
+
+td.live {
+  color: var(--ok);
 }
 </style>

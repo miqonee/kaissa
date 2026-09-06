@@ -75,7 +75,7 @@ function gameOutcome(g: import('shared').GameSummary): string {
       <div class="panel-head"><h2>Динамика рейтинга</h2></div>
       <div class="panel-body">
         <svg viewBox="0 0 560 120" class="spark" preserveAspectRatio="none">
-          <path :d="sparkPath!" fill="none" stroke="var(--brass-strong)" stroke-width="2" />
+          <path :d="sparkPath!" fill="none" stroke="var(--accent)" stroke-width="2" />
         </svg>
       </div>
     </div>
@@ -92,8 +92,8 @@ function gameOutcome(g: import('shared').GameSummary): string {
             <td>{{ modeLabel(g.mode) }}</td>
             <td>{{ g.participants.map((p) => p.username).join(', ') }}</td>
             <td>{{ gameOutcome(g) }}</td>
-            <td>
-              <router-link v-if="g.status !== 'active'" :to="`/replay/${g.id}`" class="small-link">просмотр</router-link>
+            <td class="actions">
+              <router-link v-if="g.status !== 'active'" :to="`/replay/${g.id}`" class="button small ghost">Просмотр</router-link>
             </td>
           </tr>
         </tbody>
@@ -123,10 +123,7 @@ function gameOutcome(g: import('shared').GameSummary): string {
 
 .stat-num { font-size: 28px; font-weight: 600; }
 
-.stat-label { font-size: 13px; color: var(--ink-faint); }
+.stat-label { font-size: 13px; color: var(--ink-3); }
 
 .spark { width: 100%; height: 120px; }
-
-.dim { color: var(--ink-faint); }
-.small-link { font-size: 13px; }
 </style>

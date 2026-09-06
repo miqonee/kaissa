@@ -4,11 +4,13 @@ import { useRoute, useRouter } from 'vue-router';
 import { Chess, type Square } from 'chess.js';
 import type { ChatMessage, GameParticipantInfo, GameState, PieceType } from 'shared';
 import { timeControlLabel } from 'shared';
-import { getSocket } from '../api/socket';
+import { getSocket, onSocketResync } from '../api/socket';
 import { useAuthStore } from '../stores/auth';
 import { api } from '../api/rest';
 import ChessBoard from '../components/ChessBoard.vue';
 import PocketBar from '../components/PocketBar.vue';
+import AppIcon from '../components/AppIcon.vue';
+import GameReplayModal from '../components/GameReplayModal.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -25,9 +27,8 @@ const chatBox = ref<HTMLElement | null>(null);
 const selectedDrop = ref<PieceType | null>(null);
 const promoDialog = ref<{ board: 0 | 1; from: string; to: string } | null>(null);
 const showResult = ref(false);
+const showReplay = ref(false);
 const disconnected = ref<{ userId: number; username: string }[]>([]);
-
-const engines: (Chess | null)[] = [null, null];
 
 const myId = computed(() => auth.user?.id ?? 0);
 const isParticipant = computed(() => state.value?.participants.some((p) => p.userId === myId.value) ?? false);
@@ -41,12 +42,9 @@ const myBoard = computed<0 | 1 | null>(() => {
 const boardsConfig = computed(() => {
   if (!state.value) return [];
   if (state.value.mode === 'bughouse') {
-    return [
-      { index: 0 as const, orientation: 'white' as const },
-      { index: 1 as const, orientation: 'black' as const },
-    ];
+    return [{ index: 0 as const }, { index: 1 as const }];
   }
-  return [{ index: 0 as const, orientation: 'white' as const }];
+  return [{ index: 0 as const }];
 });
 
 function fenOf(b: number): string {
@@ -185,6 +183,21 @@ function isPlayerTurn(uid: number): boolean {
   return state.value.turnUserIds.includes(uid);
 }
 
+/** Роль участника относительно текущего пользователя: я / напарник / соперник */
+type PlayerRole = 'me' | 'partner' | 'opponent';
+
+function roleOf(p: GameParticipantInfo): PlayerRole {
+  if (p.userId === myId.value) return 'me';
+  if (myParticipant.value && p.team === myParticipant.value.team) return 'partner';
+  return 'opponent';
+}
+
+const currentMover = computed(() => {
+  if (!state.value || state.value.status !== 'active') return null;
+  const uid = state.value.turnUserIds[0] ?? 0;
+  return state.value.participants.find((p) => p.userId === uid) ?? null;
+});
+
 // ---------- Действия ----------
 
 function onMove(b: 0 | 1, payload: { from: string; to: string }): void {
@@ -247,8 +260,12 @@ function scrollChat(): void {
 
 // ---------- Lifecycle ----------
 
+let offResync: (() => void) | null = null;
+
 onMounted(() => {
   socket.emit('game:watch', gameId);
+  // Реконнект сокета теряет комнату игры — переподключиться и получить свежий game:state
+  offResync = onSocketResync(() => socket.emit('game:watch', gameId));
 
   socket.on('game:state', (st) => {
     if (st.gameId !== gameId) return;
@@ -263,16 +280,7 @@ onMounted(() => {
       ...lastMoves.value,
       [mv.boardIndex]: mv.dropPiece ? [mv.to, mv.to] : [mv.from, mv.to],
     };
-    socket.emit('game:watch', gameId);
     selectedDrop.value = null;
-  });
-
-  socket.on('game:clock', (payload) => {
-    if (payload.gameId !== gameId) return;
-    if (state.value) {
-      state.value.clocks = payload.clocks;
-      rebuildLocalClocks();
-    }
   });
 
   socket.on('game:end', (payload) => {
@@ -301,9 +309,10 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  offResync?.();
+  offResync = null;
   socket.off('game:state');
   socket.off('game:move');
-  socket.off('game:clock');
   socket.off('game:end');
   socket.off('game:chat');
   socket.off('game:players-left');
@@ -368,22 +377,27 @@ function resultHeadline(): string {
     <!-- Верхняя информационная плашка -->
     <div class="game-topbar panel">
       <div class="game-title-group">
-        <router-link to="/" class="back-link" title="К столам">← Столы</router-link>
+        <router-link to="/" class="back-link" title="К столам">
+          <AppIcon name="arrow-left" :size="14" /> Столы
+        </router-link>
         <h1>
           {{ state.mode === 'bughouse' ? 'Багхаус' : 'Матч 2×2 (одна доска)' }}
         </h1>
         <span class="badge mono">{{ timeControlLabel(state.timeControl) }}</span>
         <span v-if="state.status === 'active'" class="badge on">В игре</span>
         <span v-else class="badge">{{ state.result }}</span>
-        <span v-if="!isParticipant" class="badge">Режим зрителя</span>
+        <span v-if="!isParticipant" class="badge dim">Режим зрителя</span>
       </div>
 
       <div class="game-topbar-actions">
+        <button v-if="state.status !== 'active'" class="small" @click="showReplay = true">
+          <AppIcon name="play" :size="13" /> Смотреть партию
+        </button>
         <button v-if="isParticipant && state.status === 'active'" class="danger small" @click="resign">
           Сдаться
         </button>
         <button v-if="state.status !== 'active'" class="small brass" @click="analyzeOnLichess(0)">
-          Анализ на Lichess ↗
+          <AppIcon name="external" :size="13" /> Анализ на Lichess
         </button>
       </div>
     </div>
@@ -396,7 +410,7 @@ function resultHeadline(): string {
         <div v-if="state.mode === 'team' && teamModeSides" class="team-board-wrapper">
           <!-- Верхняя команда (соперники) -->
           <div class="team-players-bar top">
-            <div class="team-color-indicator" :class="teamModeSides.top.color">
+            <div class="color-tag" :class="teamModeSides.top.color">
               {{ teamModeSides.top.color === 'w' ? 'Белые' : 'Черные' }}
             </div>
             <div class="team-members">
@@ -404,15 +418,13 @@ function resultHeadline(): string {
                 v-for="p in teamModeSides.top.players"
                 :key="p.userId"
                 class="member-pill"
-                :class="{
-                  'active-turn': isPlayerTurn(p.userId),
-                  'is-me': p.userId === myId
-                }"
+                :class="[roleOf(p), { 'active-turn': isPlayerTurn(p.userId) }]"
               >
-                <span class="slot-badge mono">Ход {{ p.moveSlot + 1 }}</span>
                 <span class="member-name">{{ p.username }}</span>
                 <span class="member-rating mono">({{ p.ratingBefore }})</span>
-                <span v-if="isPlayerTurn(p.userId)" class="turn-chip">Ходит</span>
+                <span v-if="isPlayerTurn(p.userId)" class="turn-chip">
+                  <span class="turn-dot"></span> Ходит
+                </span>
               </div>
             </div>
             <div class="clock-display mono" :class="{ running: state.clocksActive[0] === teamModeSides.top.color }">
@@ -436,7 +448,7 @@ function resultHeadline(): string {
 
           <!-- Нижняя команда (моя сторона) -->
           <div class="team-players-bar bottom">
-            <div class="team-color-indicator" :class="teamModeSides.bottom.color">
+            <div class="color-tag" :class="teamModeSides.bottom.color">
               {{ teamModeSides.bottom.color === 'w' ? 'Белые' : 'Черные' }}
             </div>
             <div class="team-members">
@@ -444,15 +456,15 @@ function resultHeadline(): string {
                 v-for="p in teamModeSides.bottom.players"
                 :key="p.userId"
                 class="member-pill"
-                :class="{
-                  'active-turn': isPlayerTurn(p.userId),
-                  'is-me': p.userId === myId
-                }"
+                :class="[roleOf(p), { 'active-turn': isPlayerTurn(p.userId) }]"
               >
-                <span class="slot-badge mono">Ход {{ p.moveSlot + 1 }}</span>
                 <span class="member-name">{{ p.username }}</span>
                 <span class="member-rating mono">({{ p.ratingBefore }})</span>
-                <span v-if="isPlayerTurn(p.userId)" class="turn-chip">Ходит</span>
+                <span v-if="roleOf(p) === 'me'" class="member-role me">Вы</span>
+                <span v-else-if="roleOf(p) === 'partner'" class="member-role partner">Напарник</span>
+                <span v-if="isPlayerTurn(p.userId)" class="turn-chip">
+                  <span class="turn-dot"></span> Ходит
+                </span>
               </div>
             </div>
             <div class="clock-display mono" :class="{ running: state.clocksActive[0] === teamModeSides.bottom.color }">
@@ -537,21 +549,23 @@ function resultHeadline(): string {
           <div class="panel-body queue-body">
             <div v-if="state.mode === 'team'" class="queue-explain">
               <p class="dim small-hint">
-                Партнеры чередуются через ход: Слот 1 → Слот 2 → Слот 1.
+                Напарники чередуются через ход: слот 1 → слот 2 → слот 1.
               </p>
               <div class="queue-list">
                 <div
                   v-for="p in state.participants"
                   :key="p.userId"
                   class="queue-item"
-                  :class="{ current: isPlayerTurn(p.userId) }"
+                  :class="[roleOf(p), { current: isPlayerTurn(p.userId) }]"
                 >
                   <span class="queue-dot" :class="{ on: isPlayerTurn(p.userId) }"></span>
-                  <span class="queue-color-tag" :class="p.color">
+                  <span class="color-tag" :class="p.color">
                     {{ p.color === 'w' ? 'Белые' : 'Черные' }}
                   </span>
                   <span class="queue-name">{{ p.username }}</span>
-                  <span class="dim mono">слот {{ p.moveSlot + 1 }}</span>
+                  <span v-if="roleOf(p) === 'me'" class="member-role me">Вы</span>
+                  <span v-else-if="roleOf(p) === 'partner'" class="member-role partner">Напарник</span>
+                  <span class="dim mono slot-note">слот {{ p.moveSlot + 1 }}</span>
                   <span v-if="isPlayerTurn(p.userId)" class="turn-now-chip">СЕЙЧАС ХОД</span>
                 </div>
               </div>
@@ -562,6 +576,10 @@ function resultHeadline(): string {
                 Обе доски играют одновременно. Кликните по фигуре в кармане и затем по пустой клетке для дропа.
               </p>
             </div>
+
+            <p v-if="currentMover && state.mode === 'team'" class="small-hint dim">
+              Сейчас ход: <strong>{{ currentMover.username }}</strong>
+            </p>
 
             <p v-if="disconnected.length" class="warn-text">
               Отключились: {{ disconnected.map((d) => d.username).join(', ') }}
@@ -590,7 +608,9 @@ function resultHeadline(): string {
             </div>
             <form class="chat-input-row" @submit.prevent="sendChat">
               <input v-model="chatText" placeholder="Сообщение всем…" maxlength="300" />
-              <button type="submit" class="primary">→</button>
+              <button type="submit" class="primary icon-only" aria-label="Отправить">
+                <AppIcon name="arrow-right" :size="15" />
+              </button>
             </form>
           </div>
         </div>
@@ -618,12 +638,14 @@ function resultHeadline(): string {
       </div>
     </div>
 
-    <!-- Модальное окно завершения партии с PGN / Lichess -->
-    <div v-if="showResult && state.status !== 'active'" class="modal-backdrop">
+    <!-- Модальное окно завершения партии -->
+    <div v-if="showResult && state.status !== 'active'" class="modal-backdrop" @click.self="showResult = false">
       <div class="modal result-modal">
         <div class="modal-head">
           <h2>Партия завершена</h2>
-          <button class="modal-close" @click="showResult = false">✕</button>
+          <button class="modal-close" aria-label="Закрыть" @click="showResult = false">
+            <AppIcon name="close" :size="18" />
+          </button>
         </div>
 
         <div class="modal-body">
@@ -637,51 +659,61 @@ function resultHeadline(): string {
               <tr>
                 <th>Игрок</th>
                 <th>Команда</th>
-                <th>Было</th>
-                <th>±</th>
-                <th>Итог</th>
+                <th class="num">Было</th>
+                <th class="num">±</th>
+                <th class="num">Итог</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="p in state.participants" :key="p.userId">
-                <td style="font-weight: 600;">{{ p.username }}</td>
-                <td>Команда {{ p.team }} ({{ p.color === 'w' ? 'белые' : 'черные' }})</td>
-                <td class="mono dim">{{ p.ratingBefore }}</td>
-                <td class="mono" :class="{ 'plus': (p.ratingAfter ?? p.ratingBefore) > p.ratingBefore, 'minus': (p.ratingAfter ?? p.ratingBefore) < p.ratingBefore }">
-                  <span v-if="p.ratingAfter !== null">
+                <td>
+                  <strong class="player-name">{{ p.username }}</strong>
+                </td>
+                <td class="dim">Команда {{ p.team }} ({{ p.color === 'w' ? 'белые' : 'черные' }})</td>
+                <td class="mono dim num">{{ p.ratingBefore }}</td>
+                <td class="num">
+                  <span
+                    v-if="p.ratingAfter !== null"
+                    class="rating-delta"
+                    :class="{ plus: (p.ratingAfter ?? p.ratingBefore) > p.ratingBefore, minus: (p.ratingAfter ?? p.ratingBefore) < p.ratingBefore }"
+                  >
                     {{ p.ratingAfter - p.ratingBefore > 0 ? '+' : '' }}{{ p.ratingAfter - p.ratingBefore }}
                   </span>
                 </td>
-                <td class="mono" style="font-weight: 700;">{{ p.ratingAfter ?? p.ratingBefore }}</td>
+                <td class="mono num" style="font-weight: 700;">{{ p.ratingAfter ?? p.ratingBefore }}</td>
               </tr>
             </tbody>
           </table>
 
-          <!-- Кнопки анализа на Lichess -->
-          <div class="analysis-box panel">
+          <!-- Блок анализа партии -->
+          <div class="analysis-box">
             <div class="analysis-text">
               <h4>Анализ партии</h4>
               <p class="dim small-hint">
-                Экспортируйте ходы в формате PGN или откройте движок Stockfish прямо на Lichess для глубокого разбора.
+                Пересмотрите партию в плеере, скачайте PGN или откройте разбор в движке на Lichess.
               </p>
             </div>
             <div class="analysis-buttons">
+              <button class="primary" @click="showReplay = true">
+                <AppIcon name="play" :size="15" /> Смотреть партию
+              </button>
               <a :href="`/api/games/${gameId}/pgn?download=1`" class="button" download>
-                ⬇ Скачать PGN
+                <AppIcon name="download" :size="15" /> Скачать PGN
               </a>
               <button
                 class="brass"
                 :disabled="lichessBusy"
                 @click="analyzeOnLichess(0)"
               >
-                {{ lichessBusy ? 'Открываем…' : 'Анализ на Lichess ↗' }}
+                <AppIcon name="external" :size="14" />
+                {{ lichessBusy ? 'Открываем…' : (state.mode === 'bughouse' ? 'Lichess · доска 1' : 'Анализ на Lichess') }}
               </button>
               <button
                 v-if="state.mode === 'bughouse'"
                 class="small ghost"
                 @click="analyzeOnLichess(1)"
               >
-                Доска 2 на Lichess ↗
+                <AppIcon name="external" :size="13" /> Lichess · доска 2
               </button>
             </div>
           </div>
@@ -689,17 +721,23 @@ function resultHeadline(): string {
 
         <div class="modal-foot">
           <button v-if="isParticipant" class="primary big" :disabled="rematchBusy" @click="rematch">
-            {{ rematchBusy ? 'Создаём…' : 'Реванш ↺' }}
+            <AppIcon name="rematch" :size="16" />
+            {{ rematchBusy ? 'Создаём…' : 'Реванш' }}
           </button>
-          <router-link :to="`/replay/${gameId}`" class="button">
-            Просмотр ходов
-          </router-link>
           <router-link to="/" class="button ghost">
             В лобби
           </router-link>
         </div>
       </div>
     </div>
+
+    <!-- Плеер партии поверх -->
+    <GameReplayModal
+      v-if="showReplay"
+      :game-id="gameId"
+      :title="`Партия #${gameId}`"
+      @close="showReplay = false"
+    />
   </div>
 
   <div v-else class="empty">Подключение к партии #{{ gameId }}…</div>
@@ -729,13 +767,17 @@ function resultHeadline(): string {
 }
 
 .back-link {
-  color: var(--ink-faint);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink-3);
   font-weight: 500;
   margin-right: 6px;
 }
 .back-link:hover {
   color: var(--ink);
   text-decoration: none;
+  border-color: transparent;
 }
 
 .game-title-group h1 {
@@ -767,41 +809,23 @@ function resultHeadline(): string {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--gap-xs);
 }
 
 .team-players-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 8px 14px;
-  background: var(--bg-card);
+  gap: var(--gap-s);
+  padding: var(--gap-xs) var(--gap-s);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-m);
 }
 
-.team-color-indicator {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 3px 8px;
-  border-radius: var(--r-s);
-}
-.team-color-indicator.w {
-  background: #fff;
-  color: #111;
-  border: 1px solid #bbb;
-}
-.team-color-indicator.b {
-  background: #111;
-  color: #fff;
-}
-
 .team-members {
   display: flex;
-  gap: 8px;
+  gap: var(--gap-xs);
   flex-wrap: wrap;
   flex: 1;
 }
@@ -811,39 +835,85 @@ function resultHeadline(): string {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: var(--bg-inset);
+  background: var(--surface-inset);
   border: 1px solid var(--line);
   border-radius: var(--r-s);
   font-size: 13px;
-  transition: all 0.15s;
+  transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast);
 }
 
-.member-pill.active-turn {
-  border-color: var(--brass);
-  background: color-mix(in srgb, var(--brass) 18%, var(--bg-card));
-  box-shadow: 0 0 0 1.5px var(--brass);
+/* Роли игроков */
+.member-rating {
+  font-size: 12px;
+  color: var(--ink-3);
 }
 
-.member-pill.is-me {
+.member-pill.me .member-rating {
+  color: var(--ink-2);
+}
+
+.member-pill.me {
+  border-color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   font-weight: 600;
 }
 
-.slot-badge {
-  font-size: 10.5px;
-  color: var(--ink-faint);
-  background: var(--bg-card);
-  padding: 1px 5px;
-  border-radius: 3px;
+.member-pill.partner {
+  border-style: dashed;
+  border-color: var(--felt-2);
+  background: color-mix(in srgb, var(--felt) 9%, var(--surface));
 }
 
-.turn-chip {
-  background: var(--brass);
-  color: #fff;
+.member-pill.opponent {
+  opacity: 0.9;
+}
+
+/* Чья очередь */
+.member-pill.active-turn {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1.5px var(--accent-2);
+}
+
+.member-role {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: var(--r-xs);
+  white-space: nowrap;
+}
+
+.member-role.me {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.member-role.partner {
+  color: var(--felt-ink);
+  background: var(--felt-2);
+}
+
+.turn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: var(--r-xs);
+  white-space: nowrap;
+}
+
+.turn-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .clock-display {
@@ -851,16 +921,17 @@ function resultHeadline(): string {
   font-weight: 700;
   padding: 4px 12px;
   border-radius: var(--r-s);
-  background: var(--bg-inset);
+  background: var(--surface-inset);
   border: 1px solid var(--line);
-  min-width: 80px;
+  min-width: 84px;
   text-align: center;
 }
+
 .clock-display.running {
-  background: var(--bg-card);
-  border-color: var(--brass);
-  color: var(--brass);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--brass) 25%, transparent);
+  background: var(--accent-soft);
+  border-color: var(--accent-2);
+  color: var(--accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent-2) 25%, transparent);
 }
 
 .board-frame {
@@ -889,8 +960,8 @@ function resultHeadline(): string {
 .bughouse-board-col.my-board {
   padding: 6px;
   border-radius: var(--r-m);
-  background: color-mix(in srgb, var(--brass) 6%, transparent);
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--brass) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .board-top-info {
@@ -909,7 +980,7 @@ function resultHeadline(): string {
   display: flex;
   justify-content: space-between;
   padding: 6px 12px;
-  background: var(--bg-card);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-s);
   font-size: 13.5px;
@@ -922,7 +993,7 @@ function resultHeadline(): string {
 }
 
 .clock-active {
-  color: var(--brass);
+  color: var(--accent-2);
   font-weight: 700;
 }
 
@@ -951,42 +1022,47 @@ function resultHeadline(): string {
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background: var(--bg-inset);
+  background: var(--surface-inset);
   border: 1px solid var(--line);
   border-radius: var(--r-s);
   font-size: 12.5px;
 }
 
+.queue-item.me {
+  border-color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.queue-item.partner {
+  border-style: dashed;
+  border-color: var(--felt-2);
+}
+
 .queue-item.current {
-  border-color: var(--brass);
-  background: color-mix(in srgb, var(--brass) 14%, var(--bg-card));
+  border-color: var(--accent);
+  background: var(--accent-soft);
   font-weight: 600;
+  box-shadow: 0 0 0 1.5px var(--accent-2);
 }
 
 .queue-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--ink-faint);
+  background: var(--ink-3);
 }
 .queue-dot.on {
   background: var(--ok);
   box-shadow: 0 0 6px var(--ok);
 }
 
-.queue-color-tag {
-  font-size: 10.5px;
-  font-weight: 700;
-  padding: 1px 5px;
-  border-radius: 3px;
+.slot-note {
+  margin-left: auto;
 }
-.queue-color-tag.w { background: #fff; color: #111; border: 1px solid #ccc; }
-.queue-color-tag.b { background: #111; color: #fff; }
 
 .turn-now-chip {
-  margin-left: auto;
   font-size: 10px;
-  color: var(--brass);
+  color: var(--accent);
   font-weight: 700;
   letter-spacing: 0.05em;
 }
@@ -1018,7 +1094,7 @@ function resultHeadline(): string {
 
 .chat-user {
   font-weight: 600;
-  color: var(--brass);
+  color: var(--accent-2);
   margin-right: 6px;
 }
 
@@ -1057,28 +1133,48 @@ function resultHeadline(): string {
 }
 
 .result-modal {
-  max-width: 580px;
+  max-width: 600px;
 }
 
 .headline-box {
   text-align: center;
   padding: 12px;
-  background: var(--bg-inset);
+  background: var(--surface-inset);
   border-radius: var(--r-s);
-  margin-bottom: 16px;
+  margin-bottom: var(--gap-m);
 }
 
 .headline-box h3 {
   font-size: 18px;
-  color: var(--brass);
+  color: var(--accent);
 }
 
-.result-table td.plus { color: var(--ok); font-weight: 700; }
-.result-table td.minus { color: var(--bad); font-weight: 700; }
+.rating-delta {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+
+.rating-delta.plus {
+  color: var(--ok);
+  background: var(--ok-soft);
+}
+
+.rating-delta.minus {
+  color: var(--bad);
+  background: var(--bad-soft);
+}
 
 .analysis-box {
-  margin-top: 18px;
-  padding: 14px 18px;
+  margin-top: var(--gap-m);
+  padding: var(--gap-m);
+  background: var(--surface-inset);
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
 }
 
 .analysis-box h4 {
@@ -1087,9 +1183,9 @@ function resultHeadline(): string {
 
 .analysis-buttons {
   display: flex;
-  gap: 10px;
+  gap: var(--gap-xs);
   flex-wrap: wrap;
-  margin-top: 10px;
+  margin-top: var(--gap-s);
 }
 
 .small-hint {
@@ -1098,5 +1194,44 @@ function resultHeadline(): string {
 .warn-text {
   color: var(--warn);
   font-size: 12.5px;
+}
+
+/* Мобильная адаптация игры: компактные панели игроков и максимум места под доску */
+@media (max-width: 640px) {
+  .game-page {
+    gap: 10px;
+  }
+  .game-topbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .game-layout {
+    gap: 12px;
+  }
+  .team-players-bar {
+    padding: 4px 8px;
+    gap: 6px;
+  }
+  .clock-display {
+    font-size: 16px;
+    padding: 3px 8px;
+    min-width: 62px;
+  }
+  .member-pill {
+    padding: 3px 6px;
+    font-size: 12px;
+    gap: 4px;
+  }
+  .member-rating {
+    display: none;
+  }
+  .member-role {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+  .bughouse-clocks-bar {
+    padding: 4px 8px;
+    font-size: 12.5px;
+  }
 }
 </style>

@@ -3,10 +3,11 @@ import { onMounted, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import type { LobbySummary, LiveGameInfo, GameMode, TimeControl } from 'shared';
 import { timeControlLabel } from 'shared';
-import { getSocket } from '../api/socket';
+import { getSocket, onSocketResync } from '../api/socket';
 import { api } from '../api/rest';
 import ChessBoard from '../components/ChessBoard.vue';
 import CreateLobbyModal from '../components/CreateLobbyModal.vue';
+import AppIcon from '../components/AppIcon.vue';
 
 const router = useRouter();
 const lobbies = ref<LobbySummary[]>([]);
@@ -25,6 +26,11 @@ const socket = getSocket();
 onMounted(() => {
   socket.emit('live:subscribe');
   socket.emit('lobby-list:subscribe');
+  // Реконнект сокета теряет комнаты live/lobby-list — подписаться заново
+  offResync = onSocketResync(() => {
+    socket.emit('live:subscribe');
+    socket.emit('lobby-list:subscribe');
+  });
   socket.on('lobby:list:update', (list) => (lobbies.value = list));
   socket.on('live:snapshot', (games) => (liveGames.value = games));
   socket.on('live:new', (g) => {
@@ -48,7 +54,11 @@ onMounted(() => {
   });
 });
 
+let offResync: (() => void) | null = null;
+
 onBeforeUnmount(() => {
+  offResync?.();
+  offResync = null;
   socket.off('lobby:list:update');
   socket.off('live:snapshot');
   socket.off('live:new');
@@ -130,8 +140,8 @@ function modeLabel(m: string): string {
         <p class="dim">Играйте парами на одной доске или в багхаус с обменом фигурами в реальном времени.</p>
       </div>
       <div class="banner-actions">
-        <button class="primary big" @click="showCreateModal = true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        <button class="primary banner-create-btn" @click="showCreateModal = true">
+          <AppIcon name="plus" :size="18" :stroke-width="2.4" />
           Создать стол
         </button>
 
@@ -142,7 +152,7 @@ function modeLabel(m: string): string {
             maxlength="6"
             class="mono join-input"
           />
-          <button type="submit" class="brass" :disabled="!joinCode.trim() || joinBusy">
+          <button type="submit" class="brass join-btn" :disabled="!joinCode.trim() || joinBusy">
             Войти
           </button>
         </form>
@@ -191,7 +201,9 @@ function modeLabel(m: string): string {
                 <div class="meta-row">
                   <span class="badge">{{ modeLabel(g.mode) }}</span>
                   <span class="mono dim">ход {{ Math.ceil(g.moveNumber / (g.mode === 'bughouse' ? 1 : 2)) }}</span>
-                  <span class="spectate-hint">Смотреть →</span>
+                  <span class="spectate-hint">
+                    <AppIcon name="eye" :size="14" /> Смотреть
+                  </span>
                 </div>
               </div>
             </article>
@@ -222,9 +234,6 @@ function modeLabel(m: string): string {
               <div class="lobby-card-main">
                 <div class="lobby-title-row">
                   <span class="lobby-name">{{ l.name }}</span>
-                  <span class="lobby-code-chip mono" title="Код для входа" @click.stop>
-                    {{ l.code }}
-                  </span>
                 </div>
                 <div class="lobby-players">
                   <span
@@ -237,13 +246,6 @@ function modeLabel(m: string): string {
                     {{ p.username }}
                     <span class="mono dim">({{ p.rating }})</span>
                   </span>
-                  <span
-                    v-for="s in 4 - l.players.length"
-                    :key="'slot' + s"
-                    class="lp empty"
-                  >
-                    + свободно
-                  </span>
                 </div>
               </div>
 
@@ -252,7 +254,15 @@ function modeLabel(m: string): string {
                   <span class="badge">{{ modeLabel(l.mode) }}</span>
                   <span class="badge mono">{{ timeControlLabel(l.timeControl) }}</span>
                 </div>
-                <span class="seats mono">{{ l.players.length }}/4</span>
+                <span class="seats-indicator" :title="`${l.players.length} из 4 мест занято`">
+                  <span
+                    v-for="s in 4"
+                    :key="s"
+                    class="seat-pip"
+                    :class="{ filled: s <= l.players.length }"
+                  ></span>
+                  <span class="seats mono">{{ l.players.length }}/4</span>
+                </span>
                 <button class="primary small">Сесть за стол</button>
               </div>
             </div>
@@ -298,8 +308,8 @@ function modeLabel(m: string): string {
   justify-content: space-between;
   gap: 24px;
   flex-wrap: wrap;
-  background: linear-gradient(135deg, var(--bg-card) 0%, color-mix(in srgb, var(--felt) 12%, var(--bg-card)) 100%);
-  border-color: color-mix(in srgb, var(--brass) 35%, var(--line));
+  background: linear-gradient(135deg, var(--surface) 0%, color-mix(in srgb, var(--felt) 12%, var(--surface)) 100%);
+  border-color: color-mix(in srgb, var(--accent-2) 35%, var(--line));
 }
 
 .banner-intro h1 {
@@ -310,21 +320,45 @@ function modeLabel(m: string): string {
 .banner-actions {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   flex-wrap: wrap;
+}
+
+.banner-create-btn {
+  height: 42px;
+  padding: 0 20px;
+  font-size: 14.5px;
+  font-weight: 600;
+  border-radius: var(--r-s);
+  box-sizing: border-box;
 }
 
 .quick-join {
   display: flex;
+  align-items: center;
   gap: 6px;
 }
 
 .join-input {
+  height: 42px;
   width: 140px;
+  padding: 0 12px;
+  font-size: 14px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-weight: 600;
   text-align: center;
+  border-radius: var(--r-s);
+  box-sizing: border-box;
+}
+
+.join-btn {
+  height: 42px;
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: var(--r-s);
+  box-sizing: border-box;
 }
 
 .banner-error {
@@ -336,7 +370,28 @@ function modeLabel(m: string): string {
   display: grid;
   grid-template-columns: 1.05fr 1fr;
   gap: 24px;
-  align-items: start;
+  align-items: stretch;
+}
+
+/* Обе колонки визуально завершены: панели растягиваются на высоту сетки */
+.live-col,
+.lobbies-col {
+  display: flex;
+  min-width: 0;
+}
+
+.live-col > .panel,
+.lobbies-col > .panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.lobbies-col > .panel > .panel-body,
+.live-col > .panel > .panel-body,
+.lobbies-col > .panel > .empty {
+  flex: 1;
 }
 
 @media (max-width: 980px) {
@@ -357,13 +412,13 @@ function modeLabel(m: string): string {
   border: 1px solid var(--line);
   border-radius: var(--r-m);
   padding: 14px;
-  background: var(--bg-inset);
+  background: var(--surface-inset);
   transition: all 0.15s;
 }
 
 .live-game:hover {
-  border-color: var(--brass);
-  background: var(--bg-raised);
+  border-color: var(--accent-2);
+  background: var(--surface-2);
   transform: translateY(-1px);
 }
 
@@ -390,7 +445,7 @@ function modeLabel(m: string): string {
 }
 
 .players-line .vs {
-  color: var(--ink-faint);
+  color: var(--ink-3);
   font-size: 12px;
   font-style: italic;
 }
@@ -409,8 +464,15 @@ function modeLabel(m: string): string {
 
 .spectate-hint {
   margin-left: auto;
-  color: var(--brass);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
   font-weight: 600;
+}
+
+.live-game:hover .spectate-hint {
+  color: var(--accent-2);
 }
 
 /* Карточки столов */
@@ -429,14 +491,14 @@ function modeLabel(m: string): string {
   padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: var(--r-m);
-  background: var(--bg-inset);
+  background: var(--surface-inset);
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .lobby-card:hover {
-  border-color: var(--brass);
-  background: var(--bg-raised);
+  border-color: var(--accent-2);
+  background: var(--surface-2);
 }
 
 .lobby-card-main {
@@ -455,17 +517,9 @@ function modeLabel(m: string): string {
   font-size: 15px;
   font-weight: 600;
   color: var(--ink);
-}
-
-.lobby-code-chip {
-  background: var(--bg-card);
-  border: 1px dashed var(--brass);
-  color: var(--brass);
-  padding: 1px 7px;
-  border-radius: 4px;
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lobby-players {
@@ -479,7 +533,7 @@ function modeLabel(m: string): string {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--ink-soft);
+  color: var(--ink-2);
 }
 
 .lp.offline {
@@ -487,8 +541,31 @@ function modeLabel(m: string): string {
 }
 
 .lp.empty {
-  color: var(--ink-faint);
+  color: var(--ink-3);
   font-style: italic;
+}
+
+.seats-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.seat-pip {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line-2);
+  transition: background var(--t-fast), box-shadow var(--t-fast);
+}
+
+.seat-pip.filled {
+  background: var(--ok);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--ok) 60%, transparent);
 }
 
 .lobby-card-meta {
@@ -504,9 +581,66 @@ function modeLabel(m: string): string {
 }
 
 .seats {
-  font-size: 13.5px;
-  color: var(--ink-faint);
-  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  font-weight: 700;
+}
+
+/* На узких экранах карточка стола и баннер перестраиваются вертикально */
+@media (max-width: 560px) {
+  .home-banner {
+    padding: 16px 14px;
+    gap: 14px;
+  }
+
+  .banner-intro h1 {
+    font-size: 20px;
+  }
+
+  .banner-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .banner-create-btn {
+    width: 100%;
+  }
+
+  .quick-join {
+    width: 100%;
+  }
+
+  .join-input {
+    flex: 1;
+    width: auto;
+  }
+
+  .lobby-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .lobby-card-meta {
+    justify-content: space-between;
+  }
+
+  .lobby-card-meta .tags {
+    flex-wrap: wrap;
+  }
+}
+
+/* Компактное пустое состояние: по центру, без раздутых отступов */
+.lobbies-col .empty,
+.live-col .empty {
+  padding: 28px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: auto;
 }
 
 /* Toast */
@@ -515,9 +649,9 @@ function modeLabel(m: string): string {
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--bg-raised);
+  background: var(--surface-2);
   color: var(--ink);
-  border: 1px solid var(--brass);
+  border: 1px solid var(--accent-2);
   border-radius: var(--r-m);
   padding: 12px 20px;
   display: flex;

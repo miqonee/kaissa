@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue';
 import type { AdminUserRow } from 'shared';
 import { api } from '../api/rest';
 import { useAuthStore } from '../stores/auth';
+import AppIcon from '../components/AppIcon.vue';
 
 const auth = useAuthStore();
 const users = ref<AdminUserRow[]>([]);
@@ -83,7 +84,9 @@ function fmtDate(iso: string) {
           <h2>Панель администратора</h2>
           <span class="hint">Управление игроками для тестирования и балансировки</span>
         </div>
-        <button class="small ghost" @click="loadUsers">Обновить ↻</button>
+        <button class="small ghost" @click="loadUsers">
+          <AppIcon name="refresh" :size="14" /> Обновить
+        </button>
       </div>
 
       <div v-if="error" class="panel-body">
@@ -113,9 +116,9 @@ function fmtDate(iso: string) {
               <td>
                 <span class="dot" :class="{ on: u.online }" :title="u.online ? 'В сети' : 'Офлайн'"></span>
               </td>
-              <td style="font-weight: 600;">
-                {{ u.username }}
-                <span v-if="u.id === auth.user?.id" class="badge">Вы</span>
+              <td>
+                <strong class="player-name">{{ u.username }}</strong>
+                <span v-if="u.id === auth.user?.id" class="badge dim">Вы</span>
               </td>
               <td class="mono" style="font-weight: 700;">{{ u.rating }}</td>
               <td class="mono dim">{{ u.wins }} / {{ u.losses }}</td>
@@ -140,7 +143,7 @@ function fmtDate(iso: string) {
                     @click="resetRating(u)"
                     title="Сбросить рейтинг на 1200"
                   >
-                    Сброс 1200
+                    <AppIcon name="rematch" :size="13" /> Сброс 1200
                   </button>
 
                   <button
@@ -150,7 +153,7 @@ function fmtDate(iso: string) {
                     @click="deleteUser(u)"
                     title="Удалить аккаунт и все партии"
                   >
-                    Удалить
+                    <AppIcon name="trash" :size="13" /> Удалить
                   </button>
                 </div>
               </td>
@@ -174,7 +177,7 @@ function fmtDate(iso: string) {
 }
 
 .is-me {
-  background: color-mix(in srgb, var(--brass) 6%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 6%, transparent);
 }
 
 .admin-actions {

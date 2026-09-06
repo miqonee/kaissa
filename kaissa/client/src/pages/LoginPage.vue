@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { resetSocket } from '../api/socket';
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -22,6 +23,8 @@ async function submit() {
     } else {
       await auth.register(username.value.trim(), password.value);
     }
+    // сокет мог существовать до логина — пересоздать с новой cookie-сессией
+    resetSocket();
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
     router.push(redirect);
   } catch (e) {
@@ -85,7 +88,7 @@ async function submit() {
 }
 
 .login-head p {
-  color: var(--ink-faint);
+  color: var(--ink-3);
   margin: 6px 0 0;
   font-size: 14px;
 }
@@ -93,7 +96,7 @@ async function submit() {
 .switch-mode {
   text-align: center;
   font-size: 13px;
-  color: var(--ink-soft);
+  color: var(--ink-2);
   margin: 16px 0 0;
 }
 

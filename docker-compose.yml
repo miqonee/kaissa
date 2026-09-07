@@ -35,7 +35,7 @@ services:
       dockerfile: client/Dockerfile
     restart: unless-stopped
     ports:
-      - "${KAISSA_PORT:-8289}:80"
+      - "${KAISSA_PORT:-8289}:3000"
     depends_on:
       - server
 

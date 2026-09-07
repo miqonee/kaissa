@@ -25,4 +25,4 @@ RUN sed -i '/user  nginx;/d' /etc/nginx/nginx.conf && \
     chgrp -R 0 /var/cache/nginx /var/log/nginx /etc/nginx /usr/share/nginx/html && \
     chmod -R g=u /var/cache/nginx /var/log/nginx /etc/nginx /usr/share/nginx/html
 
-EXPOSE 80
+EXPOSE 3000

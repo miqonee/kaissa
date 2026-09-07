@@ -9,7 +9,7 @@ export const router = createRouter({
     { path: '/lobby/:id', name: 'lobby', component: () => import('./pages/LobbyPage.vue') },
     { path: '/game/:id', name: 'game', component: () => import('./pages/GamePage.vue') },
     { path: '/history', name: 'history', component: () => import('./pages/HistoryPage.vue') },
-    { path: '/replay/:id', name: 'replay', component: () => import('./pages/ReplayPage.vue') },
+    { path: '/replay/:id', redirect: '/history' },
     { path: '/players/:username', name: 'profile', component: () => import('./pages/ProfilePage.vue') },
     { path: '/leaderboard', name: 'leaderboard', component: () => import('./pages/LeaderboardPage.vue') },
     { path: '/admin', name: 'admin', component: () => import('./pages/AdminPage.vue') },

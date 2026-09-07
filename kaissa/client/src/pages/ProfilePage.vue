@@ -3,10 +3,12 @@ import { computed, onMounted, ref } from 'vue';
 import type { ProfilePayload } from 'shared';
 import { api } from '../api/rest';
 import { useRoute } from 'vue-router';
+import GameReplayModal from '../components/GameReplayModal.vue';
 
 const route = useRoute();
 const profile = ref<ProfilePayload | null>(null);
 const error = ref('');
+const replayId = ref<number | null>(null);
 
 onMounted(async () => {
   try {
@@ -93,13 +95,21 @@ function gameOutcome(g: import('shared').GameSummary): string {
             <td>{{ g.participants.map((p) => p.username).join(', ') }}</td>
             <td>{{ gameOutcome(g) }}</td>
             <td class="actions">
-              <router-link v-if="g.status !== 'active'" :to="`/replay/${g.id}`" class="button small ghost">Просмотр</router-link>
+              <button v-if="g.status !== 'active'" class="button small ghost" @click="replayId = g.id">Просмотр</button>
             </td>
           </tr>
         </tbody>
       </table>
       <div v-else class="empty">Партий пока нет.</div>
     </div>
+
+    <!-- Модальный плеер партии -->
+    <GameReplayModal
+      v-if="replayId !== null"
+      :game-id="replayId"
+      :title="`Партия #${replayId}`"
+      @close="replayId = null"
+    />
   </div>
   <div v-else class="empty">Загрузка…</div>
 </template>

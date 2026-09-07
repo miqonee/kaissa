@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import type { GameSummary, MoveRecord } from 'shared';
 import { api } from '../api/rest';
 import AppIcon from './AppIcon.vue';
@@ -13,8 +12,6 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{ (e: 'close'): void }>();
-
-const router = useRouter();
 
 const game = ref<GameSummary | null>(null);
 const moves = ref<MoveRecord[]>([]);
@@ -40,10 +37,6 @@ function onKey(e: KeyboardEvent): void {
     e.stopPropagation();
     emit('close');
   }
-}
-
-function openFull(): void {
-  router.push(`/replay/${props.gameId}`);
 }
 
 // Блокируем прокрутку фона, пока открыта модалка
@@ -76,9 +69,6 @@ watch(() => props.gameId, load);
       <div class="modal-head">
         <h2>{{ title ?? `Партия #${gameId}` }}</h2>
         <div class="rh-actions">
-          <button class="small ghost" title="Открыть плеер на всю страницу" @click="openFull">
-            <AppIcon name="external" :size="14" /> На всю страницу
-          </button>
           <button class="modal-close" aria-label="Закрыть" @click="emit('close')">
             <AppIcon name="close" :size="18" />
           </button>

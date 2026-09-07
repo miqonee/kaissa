@@ -2,8 +2,9 @@ FROM node:22-alpine AS build
 WORKDIR /app
 ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 
-# Копируем готовый shared
+# Копируем и собираем shared
 COPY shared ./shared
+RUN cd shared && npm install && npm run build
 
 # Зависимости клиента
 COPY client/package.json ./client/
@@ -20,7 +21,7 @@ COPY client/nginx.conf /etc/nginx/conf.d/default.conf
 # Поддержка запуска в OpenShift под unprivileged пользователем (SCC restricted)
 RUN sed -i '/user  nginx;/d' /etc/nginx/nginx.conf && \
     sed -i 's,pid .*,pid /tmp/nginx.pid;,g' /etc/nginx/nginx.conf && \
-    sed -i 's/listen 80;/listen 8080;/g' /etc/nginx/conf.d/default.conf && \
+    sed -i 's/listen 80;/listen 8289;/g' /etc/nginx/conf.d/default.conf && \
     mkdir -p /var/cache/nginx/client_temp /var/cache/nginx/proxy_temp /var/log/nginx && \
     chgrp -R 0 /var/cache/nginx /var/log/nginx /etc/nginx /usr/share/nginx/html && \
     chmod -R g=u /var/cache/nginx /var/log/nginx /etc/nginx /usr/share/nginx/html

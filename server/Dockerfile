@@ -3,6 +3,8 @@ WORKDIR /app
 ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 
 COPY shared ./shared
+RUN cd shared && npm install && npm run build
+
 COPY server/package.json ./server/
 RUN cd server && npm config set strict-ssl false && npm install
 
@@ -17,7 +19,7 @@ WORKDIR /app/server
 ENV NODE_ENV=production
 ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 
-COPY shared /app/shared
+COPY --from=build /app/shared /app/shared
 COPY server/package.json ./
 RUN npm config set strict-ssl false && npm install --omit=dev
 

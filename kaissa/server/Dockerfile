@@ -9,7 +9,8 @@ RUN cd server && npm config set strict-ssl false && npm install
 COPY server/tsconfig.json server/tsconfig.build.json ./server/
 COPY server/prisma ./server/prisma
 COPY server/src ./server/src
-RUN cd server && npx prisma generate && npm run build
+RUN cd server && npx prisma generate
+RUN cd server && npm run build
 
 FROM node:22-alpine
 WORKDIR /app/server

@@ -39,9 +39,12 @@ export function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> 
   return socket;
 }
 
-/** Пересоздать сокет (после логина/логаута — новая cookie-сессия) */
+/** Сброс/закрытие сокета (после логина/логаута) */
 export function resetSocket(): void {
-  socket?.disconnect();
-  socket = null;
-  useConnectionStore().set('connecting');
+  if (socket) {
+    socket.removeAllListeners();
+    socket.disconnect();
+    socket = null;
+  }
+  useConnectionStore().set('offline');
 }

@@ -263,10 +263,6 @@ function scrollChat(): void {
 let offResync: (() => void) | null = null;
 
 onMounted(() => {
-  socket.emit('game:watch', gameId);
-  // Реконнект сокета теряет комнату игры — переподключиться и получить свежий game:state
-  offResync = onSocketResync(() => socket.emit('game:watch', gameId));
-
   socket.on('game:state', (st) => {
     if (st.gameId !== gameId) return;
     state.value = st;
@@ -304,6 +300,10 @@ onMounted(() => {
     if (payload.gameId !== gameId) return;
     disconnected.value = payload.left;
   });
+
+  socket.emit('game:watch', gameId);
+  // Реконнект сокета теряет комнату игры — переподключиться и получить свежий game:state
+  offResync = onSocketResync(() => socket.emit('game:watch', gameId));
 
   ticker = window.setInterval(tickClocks, 500);
 });

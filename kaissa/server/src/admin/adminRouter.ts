@@ -81,9 +81,15 @@ adminRouter.post('/users/:id/admin', async (req, res) => {
 export async function promoteConfiguredAdmins(usernames: string[]): Promise<void> {
   const clean = usernames.map((u) => u.trim()).filter(Boolean);
   if (!clean.length) return;
-  const res = await prisma.user.updateMany({
-    where: { username: { in: clean } },
-    data: { isAdmin: true },
-  });
-  if (res.count) console.log(`[kaissa] выданы права администратора: ${clean.join(', ')}`);
+  const users = await prisma.user.findMany({ select: { id: true, username: true, isAdmin: true } });
+  const toPromote = users.filter(
+    (u) => !u.isAdmin && clean.some((c) => c.toLowerCase() === u.username.toLowerCase()),
+  );
+  if (toPromote.length) {
+    await prisma.user.updateMany({
+      where: { id: { in: toPromote.map((u) => u.id) } },
+      data: { isAdmin: true },
+    });
+    console.log(`[kaissa] выданы права администратора: ${toPromote.map((u) => u.username).join(', ')}`);
+  }
 }

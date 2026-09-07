@@ -23,4 +23,7 @@ router.beforeEach(async (to) => {
   if (to.name !== 'login' && !auth.user) {
     return { name: 'login', query: { redirect: to.fullPath } };
   }
+  if (to.name === 'admin' && !auth.user?.isAdmin) {
+    return { name: 'home' };
+  }
 });

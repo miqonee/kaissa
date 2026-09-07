@@ -277,6 +277,8 @@ export class LobbiesManager {
       team2: team2.map((m) => ({ uid: m.uid, username: m.username, rating: m.rating })),
     });
     lobby.started = true;
+    // Сразу подключаем все сокеты из комнаты лобби в комнату игры, чтобы никто не потерял первые события
+    this.io?.in(this.room(lobbyId)).socketsJoin(this.games!.gameRoom(gameId));
     // рассылка redirect
     this.io?.to(this.room(lobbyId)).emit('lobby:started', { gameId });
     this.broadcastList();

@@ -86,7 +86,7 @@ function config() {
     viewOnly: !interactive && !props.dropPiece,
     turnColor: (props.fen.split(' ')[1] === 'b' ? 'black' : 'white') as CgColor,
     lastMove: lastMoveKeys(),
-    check: props.checkSquare ? (props.checkSquare as Key) : false,
+    check: props.checkSquare ? true : false,
     movable: {
       free: false,
       color: interactive ? (props.movableColor as CgColor) : undefined,
@@ -97,7 +97,13 @@ function config() {
       },
     },
     premovable: { enabled: false },
-    draggable: { showGhost: true },
+    draggable: {
+      enabled: interactive,
+      distance: 3,
+      autoDistance: true,
+      showGhost: true,
+      deleteOnDropOff: false,
+    },
     selectable: { enabled: true },
     events: {
       select: (key: Key | undefined) => {
@@ -121,17 +127,70 @@ onMounted(() => {
 });
 
 watch(
-  () => [
-    props.fen,
-    props.orientation,
-    props.movableColor,
-    props.dests,
-    props.lastMove,
-    props.checkSquare,
-    props.dropPiece,
-  ],
-  () => cg?.set(config() as never),
+  () => props.fen,
+  (newFen) => {
+    if (!cg) return;
+    const turnColor = (newFen.split(' ')[1] === 'b' ? 'black' : 'white') as CgColor;
+    const interactive = props.movableColor !== null;
+    cg.set({
+      fen: newFen,
+      turnColor,
+      check: props.checkSquare ? true : false,
+      lastMove: lastMoveKeys(),
+      viewOnly: !interactive && !props.dropPiece,
+      movable: {
+        color: interactive ? (props.movableColor as CgColor) : undefined,
+        dests: destsMap(),
+      },
+      draggable: {
+        enabled: interactive,
+      },
+    } as never);
+  },
+);
+
+watch(
+  () => [props.movableColor, props.dests, props.dropPiece],
+  () => {
+    if (!cg) return;
+    const interactive = props.movableColor !== null;
+    cg.set({
+      viewOnly: !interactive && !props.dropPiece,
+      movable: {
+        color: interactive ? (props.movableColor as CgColor) : undefined,
+        dests: destsMap(),
+      },
+      draggable: {
+        enabled: interactive,
+      },
+    } as never);
+  },
   { deep: true },
+);
+
+watch(
+  () => props.lastMove,
+  () => {
+    if (!cg) return;
+    cg.set({ lastMove: lastMoveKeys() } as never);
+  },
+  { deep: true },
+);
+
+watch(
+  () => props.checkSquare,
+  (chk) => {
+    if (!cg) return;
+    cg.set({ check: chk ? true : false } as never);
+  },
+);
+
+watch(
+  () => props.orientation,
+  (ori) => {
+    if (!cg) return;
+    cg.set({ orientation: ori as CgColor } as never);
+  },
 );
 
 onBeforeUnmount(() => {

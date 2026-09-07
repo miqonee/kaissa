@@ -52,6 +52,7 @@ function joinLobby(): void {
 }
 
 let offResync: (() => void) | null = null;
+let gameStarting = false;
 
 onMounted(() => {
   joinLobby();
@@ -67,7 +68,8 @@ onMounted(() => {
     scrollChat();
   });
   socket.on('lobby:started', ({ gameId }) => {
-    router.push(`/game/${gameId}`);
+    gameStarting = true;
+    window.location.assign(`/game/${gameId}`);
   });
   socket.on('lobby:closed', (reason) => {
     error.value = reason;
@@ -77,7 +79,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
   offResync?.();
   offResync = null;
-  socket.emit('lobby:leave');
+  if (!gameStarting) {
+    socket.emit('lobby:leave');
+  }
   socket.off('lobby:state');
   socket.off('lobby:chat');
   socket.off('lobby:started');

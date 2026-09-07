@@ -13,11 +13,16 @@ export interface JwtPayload {
   username: string;
 }
 
+export function isConfiguredAdmin(username: string): boolean {
+  const norm = username.trim().toLowerCase();
+  return env.adminUsernames.some((u) => u.trim().toLowerCase() === norm);
+}
+
 export async function register(req: Request, res: Response): Promise<void> {
   const { username, password } = req.body ?? {};
   const name = String(username ?? '').trim();
-  if (!/^[a-zA-Z0-9_-]{3,20}$/.test(name)) {
-    res.status(400).json({ error: 'Ник: 3-20 символов, латиница/цифры/_-' });
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{1,28}[a-zA-Z0-9]$/.test(name)) {
+    res.status(400).json({ error: 'Ник: 3-30 символов, латиница, цифры, дефис, точка или подчеркивание' });
     return;
   }
   if (typeof password !== 'string' || password.length < 4 || password.length > 72) {
@@ -30,8 +35,9 @@ export async function register(req: Request, res: Response): Promise<void> {
     return;
   }
   const passwordHash = await bcrypt.hash(password, 10);
+  const isAdmin = isConfiguredAdmin(name);
   const user = await prisma.user.create({
-    data: { username: name, passwordHash, rating: 1200 },
+    data: { username: name, passwordHash, rating: 1200, isAdmin },
   });
   issue(res, user.id, user.username);
   res.status(201).json({ user: toPublic(user) });
@@ -44,6 +50,10 @@ export async function login(req: Request, res: Response): Promise<void> {
   if (!user || !(await bcrypt.compare(String(password ?? ''), user.passwordHash))) {
     res.status(401).json({ error: 'Неверное имя или пароль' });
     return;
+  }
+  if (!user.isAdmin && isConfiguredAdmin(user.username)) {
+    user.isAdmin = true;
+    await prisma.user.update({ where: { id: user.id }, data: { isAdmin: true } });
   }
   issue(res, user.id, user.username);
   res.json({ user: toPublic(user) });
@@ -92,7 +102,13 @@ export function currentPayload(req: Request): JwtPayload | null {
 export async function currentUser(req: Request) {
   const payload = currentPayload(req);
   if (!payload) return null;
-  return prisma.user.findUnique({ where: { id: payload.uid } });
+  const user = await prisma.user.findUnique({ where: { id: payload.uid } });
+  if (!user) return null;
+  if (!user.isAdmin && isConfiguredAdmin(user.username)) {
+    user.isAdmin = true;
+    await prisma.user.update({ where: { id: user.id }, data: { isAdmin: true } });
+  }
+  return user;
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {

@@ -149,7 +149,9 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
       const id = Number(gameId);
       const g = gamesManager.getActive(id);
       if (g) {
+        ctx.gameId = id;
         socket.join(gamesManager.gameRoom(id));
+        gamesManager.onPlayerReconnect(id, ctx.uid);
         socket.emit('game:state', gamesManager.toGameState(g));
       } else {
         socket.emit('lobby:closed', 'Партия не найдена или завершена');

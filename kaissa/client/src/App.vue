@@ -1,19 +1,35 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, watch } from 'vue';
 import { useAuthStore } from './stores/auth';
 import { useThemeStore } from './stores/theme';
 import { useConnectionStore } from './stores/connection';
-import { getSocket } from './api/socket';
+import { getSocket, resetSocket } from './api/socket';
 import AppIcon from './components/AppIcon.vue';
 
 const auth = useAuthStore();
 const theme = useThemeStore();
 const conn = useConnectionStore();
 
-onMounted(() => {
+onMounted(async () => {
   theme.init();
-  getSocket(); // старт сокета + отслеживание состояния связи
+  if (!auth.checked) {
+    await auth.check();
+  }
+  if (auth.user) {
+    getSocket();
+  }
 });
+
+watch(
+  () => auth.user,
+  (user) => {
+    if (user) {
+      getSocket();
+    } else {
+      resetSocket();
+    }
+  },
+);
 
 function logout(): void {
   auth.logout();
@@ -61,13 +77,11 @@ const connLabel = computed(() => {
           <router-link to="/">Лобби</router-link>
           <router-link to="/history">Архив партий</router-link>
           <router-link to="/leaderboard">Рейтинг</router-link>
-          <router-link v-if="auth.user.isAdmin" to="/admin" class="admin-link">
-            <span class="badge admin">Админ</span>
-          </router-link>
         </nav>
 
         <div class="topbar-right">
           <span
+            v-if="auth.user"
             class="conn-indicator"
             :class="conn.state"
             :title="connLabel"
@@ -83,6 +97,16 @@ const connLabel = computed(() => {
           </button>
 
           <template v-if="auth.user">
+            <router-link
+              v-if="auth.user.isAdmin"
+              to="/admin"
+              class="admin-header-btn"
+              title="Панель администратора"
+            >
+              <AppIcon name="crown" :size="14" />
+              <span>Админка</span>
+            </router-link>
+
             <router-link :to="`/players/${auth.user.username}`" class="me-link">
               <span class="me-name">{{ auth.user.username }}</span>
               <span class="rating-chip mono">{{ auth.user.rating }}</span>
@@ -100,8 +124,27 @@ const connLabel = computed(() => {
 </template>
 
 <style scoped>
-.admin-link {
-  padding: 4px 6px;
+.admin-header-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--r-s);
+  background: color-mix(in srgb, var(--accent-1) 12%, transparent);
+  color: var(--accent-1);
+  border: 1px solid color-mix(in srgb, var(--accent-1) 35%, transparent);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.admin-header-btn:hover {
+  background: var(--accent-1);
+  color: var(--surface-1);
+  border-color: var(--accent-1);
 }
 
 .conn-indicator {

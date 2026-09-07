@@ -230,6 +230,7 @@ export class GamesManager {
       ...(data.dropPiece ? { dropPiece: data.dropPiece } : {}),
       clocksAfter,
     });
+    this.io?.to(this.gameRoom(g.id)).emit('game:state', this.toGameState(g));
     this.io?.to('live').emit('live:update', this.liveInfo(g));
 
     await this.checkEndAfterMove(g, data.boardIndex as Board);

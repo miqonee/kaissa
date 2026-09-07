@@ -6,6 +6,13 @@ import ChessBoard from './ChessBoard.vue';
 import PocketBar from './PocketBar.vue';
 import AppIcon from './AppIcon.vue';
 import { buildMoveRows, buildReplay, type ReplayMoveView } from '../game/replay';
+import {
+  playMoveSound,
+  playCaptureSound,
+  playCheckSound,
+  playCastleSound,
+  playDropSound,
+} from '../audio/sounds';
 
 const props = withDefaults(
   defineProps<{
@@ -45,8 +52,32 @@ const boardsCount = computed(() => data.value.boardsCount);
 /** индекс активного хода в списке (null — стартовая позиция) */
 const activeMoveIndex = computed(() => (cursor.value > 0 ? cursor.value - 1 : null));
 
-function goTo(ply: number): void {
-  cursor.value = Math.max(0, Math.min(total.value, ply));
+function playReplayMove(targetPly: number): void {
+  if (targetPly <= 0 || targetPly > data.value.moves.length) return;
+  const mv = data.value.moves[targetPly - 1];
+  const targetFrame = data.value.frames[targetPly];
+  if (!mv || !targetFrame) return;
+
+  const isCheck = targetFrame.boards.some((b) => b.check !== null) || mv.san.includes('+');
+  if (isCheck) {
+    playCheckSound();
+  } else if (mv.dropPiece) {
+    playDropSound();
+  } else if (mv.san.includes('O-O')) {
+    playCastleSound();
+  } else if (mv.san.includes('x')) {
+    playCaptureSound();
+  } else {
+    playMoveSound();
+  }
+}
+
+function goTo(ply: number, withSound: boolean = false): void {
+  const target = Math.max(0, Math.min(total.value, ply));
+  if (withSound && target > cursor.value) {
+    playReplayMove(target);
+  }
+  cursor.value = target;
 }
 function first(): void {
   goTo(0);
@@ -55,13 +86,13 @@ function prev(): void {
   goTo(cursor.value - 1);
 }
 function next(): void {
-  goTo(cursor.value + 1);
+  goTo(cursor.value + 1, true);
 }
 function last(): void {
   goTo(total.value);
 }
 function stepToMove(index: number): void {
-  goTo(index + 1);
+  goTo(index + 1, true);
   stop();
 }
 
@@ -83,7 +114,7 @@ function play(): void {
       stop();
       return;
     }
-    goTo(cursor.value + 1);
+    goTo(cursor.value + 1, true);
   }, BASE_DELAY / speed.value);
 }
 
@@ -251,7 +282,11 @@ function pieceLabel(t: PieceType): string {
         <div v-for="b in boardsCount" :key="b" class="rp-board-col">
           <div class="rp-board-head">
             <span class="rp-board-num mono">Доска {{ b }}</span>
-            <span v-if="checkOf(b - 1)" class="badge bad">шах</span>
+            <span
+              class="badge bad rp-check-badge"
+              :class="{ visible: Boolean(checkOf(b - 1)) }"
+              aria-label="Шах"
+            >шах</span>
           </div>
 
           <PocketBar
@@ -446,7 +481,20 @@ function pieceLabel(t: PieceType): string {
   display: flex;
   align-items: center;
   gap: var(--gap-xs);
-  min-height: 22px;
+  height: 26px;
+  min-height: 26px;
+  box-sizing: border-box;
+}
+
+.rp-check-badge {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.rp-check-badge.visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .rp-board-num {

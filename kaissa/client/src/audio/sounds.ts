@@ -40,7 +40,17 @@ if (typeof window !== 'undefined') {
   resumeEvents.forEach((ev) => window.addEventListener(ev, unlock, { once: true, passive: true }));
 }
 
-/** Естественный глухой стук деревянной фигуры о доску */
+function createNoiseBuffer(ctx: AudioContext, durationSec: number): AudioBuffer {
+  const bufferSize = Math.floor(ctx.sampleRate * durationSec);
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const output = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    output[i] = Math.random() * 2 - 1;
+  }
+  return buffer;
+}
+
+/** Упругий, сухой и отчетливый клик хода (стиль Lichess Classic) */
 export function playMoveSound(): void {
   if (isMuted.value) return;
   const ctx = getContext();
@@ -48,87 +58,58 @@ export function playMoveSound(): void {
 
   const now = ctx.currentTime;
   const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
   const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
 
-  filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(900, now);
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(800, now);
+  filter.Q.setValueAtTime(1.5, now);
 
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(260, now);
-  osc.frequency.exponentialRampToValueAtTime(70, now + 0.05);
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(420, now);
+  osc.frequency.exponentialRampToValueAtTime(90, now + 0.04);
 
-  gain.gain.setValueAtTime(0.001, now);
-  gain.gain.linearRampToValueAtTime(0.28, now + 0.004);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.linearRampToValueAtTime(0.12, now + 0.003);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.045);
 
   osc.connect(filter);
   filter.connect(gain);
   gain.connect(ctx.destination);
 
   osc.start(now);
-  osc.stop(now + 0.065);
+  osc.stop(now + 0.05);
 }
 
-/** Сочный щелчок взятия фигуры */
+/** Хлесткий щелчок взятия фигуры */
 export function playCaptureSound(): void {
   if (isMuted.value) return;
   const ctx = getContext();
   if (!ctx) return;
 
   const now = ctx.currentTime;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
 
-  osc.type = 'triangle';
-  osc.frequency.setValueAtTime(340, now);
-  osc.frequency.exponentialRampToValueAtTime(90, now + 0.07);
+  // Короткий акустический шум столкновения
+  const noise = ctx.createBufferSource();
+  noise.buffer = createNoiseBuffer(ctx, 0.02);
+  const noiseFilter = ctx.createBiquadFilter();
+  noiseFilter.type = 'bandpass';
+  noiseFilter.frequency.setValueAtTime(1100, now);
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(0.0001, now);
+  noiseGain.gain.linearRampToValueAtTime(0.10, now + 0.003);
+  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.02);
 
-  gain.gain.setValueAtTime(0.001, now);
-  gain.gain.linearRampToValueAtTime(0.35, now + 0.003);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+  noiseGain.connect(ctx.destination);
+  noise.start(now);
 
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-
-  osc.start(now);
-  osc.stop(now + 0.085);
-}
-
-/** Звонкий металлический колокольчик при шахе */
-export function playCheckSound(): void {
-  if (isMuted.value) return;
-  const ctx = getContext();
-  if (!ctx) return;
-
-  const now = ctx.currentTime;
-  [660, 880].forEach((freq, i) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(freq, now);
-
-    gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(i === 0 ? 0.25 : 0.18, now + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start(now);
-    osc.stop(now + 0.36);
-  });
-}
-
-/** Сдвоенный перестук рокировки */
-export function playCastleSound(): void {
   playMoveSound();
-  setTimeout(() => playMoveSound(), 90);
 }
 
-/** Выставление фигуры из кармана (багхаус) */
-export function playDropSound(): void {
+/** Чистый нерезкий колокольчик шаха */
+export function playCheckSound(): void {
   if (isMuted.value) return;
   const ctx = getContext();
   if (!ctx) return;
@@ -138,44 +119,54 @@ export function playDropSound(): void {
   const gain = ctx.createGain();
 
   osc.type = 'sine';
-  osc.frequency.setValueAtTime(320, now);
-  osc.frequency.exponentialRampToValueAtTime(110, now + 0.05);
+  osc.frequency.setValueAtTime(880, now);
 
-  gain.gain.setValueAtTime(0.001, now);
-  gain.gain.linearRampToValueAtTime(0.3, now + 0.003);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.linearRampToValueAtTime(0.08, now + 0.006);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
 
   osc.connect(gain);
   gain.connect(ctx.destination);
 
   osc.start(now);
-  osc.stop(now + 0.065);
+  osc.stop(now + 0.23);
 }
 
-/** Финальный торжественный аккорд завершения партии */
+/** Быстрый перестук рокировки */
+export function playCastleSound(): void {
+  playMoveSound();
+  setTimeout(() => playMoveSound(), 75);
+}
+
+/** Постановка фигуры из кармана (багхаус) */
+export function playDropSound(): void {
+  playMoveSound();
+}
+
+/** Финальный торжественный аккорд */
 export function playGameEndSound(won: boolean = true): void {
   if (isMuted.value) return;
   const ctx = getContext();
   if (!ctx) return;
 
   const now = ctx.currentTime;
-  const freqs = won ? [523.25, 659.25, 783.99, 1046.5] : [440.0, 392.0, 349.23, 293.66];
+  const freqs = won ? [261.63, 329.63, 392.0, 523.25] : [440.0, 392.0, 349.23, 293.66];
 
   freqs.forEach((freq, idx) => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(freq, now + idx * 0.06);
+    osc.frequency.setValueAtTime(freq, now + idx * 0.07);
 
-    gain.gain.setValueAtTime(0.001, now + idx * 0.06);
-    gain.gain.linearRampToValueAtTime(0.18, now + idx * 0.06 + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.06 + 0.55);
+    gain.gain.setValueAtTime(0.0001, now + idx * 0.07);
+    gain.gain.linearRampToValueAtTime(0.06, now + idx * 0.07 + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.07 + 0.55);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
 
-    osc.start(now + idx * 0.06);
-    osc.stop(now + idx * 0.06 + 0.58);
+    osc.start(now + idx * 0.07);
+    osc.stop(now + idx * 0.07 + 0.60);
   });
 }

@@ -462,25 +462,48 @@ function resultHeadline(): string {
         <div v-if="state.mode === 'team' && teamModeSides" class="team-board-wrapper">
           <!-- Верхняя команда (соперники) -->
           <div class="team-players-bar top">
-            <div class="color-tag" :class="teamModeSides.top.color">
-              {{ teamModeSides.top.color === 'w' ? 'Белые' : 'Черные' }}
-            </div>
-            <div class="team-members">
+            <!-- Слева: Игрок 1 (слот 1, начинает) + цвет стороны -->
+            <div class="team-slot left">
+              <span class="color-badge" :class="teamModeSides.top.color">
+                {{ teamModeSides.top.color === 'w' ? 'Белые' : 'Чёрные' }}
+              </span>
               <div
-                v-for="p in teamModeSides.top.players"
-                :key="p.userId"
-                class="member-pill"
-                :class="[roleOf(p), { 'active-turn': isPlayerTurn(p.userId) }]"
+                v-if="teamModeSides.top.players[0]"
+                class="member-pill compact"
+                :class="[roleOf(teamModeSides.top.players[0]), { 'active-turn': isPlayerTurn(teamModeSides.top.players[0].userId) }]"
               >
-                <span class="member-name">{{ p.username }}</span>
-                <span class="member-rating mono">({{ p.ratingBefore }})</span>
-                <span v-if="isPlayerTurn(p.userId)" class="turn-chip">
+                <span class="slot-num mono">1</span>
+                <span class="member-name">{{ teamModeSides.top.players[0].username }}</span>
+                <span class="member-rating mono">({{ teamModeSides.top.players[0].ratingBefore }})</span>
+                <span v-if="roleOf(teamModeSides.top.players[0]) === 'me'" class="member-role me">Вы</span>
+                <span v-else-if="roleOf(teamModeSides.top.players[0]) === 'partner'" class="member-role partner">Напарник</span>
+                <span v-if="isPlayerTurn(teamModeSides.top.players[0].userId)" class="turn-chip">
                   <span class="turn-dot"></span> Ходит
                 </span>
               </div>
             </div>
-            <div class="clock-display mono" :class="{ running: state.clocksActive[0] === teamModeSides.top.color }">
+
+            <!-- По центру: Таймер стороны -->
+            <div class="clock-display mono center" :class="{ running: state.clocksActive[0] === teamModeSides.top.color }">
               {{ fmtClock(clockMs(0, teamModeSides.top.color)) }}
+            </div>
+
+            <!-- Справа: Игрок 2 (слот 2, ходит вторым) -->
+            <div class="team-slot right">
+              <div
+                v-if="teamModeSides.top.players[1]"
+                class="member-pill compact"
+                :class="[roleOf(teamModeSides.top.players[1]), { 'active-turn': isPlayerTurn(teamModeSides.top.players[1].userId) }]"
+              >
+                <span class="slot-num mono">2</span>
+                <span class="member-name">{{ teamModeSides.top.players[1].username }}</span>
+                <span class="member-rating mono">({{ teamModeSides.top.players[1].ratingBefore }})</span>
+                <span v-if="roleOf(teamModeSides.top.players[1]) === 'me'" class="member-role me">Вы</span>
+                <span v-else-if="roleOf(teamModeSides.top.players[1]) === 'partner'" class="member-role partner">Напарник</span>
+                <span v-if="isPlayerTurn(teamModeSides.top.players[1].userId)" class="turn-chip">
+                  <span class="turn-dot"></span> Ходит
+                </span>
+              </div>
             </div>
           </div>
 
@@ -500,27 +523,48 @@ function resultHeadline(): string {
 
           <!-- Нижняя команда (моя сторона) -->
           <div class="team-players-bar bottom">
-            <div class="color-tag" :class="teamModeSides.bottom.color">
-              {{ teamModeSides.bottom.color === 'w' ? 'Белые' : 'Черные' }}
-            </div>
-            <div class="team-members">
+            <!-- Слева: Игрок 1 (слот 1, начинает) + цвет стороны -->
+            <div class="team-slot left">
+              <span class="color-badge" :class="teamModeSides.bottom.color">
+                {{ teamModeSides.bottom.color === 'w' ? 'Белые' : 'Чёрные' }}
+              </span>
               <div
-                v-for="p in teamModeSides.bottom.players"
-                :key="p.userId"
-                class="member-pill"
-                :class="[roleOf(p), { 'active-turn': isPlayerTurn(p.userId) }]"
+                v-if="teamModeSides.bottom.players[0]"
+                class="member-pill compact"
+                :class="[roleOf(teamModeSides.bottom.players[0]), { 'active-turn': isPlayerTurn(teamModeSides.bottom.players[0].userId) }]"
               >
-                <span class="member-name">{{ p.username }}</span>
-                <span class="member-rating mono">({{ p.ratingBefore }})</span>
-                <span v-if="roleOf(p) === 'me'" class="member-role me">Вы</span>
-                <span v-else-if="roleOf(p) === 'partner'" class="member-role partner">Напарник</span>
-                <span v-if="isPlayerTurn(p.userId)" class="turn-chip">
+                <span class="slot-num mono">1</span>
+                <span class="member-name">{{ teamModeSides.bottom.players[0].username }}</span>
+                <span class="member-rating mono">({{ teamModeSides.bottom.players[0].ratingBefore }})</span>
+                <span v-if="roleOf(teamModeSides.bottom.players[0]) === 'me'" class="member-role me">Вы</span>
+                <span v-else-if="roleOf(teamModeSides.bottom.players[0]) === 'partner'" class="member-role partner">Напарник</span>
+                <span v-if="isPlayerTurn(teamModeSides.bottom.players[0].userId)" class="turn-chip">
                   <span class="turn-dot"></span> Ходит
                 </span>
               </div>
             </div>
-            <div class="clock-display mono" :class="{ running: state.clocksActive[0] === teamModeSides.bottom.color }">
+
+            <!-- По центру: Таймер стороны -->
+            <div class="clock-display mono center" :class="{ running: state.clocksActive[0] === teamModeSides.bottom.color }">
               {{ fmtClock(clockMs(0, teamModeSides.bottom.color)) }}
+            </div>
+
+            <!-- Справа: Игрок 2 (слот 2, ходит вторым) -->
+            <div class="team-slot right">
+              <div
+                v-if="teamModeSides.bottom.players[1]"
+                class="member-pill compact"
+                :class="[roleOf(teamModeSides.bottom.players[1]), { 'active-turn': isPlayerTurn(teamModeSides.bottom.players[1].userId) }]"
+              >
+                <span class="slot-num mono">2</span>
+                <span class="member-name">{{ teamModeSides.bottom.players[1].username }}</span>
+                <span class="member-rating mono">({{ teamModeSides.bottom.players[1].ratingBefore }})</span>
+                <span v-if="roleOf(teamModeSides.bottom.players[1]) === 'me'" class="member-role me">Вы</span>
+                <span v-else-if="roleOf(teamModeSides.bottom.players[1]) === 'partner'" class="member-role partner">Напарник</span>
+                <span v-if="isPlayerTurn(teamModeSides.bottom.players[1].userId)" class="turn-chip">
+                  <span class="turn-dot"></span> Ходит
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -822,16 +866,25 @@ function resultHeadline(): string {
 .game-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  margin-top: -12px;
+}
+
+.game-page.team {
+  max-width: 1080px;
+  margin: -12px auto 0;
+  width: 100%;
 }
 
 .game-topbar {
-  padding: 12px 20px;
+  padding: 10px 18px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 14px;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .game-title-group {
@@ -867,9 +920,10 @@ function resultHeadline(): string {
 
 .game-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
   align-items: start;
+  width: 100%;
 }
 @media (max-width: 1024px) {
   .game-layout {
@@ -879,23 +933,95 @@ function resultHeadline(): string {
 
 /* ================= 2x2 ОДНА ДОСКА ================= */
 .team-board-wrapper {
-  max-width: 680px;
-  margin: 0 auto;
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: var(--gap-xs);
+  gap: 8px;
+  margin: 0;
 }
 
 .team-players-bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--gap-s);
-  padding: var(--gap-xs) var(--gap-s);
+  gap: var(--gap-xs);
+  height: 40px;
+  min-height: 40px;
+  padding: 0 10px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-m);
+  box-sizing: border-box;
+}
+
+.team-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.team-slot.left {
+  justify-content: flex-start;
+}
+
+.team-slot.right {
+  justify-content: flex-end;
+}
+
+.color-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: var(--r-xs);
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.color-badge.w {
+  background: #f0ede6;
+  color: #1a1714;
+}
+
+.color-badge.b {
+  background: #2b2723;
+  color: #dfdbd3;
+  border: 1px solid var(--line);
+}
+
+.member-pill.compact {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+  border-radius: var(--r-s);
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.slot-num {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink-3);
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.clock-display.center {
+  height: 32px;
+  line-height: 32px;
+  padding: 0 14px;
+  min-width: 86px;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .team-members {
@@ -1284,18 +1410,27 @@ function resultHeadline(): string {
     gap: 12px;
   }
   .team-players-bar {
-    padding: 4px 8px;
-    gap: 6px;
-  }
-  .clock-display {
-    font-size: 16px;
-    padding: 3px 8px;
-    min-width: 62px;
-  }
-  .member-pill {
-    padding: 3px 6px;
-    font-size: 12px;
+    padding: 2px 6px;
     gap: 4px;
+    height: 36px;
+    min-height: 36px;
+  }
+  .clock-display.center {
+    font-size: 15px;
+    padding: 0 8px;
+    min-width: 60px;
+    height: 28px;
+    line-height: 28px;
+  }
+  .member-pill.compact {
+    height: 26px;
+    padding: 0 4px;
+    font-size: 11px;
+    gap: 3px;
+  }
+  .color-badge {
+    font-size: 9px;
+    padding: 1px 4px;
   }
   .member-rating {
     display: none;

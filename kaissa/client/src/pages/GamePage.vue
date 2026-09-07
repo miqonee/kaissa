@@ -14,6 +14,7 @@ import {
   playCheckSound,
   playCastleSound,
   playDropSound,
+  playQueenLossSound,
   playGameEndSound,
 } from '../audio/sounds';
 import ChessBoard from '../components/ChessBoard.vue';
@@ -311,7 +312,9 @@ onMounted(() => {
           to: mv.to as Square,
           ...(mv.promotion ? { promotion: mv.promotion as 'q' } : {}),
         });
-        if (c.isCheck()) {
+        if (m.captured === 'q') {
+          playQueenLossSound();
+        } else if (c.isCheck()) {
           playCheckSound();
         } else if (m.san.includes('O-O')) {
           playCastleSound();
@@ -462,11 +465,8 @@ function resultHeadline(): string {
         <div v-if="state.mode === 'team' && teamModeSides" class="team-board-wrapper">
           <!-- Верхняя команда (соперники) -->
           <div class="team-players-bar top">
-            <!-- Слева: Игрок 1 (слот 1, начинает) + цвет стороны -->
+            <!-- Слева: Игрок 1 (слот 1, начинает) -->
             <div class="team-slot left">
-              <span class="color-badge" :class="teamModeSides.top.color">
-                {{ teamModeSides.top.color === 'w' ? 'Белые' : 'Чёрные' }}
-              </span>
               <div
                 v-if="teamModeSides.top.players[0]"
                 class="member-pill compact"
@@ -523,11 +523,8 @@ function resultHeadline(): string {
 
           <!-- Нижняя команда (моя сторона) -->
           <div class="team-players-bar bottom">
-            <!-- Слева: Игрок 1 (слот 1, начинает) + цвет стороны -->
+            <!-- Слева: Игрок 1 (слот 1, начинает) -->
             <div class="team-slot left">
-              <span class="color-badge" :class="teamModeSides.bottom.color">
-                {{ teamModeSides.bottom.color === 'w' ? 'Белые' : 'Чёрные' }}
-              </span>
               <div
                 v-if="teamModeSides.bottom.players[0]"
                 class="member-pill compact"
@@ -967,27 +964,6 @@ function resultHeadline(): string {
 
 .team-slot.right {
   justify-content: flex-end;
-}
-
-.color-badge {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  padding: 2px 7px;
-  border-radius: var(--r-xs);
-  letter-spacing: 0.04em;
-  flex-shrink: 0;
-}
-
-.color-badge.w {
-  background: #f0ede6;
-  color: #1a1714;
-}
-
-.color-badge.b {
-  background: #2b2723;
-  color: #dfdbd3;
-  border: 1px solid var(--line);
 }
 
 .member-pill.compact {

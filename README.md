@@ -24,7 +24,7 @@ docker compose up -d --build
 docker compose ps
 ```
 
-Приложение доступно по адресу: **`http://localhost:8080`**
+Приложение доступно по адресу: **`http://localhost:8289`**
 
 ---
 

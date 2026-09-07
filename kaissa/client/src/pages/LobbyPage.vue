@@ -69,7 +69,7 @@ onMounted(() => {
   });
   socket.on('lobby:started', ({ gameId }) => {
     gameStarting = true;
-    window.location.assign(`/game/${gameId}`);
+    router.push(`/game/${gameId}`);
   });
   socket.on('lobby:closed', (reason) => {
     error.value = reason;
@@ -111,6 +111,11 @@ function start(): void {
     if (!ack.ok) {
       error.value = ack.error ?? 'Не удалось начать';
       setTimeout(() => (error.value = ''), 3500);
+      return;
+    }
+    if (ack.data?.gameId) {
+      gameStarting = true;
+      router.push(`/game/${ack.data.gameId}`);
     }
   });
 }

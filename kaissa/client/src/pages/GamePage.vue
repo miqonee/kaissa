@@ -7,6 +7,15 @@ import { timeControlLabel } from 'shared';
 import { getSocket, onSocketResync } from '../api/socket';
 import { useAuthStore } from '../stores/auth';
 import { api } from '../api/rest';
+import { openLichessAnalysis } from '../api/lichess';
+import {
+  playMoveSound,
+  playCaptureSound,
+  playCheckSound,
+  playCastleSound,
+  playDropSound,
+  playGameEndSound,
+} from '../audio/sounds';
 import ChessBoard from '../components/ChessBoard.vue';
 import PocketBar from '../components/PocketBar.vue';
 import AppIcon from '../components/AppIcon.vue';
@@ -261,10 +270,22 @@ function scrollChat(): void {
 // ---------- Lifecycle ----------
 
 let offResync: (() => void) | null = null;
+let watchRetryTimer: number | undefined;
+
+function requestWatch(retries: number = 3): void {
+  socket.emit('game:watch', gameId);
+  if (retries > 0 && !state.value) {
+    clearTimeout(watchRetryTimer);
+    watchRetryTimer = window.setTimeout(() => {
+      if (!state.value) requestWatch(retries - 1);
+    }, 700);
+  }
+}
 
 onMounted(() => {
   socket.on('game:state', (st) => {
     if (st.gameId !== gameId) return;
+    clearTimeout(watchRetryTimer);
     state.value = st;
     if (st.status !== 'active') showResult.value = true;
     rebuildLocalClocks();
@@ -277,6 +298,32 @@ onMounted(() => {
       [mv.boardIndex]: mv.dropPiece ? [mv.to, mv.to] : [mv.from, mv.to],
     };
     selectedDrop.value = null;
+
+    // Звуки ходов
+    if (mv.dropPiece) {
+      playDropSound();
+    } else {
+      try {
+        const prevFen = fenOf(mv.boardIndex);
+        const c = new Chess(prevFen);
+        const m = c.move({
+          from: mv.from as Square,
+          to: mv.to as Square,
+          ...(mv.promotion ? { promotion: mv.promotion as 'q' } : {}),
+        });
+        if (c.isCheck()) {
+          playCheckSound();
+        } else if (m.san.includes('O-O')) {
+          playCastleSound();
+        } else if (m.captured) {
+          playCaptureSound();
+        } else {
+          playMoveSound();
+        }
+      } catch {
+        playMoveSound();
+      }
+    }
   });
 
   socket.on('game:end', (payload) => {
@@ -288,6 +335,9 @@ onMounted(() => {
       state.value.participants = payload.participants;
       showResult.value = true;
     }
+    const myTeam = myParticipant.value?.team;
+    const won = myTeam ? (payload.result === '1-0' && myTeam === 1) || (payload.result === '0-1' && myTeam === 2) : true;
+    playGameEndSound(won);
   });
 
   socket.on('game:chat', (msg) => {
@@ -301,14 +351,23 @@ onMounted(() => {
     disconnected.value = payload.left;
   });
 
-  socket.emit('game:watch', gameId);
-  // Реконнект сокета теряет комнату игры — переподключиться и получить свежий game:state
-  offResync = onSocketResync(() => socket.emit('game:watch', gameId));
+  // REST-запрос параллельно сокету для мгновенной загрузки стола
+  api.get<{ state: GameState }>(`/api/games/${gameId}/state`).then((res) => {
+    if (res.state && !state.value) {
+      state.value = res.state;
+      if (res.state.status !== 'active') showResult.value = true;
+      rebuildLocalClocks();
+    }
+  }).catch(() => {});
+
+  requestWatch(3);
+  offResync = onSocketResync(() => requestWatch(2));
 
   ticker = window.setInterval(tickClocks, 500);
 });
 
 onBeforeUnmount(() => {
+  clearTimeout(watchRetryTimer);
   offResync?.();
   offResync = null;
   socket.off('game:state');
@@ -339,14 +398,7 @@ async function rematch(): Promise<void> {
 async function analyzeOnLichess(boardIdx: number = 0) {
   lichessBusy.value = true;
   try {
-    const res = await api.post<{ url: string }>(`/api/games/${gameId}/lichess-import?board=${boardIdx}`, {});
-    if (res.url) {
-      window.open(res.url, '_blank');
-    }
-  } catch (e: any) {
-    // Резервный вариант: скачиваем PGN и открываем lichess.org/paste
-    window.open(`/api/games/${gameId}/pgn?download=1`, '_blank');
-    window.open('https://lichess.org/paste', '_blank');
+    await openLichessAnalysis(gameId, boardIdx);
   } finally {
     lichessBusy.value = false;
   }
@@ -740,10 +792,33 @@ function resultHeadline(): string {
     />
   </div>
 
-  <div v-else class="empty">Подключение к партии #{{ gameId }}…</div>
+  <div v-else class="game-loading-wrap">
+    <div class="panel game-loading-panel">
+      <h2>Подключение к столу #{{ gameId }}…</h2>
+      <p class="hint">Синхронизация состояния доски с сервером</p>
+      <button class="brass small" @click="requestWatch(3)">
+        <AppIcon name="refresh" :size="14" /> Обновить
+      </button>
+    </div>
+  </div>
 </template>
 
 <style scoped>
+.game-loading-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 50vh;
+}
+
+.game-loading-panel {
+  text-align: center;
+  padding: 32px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
 .game-page {
   display: flex;
   flex-direction: column;

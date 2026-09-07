@@ -144,8 +144,11 @@ function boardPgn(g: PgnGame, boardIndex: number, moves: PgnMove[]): string {
   return `${tags.join('\n')}\n\n${movetext}\n`;
 }
 
-/** PGN всей встречи (для багхауса — две партии в файле) */
-export function buildPgn(g: PgnGame, moves: PgnMove[]): string {
+/** PGN всей встречи (для багхауса — две партии в файле, либо конкретная доска при указании boardIndex) */
+export function buildPgn(g: PgnGame, moves: PgnMove[], boardIndex?: number): string {
+  if (boardIndex !== undefined && Number.isFinite(boardIndex)) {
+    return boardPgn(g, boardIndex === 1 && g.mode === 'bughouse' ? 1 : 0, moves);
+  }
   if (g.mode === 'bughouse') {
     return `${boardPgn(g, 0, moves)}\n${boardPgn(g, 1, moves)}`;
   }

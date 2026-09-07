@@ -277,8 +277,13 @@ export class LobbiesManager {
       team2: team2.map((m) => ({ uid: m.uid, username: m.username, rating: m.rating })),
     });
     lobby.started = true;
+    const gameRoom = this.games!.gameRoom(gameId);
     // Сразу подключаем все сокеты из комнаты лобби в комнату игры, чтобы никто не потерял первые события
-    this.io?.in(this.room(lobbyId)).socketsJoin(this.games!.gameRoom(gameId));
+    this.io?.in(this.room(lobbyId)).socketsJoin(gameRoom);
+    const activeGame = this.games!.getActive(gameId);
+    if (activeGame) {
+      this.io?.to(gameRoom).emit('game:state', this.games!.toGameState(activeGame));
+    }
     // рассылка redirect
     this.io?.to(this.room(lobbyId)).emit('lobby:started', { gameId });
     this.broadcastList();

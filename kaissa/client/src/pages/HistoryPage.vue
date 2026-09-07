@@ -8,6 +8,8 @@ import { useAuthStore } from '../stores/auth';
 import GameReplayModal from '../components/GameReplayModal.vue';
 import AppIcon from '../components/AppIcon.vue';
 
+import { openLichessAnalysis } from '../api/lichess';
+
 const auth = useAuthStore();
 const router = useRouter();
 const tab = ref<'mine' | 'all'>('mine');
@@ -107,13 +109,7 @@ function onRowKey(e: KeyboardEvent, g: GameSummary): void {
 async function analyzeOnLichess(gameId: number) {
   lichessLoading.value = gameId;
   try {
-    const res = await api.post<{ url: string }>(`/api/games/${gameId}/lichess-import?board=0`, {});
-    if (res.url) {
-      window.open(res.url, '_blank');
-    }
-  } catch (e) {
-    window.open(`/api/games/${gameId}/pgn?download=1`, '_blank');
-    window.open('https://lichess.org/paste', '_blank');
+    await openLichessAnalysis(gameId, 0);
   } finally {
     lichessLoading.value = null;
   }

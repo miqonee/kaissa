@@ -110,6 +110,7 @@ gamesRouter.get('/:id/pgn', requireAuth, async (req, res) => {
   });
   if (!game) return void res.status(404).json({ error: 'Партия не найдена' });
 
+  const boardQuery = req.query.board !== undefined ? parseInt(String(req.query.board), 10) : undefined;
   const pgn = buildPgn(
     {
       id: game.id,
@@ -138,12 +139,23 @@ gamesRouter.get('/:id/pgn', requireAuth, async (req, res) => {
       promotion: m.promotion,
       dropPiece: m.dropPiece,
     })),
+    boardQuery,
   );
 
   if (String(req.query.download ?? '') === '1') {
-    res.setHeader('Content-Disposition', `attachment; filename="kaissa-game-${id}.pgn"`);
+    const filename = boardQuery !== undefined ? `kaissa-game-${id}-board-${boardQuery + 1}.pgn` : `kaissa-game-${id}.pgn`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   }
   res.type('application/x-chess-pgn').send(pgn);
+});
+
+/** Мгновенное получение актуального состояния активной игры (HTTP fallback / initial render) */
+gamesRouter.get('/:id/state', requireAuth, (req, res) => {
+  const id = parseInt(String(req.params.id), 10);
+  if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
+  const g = gamesManager.getActive(id);
+  if (!g) return void res.status(404).json({ error: 'Партия не активна' });
+  res.json({ state: gamesManager.toGameState(g) });
 });
 
 /** Прокси для анализа на Lichess через их API https://lichess.org/api/import */

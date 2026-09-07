@@ -4,6 +4,7 @@ import { gamesManager, lobbies } from '../state.js';
 import { presence } from './presence.js';
 import { socketAuth } from './authSocket.js';
 import { env } from '../env.js';
+import { prisma } from '../prisma.js';
 
 // ============================================================
 // Socket-роутер: связывает события клиентов с менеджерами.
@@ -145,7 +146,7 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
 
     // ---------- Комнаты игры / трансляции ----------
 
-    socket.on('game:watch', (gameId: number) => {
+    socket.on('game:watch', async (gameId: number) => {
       const id = Number(gameId);
       const g = gamesManager.getActive(id);
       if (g) {
@@ -153,8 +154,41 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
         socket.join(gamesManager.gameRoom(id));
         gamesManager.onPlayerReconnect(id, ctx.uid);
         socket.emit('game:state', gamesManager.toGameState(g));
-      } else {
-        socket.emit('lobby:closed', 'Партия не найдена или завершена');
+        return;
+      }
+      const dbGame = await prisma.game.findUnique({
+        where: { id },
+        include: { participants: { include: { user: true } }, moves: { orderBy: [{ boardIndex: 'asc' }, { ply: 'asc' }] } },
+      });
+      if (dbGame) {
+        const lastFen0 = dbGame.moves.filter((m: { boardIndex: number; fenAfter: string }) => m.boardIndex === 0).at(-1)?.fenAfter || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+        const lastFen1 = dbGame.moves.filter((m: { boardIndex: number; fenAfter: string }) => m.boardIndex === 1).at(-1)?.fenAfter || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+        socket.emit('game:state', {
+          gameId: dbGame.id,
+          mode: dbGame.mode as any,
+          timeControl: { kind: dbGame.noClock ? 'none' : 'clock', baseMin: dbGame.baseMin, incSec: dbGame.incSec },
+          fens: dbGame.mode === 'bughouse' ? [lastFen0, lastFen1] : [lastFen0],
+          turns: ['w'],
+          clocks: [[0, 0]],
+          clocksActive: [null],
+          turnUserIds: [0],
+          participants: dbGame.participants.map((p: any) => ({
+            userId: p.userId,
+            username: p.user.username,
+            team: p.team as any,
+            color: p.color as any,
+            boardIndex: p.boardIndex as any,
+            moveSlot: p.moveSlot as any,
+            ratingBefore: p.ratingBefore,
+            ratingAfter: p.ratingAfter,
+          })),
+          pockets: null,
+          status: dbGame.status as any,
+          result: dbGame.result as any,
+          reason: dbGame.reason as any,
+          moveNumber: Math.floor(dbGame.moves.length / 2) + 1,
+          startedAt: dbGame.startedAt.getTime(),
+        });
       }
     });
 

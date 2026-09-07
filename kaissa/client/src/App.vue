@@ -3,12 +3,15 @@ import { computed, onMounted, watch } from 'vue';
 import { useAuthStore } from './stores/auth';
 import { useThemeStore } from './stores/theme';
 import { useConnectionStore } from './stores/connection';
+import { useToast } from './stores/toast';
+import { isMuted, toggleSound } from './audio/sounds';
 import { getSocket, resetSocket } from './api/socket';
 import AppIcon from './components/AppIcon.vue';
 
 const auth = useAuthStore();
 const theme = useThemeStore();
 const conn = useConnectionStore();
+const toast = useToast();
 
 onMounted(async () => {
   theme.init();
@@ -37,6 +40,10 @@ function logout(): void {
 
 const themeTitle = computed(() =>
   theme.current === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему',
+);
+
+const soundTitle = computed(() =>
+  isMuted.value ? 'Включить звуки игры' : 'Выключить звуки игры',
 );
 
 const connLabel = computed(() => {
@@ -92,6 +99,10 @@ const connLabel = computed(() => {
             <span class="conn-text" v-if="conn.state !== 'connected'">{{ connLabel }}</span>
           </span>
 
+          <button class="icon-btn" @click="toggleSound" :title="soundTitle" :aria-label="soundTitle">
+            <AppIcon :name="isMuted ? 'volume-x' : 'volume'" :size="16" />
+          </button>
+
           <button class="icon-btn" @click="theme.toggle" :title="themeTitle" :aria-label="themeTitle">
             <AppIcon :name="theme.current === 'dark' ? 'sun' : 'moon'" :size="16" />
           </button>
@@ -120,6 +131,10 @@ const connLabel = computed(() => {
     <main class="page">
       <router-view />
     </main>
+
+    <div v-if="toast.toastText.value" class="toast" role="status">
+      <span>{{ toast.toastText.value }}</span>
+    </div>
   </div>
 </template>
 

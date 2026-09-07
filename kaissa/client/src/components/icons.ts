@@ -6,6 +6,8 @@
 export type IconName =
   | 'sun'
   | 'moon'
+  | 'volume'
+  | 'volume-x'
   | 'copy'
   | 'check'
   | 'close'
@@ -44,6 +46,16 @@ export const ICON_PATHS: Record<IconName, string[]> = {
     'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
   ],
   moon: ['M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z'],
+  volume: [
+    'M11 5L6 9H2v6h4l5 4V5z',
+    'M15.54 8.46a5 5 0 0 1 0 7.07',
+    'M19.07 4.93a10 10 0 0 1 0 14.14',
+  ],
+  'volume-x': [
+    'M11 5L6 9H2v6h4l5 4V5z',
+    'M23 9l-6 6',
+    'M17 9l6 6',
+  ],
   copy: [
     'M9 9h11a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1z',
     'M5 15H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v1',

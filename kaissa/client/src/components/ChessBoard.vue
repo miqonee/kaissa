@@ -83,7 +83,6 @@ function config() {
     fen: props.fen,
     orientation: props.orientation as CgColor,
     coordinates: props.coordinates,
-    viewOnly: !interactive && !props.dropPiece,
     turnColor: (props.fen.split(' ')[1] === 'b' ? 'black' : 'white') as CgColor,
     lastMove: lastMoveKeys(),
     check: props.checkSquare ? true : false,
@@ -124,6 +123,7 @@ function config() {
 onMounted(() => {
   if (!el.value) return;
   cg = Chessground(el.value, config() as never);
+  requestAnimationFrame(() => cg?.redrawAll());
 });
 
 watch(
@@ -137,7 +137,6 @@ watch(
       turnColor,
       check: props.checkSquare ? true : false,
       lastMove: lastMoveKeys(),
-      viewOnly: !interactive && !props.dropPiece,
       movable: {
         color: interactive ? (props.movableColor as CgColor) : undefined,
         dests: destsMap(),
@@ -155,7 +154,6 @@ watch(
     if (!cg) return;
     const interactive = props.movableColor !== null;
     cg.set({
-      viewOnly: !interactive && !props.dropPiece,
       movable: {
         color: interactive ? (props.movableColor as CgColor) : undefined,
         dests: destsMap(),

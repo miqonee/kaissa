@@ -38,8 +38,6 @@ services:
       - 80
     ports:
       - "${KAISSA_PORT:-8289}:80"
-    environment:
-      - SERVICE_FQDN_CLIENT
     depends_on:
       - server
 

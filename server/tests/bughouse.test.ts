@@ -217,4 +217,19 @@ describe('BughouseGame', () => {
     expect(bg.turn(0)).toBe('b');
     expect(bg.turn(1)).toBe('b');
   });
+
+  it('дроп под шахом, не блокирующий шах, отклоняется', () => {
+    // Белый король e1, чёрный король g8, чёрная ладья e8 (шах белым по вертикали e)
+    const bg = new BughouseGame(['4r1k1/8/8/8/8/8/8/4K3 w - - 0 1', 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1']);
+    bg.pockets['0:w'].b = 1;
+    // Дроп слона на a3 не закрывает шах по вертикали e
+    expect(() => bg.apply({ board: 0, to: 'a3', piece: 'b' })).toThrow('Король остаётся под шахом');
+    // Слон не должен был списаться из кармана
+    expect(bg.pocketOf(0, 'w').b).toBe(1);
+
+    // Дроп слона на e2 закрывает шах!
+    expect(() => bg.apply({ board: 0, to: 'e2', piece: 'b' })).not.toThrow();
+    expect(bg.turn(0)).toBe('b');
+    expect(bg.pocketOf(0, 'w').b).toBe(0);
+  });
 });

@@ -21,6 +21,8 @@ interface SocketCtx {
 
 /** uid -> таймер льготного периода: отключение не сразу помечает игрока ушедшим */
 const graceTimers = new Map<number, ReturnType<typeof setTimeout>>();
+/** uid -> timestamp последнего призыва (защита от спама) */
+const lastSummon = new Map<number, number>();
 
 function cancelGrace(uid: number): void {
   const t = graceTimers.get(uid);
@@ -37,30 +39,31 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
 
   io.on('connection', (socket) => {
     const auth = socketAuth(socket);
-    if (!auth) {
-      socket.emit('lobby:closed', 'Не авторизован');
-      socket.disconnect(true);
-      return;
-    }
-    const ctx: SocketCtx = { ...auth, lobbyId: null, gameId: null };
+    const ctx: SocketCtx | null = auth ? { ...auth, lobbyId: null, gameId: null } : null;
 
-    // Личные комнаты + presence
-    cancelGrace(ctx.uid);
-    socket.join(presence.userRoom(ctx.uid));
-    presence.onConnect(ctx.uid, socket.id);
+    if (ctx) {
+      // Личные комнаты + presence
+      cancelGrace(ctx.uid);
+      socket.join(presence.userRoom(ctx.uid));
+      presence.onConnect(ctx.uid, socket.id);
 
-    // Найти активную партию игрока (реконнект)
-    const activeGame = gamesManager.activeGameOf(ctx.uid);
-    if (activeGame) {
-      ctx.gameId = activeGame;
-      socket.join(gamesManager.gameRoom(activeGame));
-      gamesManager.onPlayerReconnect(activeGame, ctx.uid);
-      socket.emit('game:state', gamesManager.toGameState(gamesManager.getActive(activeGame)!));
+      // Найти активную партию игрока (реконнект)
+      const activeGame = gamesManager.activeGameOf(ctx.uid);
+      if (activeGame) {
+        ctx.gameId = activeGame;
+        socket.join(gamesManager.gameRoom(activeGame));
+        gamesManager.onPlayerReconnect(activeGame, ctx.uid);
+        socket.emit('game:state', gamesManager.toGameState(gamesManager.getActive(activeGame)!));
+      }
     }
 
     // ---------- LOBBY ----------
 
     socket.on('lobby:join', async (codeOrId, cb) => {
+      if (!ctx) {
+        cb({ ok: false, error: 'Требуется авторизация' });
+        return;
+      }
       let lobby = lobbies.getByCode(String(codeOrId)) ?? lobbies.getById(String(codeOrId));
       if (!lobby) {
         cb({ ok: false, error: 'Лобби не найдено' });
@@ -80,7 +83,7 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
     });
 
     socket.on('lobby:leave', () => {
-      if (ctx.lobbyId) {
+      if (ctx?.lobbyId) {
         socket.leave(`lobby:${ctx.lobbyId}`);
         lobbies.leave(ctx.lobbyId, ctx.uid);
         ctx.lobbyId = null;
@@ -88,23 +91,28 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
     });
 
     socket.on('lobby:ready', (ready) => {
-      if (ctx.lobbyId) lobbies.setReady(ctx.lobbyId, ctx.uid, Boolean(ready));
+      if (ctx?.lobbyId) lobbies.setReady(ctx.lobbyId, ctx.uid, Boolean(ready));
     });
 
     socket.on('lobby:kick', (targetUid) => {
-      if (ctx.lobbyId) lobbies.kick(ctx.lobbyId, ctx.uid, Number(targetUid));
+      if (ctx?.lobbyId) lobbies.kick(ctx.lobbyId, ctx.uid, Number(targetUid));
     });
 
     socket.on('lobby:chat', (text) => {
-      if (ctx.lobbyId) lobbies.chat(ctx.lobbyId, ctx.uid, String(text));
+      if (ctx?.lobbyId) lobbies.chat(ctx.lobbyId, ctx.uid, String(text));
     });
 
     socket.on('lobby:summon', () => {
-      if (ctx.lobbyId) lobbies.summon(ctx.lobbyId, ctx.uid);
+      if (!ctx?.lobbyId) return;
+      const now = Date.now();
+      const last = lastSummon.get(ctx.uid) ?? 0;
+      if (now - last < 10_000) return; // 10 сек кулдаун
+      lastSummon.set(ctx.uid, now);
+      lobbies.summon(ctx.lobbyId, ctx.uid);
     });
 
     socket.on('lobby:start', async (cb) => {
-      if (!ctx.lobbyId) {
+      if (!ctx?.lobbyId) {
         cb({ ok: false, error: 'Вы не в лобби' });
         return;
       }
@@ -118,6 +126,10 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
     // ---------- GAME ----------
 
     socket.on('game:move', async (data, cb) => {
+      if (!ctx) {
+        cb({ ok: false, error: 'Требуется авторизация' });
+        return;
+      }
       if (typeof data?.gameId !== 'number') {
         cb({ ok: false, error: 'Некорректные данные' });
         return;
@@ -137,11 +149,11 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
     });
 
     socket.on('game:resign', (gameId) => {
-      void gamesManager.resign(Number(gameId), ctx.uid);
+      if (ctx) void gamesManager.resign(Number(gameId), ctx.uid);
     });
 
     socket.on('game:chat', (gameId, text) => {
-      gamesManager.chat(Number(gameId), ctx.uid, String(text));
+      if (ctx) gamesManager.chat(Number(gameId), ctx.uid, String(text));
     });
 
     // ---------- Комнаты игры / трансляции ----------
@@ -150,9 +162,11 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
       const id = Number(gameId);
       const g = gamesManager.getActive(id);
       if (g) {
-        ctx.gameId = id;
+        if (ctx) {
+          ctx.gameId = id;
+          gamesManager.onPlayerReconnect(id, ctx.uid);
+        }
         socket.join(gamesManager.gameRoom(id));
-        gamesManager.onPlayerReconnect(id, ctx.uid);
         socket.emit('game:state', gamesManager.toGameState(g));
         return;
       }
@@ -208,6 +222,7 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
     // Реальное отсутствие ABANDON_SECONDS секунд = игрок ушёл.
 
     socket.on('disconnect', () => {
+      if (!ctx) return;
       presence.onDisconnect(ctx.uid, socket.id);
       if (presence.isOnline(ctx.uid)) return; // осталась другая вкладка
 

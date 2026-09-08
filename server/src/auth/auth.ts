@@ -25,8 +25,8 @@ export async function register(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'Ник: 3-30 символов, латиница, цифры, дефис, точка или подчеркивание' });
     return;
   }
-  if (typeof password !== 'string' || password.length < 4 || password.length > 72) {
-    res.status(400).json({ error: 'Пароль: от 4 до 72 символов' });
+  if (typeof password !== 'string' || password.length < 8 || password.length > 72) {
+    res.status(400).json({ error: 'Пароль: от 8 до 72 символов' });
     return;
   }
   const exists = await prisma.user.findUnique({ where: { username: name } });
@@ -35,9 +35,8 @@ export async function register(req: Request, res: Response): Promise<void> {
     return;
   }
   const passwordHash = await bcrypt.hash(password, 10);
-  const isAdmin = isConfiguredAdmin(name);
   const user = await prisma.user.create({
-    data: { username: name, passwordHash, rating: 1200, isAdmin },
+    data: { username: name, passwordHash, rating: 1200, isAdmin: false },
   });
   issue(res, user.id, user.username);
   res.status(201).json({ user: toPublic(user) });

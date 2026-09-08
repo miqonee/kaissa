@@ -117,6 +117,7 @@ export class BughouseGame {
         ...(m.promotion ? { promotion: m.promotion as PieceType } : {}),
       }));
     const pocket = this.pocketOf(board, color);
+    const inCheck = chess.isCheck();
     const emptySquares: string[] = [];
     for (const sq of ALL_SQUARES) {
       if (chess.get(sq as Square) === undefined) emptySquares.push(sq);
@@ -125,6 +126,12 @@ export class BughouseGame {
       if (pocket[t] <= 0) continue;
       for (const sq of emptySquares) {
         if (t === 'p' && (sq[1] === '1' || sq[1] === '8')) continue;
+        if (inCheck) {
+          chess.put({ type: t, color }, sq as Square);
+          const stillCheck = chess.isCheck();
+          chess.remove(sq as Square);
+          if (stillCheck) continue;
+        }
         moves.push({ board, to: sq, piece: t });
       }
     }
@@ -174,6 +181,11 @@ export class BughouseGame {
       }
       pocket[mv.piece] -= 1;
       chess.put({ type: mv.piece, color: moverColor }, mv.to as Square);
+      if (chess.isCheck()) {
+        chess.remove(mv.to as Square);
+        pocket[mv.piece] += 1;
+        throw new BughouseError('Король остаётся под шахом');
+      }
       this.forceTurn(chess);
       this.lastMoveSquares[board] = [null, mv.to];
       const check = chess.isCheck();

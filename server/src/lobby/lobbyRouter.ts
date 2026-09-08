@@ -17,7 +17,7 @@ const createSchema = z.object({
 export const lobbyRouter = Router();
 
 /** Список открытых лобби */
-lobbyRouter.get('/', requireAuth, (_req, res) => {
+lobbyRouter.get('/', (_req, res) => {
   const list = lobbies
     .publicList()
     .map((l) => l.summary());
@@ -51,17 +51,21 @@ lobbyRouter.post('/join', requireAuth, async (req, res) => {
   res.json({ lobby: lobby.summary() });
 });
 
-/** Инфо о лобби по id (для входа по ссылке) */
-lobbyRouter.get('/:id', requireAuth, async (req, res) => {
+/** Инфо о лобби по id (только чтение) */
+lobbyRouter.get('/:id', (req, res) => {
+  const lobby = lobbies.getById(String(req.params.id));
+  if (!lobby || lobby.started) return void res.status(404).json({ error: 'Лобби не найдено' });
+  res.json({ lobby: lobby.summary() });
+});
+
+/** Войти в лобби по id */
+lobbyRouter.post('/:id/join', requireAuth, async (req, res) => {
   const lobby = lobbies.getById(String(req.params.id));
   if (!lobby || lobby.started) return void res.status(404).json({ error: 'Лобби не найдено' });
   const user = await currentUser(req);
-  if (user && !lobby.members.has(user.id) && lobby.members.size < 4) {
-    const r = lobbies.join(lobby, { uid: user.id, username: user.username, rating: user.rating });
-    if (!r.ok) return void res.status(409).json({ error: r.error });
-  }
-  const fresh = lobbies.getById(String(req.params.id));
-  if (!fresh) return void res.status(404).json({ error: 'Лобби не найдено' });
-  res.json({ lobby: fresh.summary() });
+  if (!user) return void res.status(401).json({ error: 'Не авторизован' });
+  const r = lobbies.join(lobby, { uid: user.id, username: user.username, rating: user.rating });
+  if (!r.ok) return void res.status(409).json({ error: r.error });
+  res.json({ lobby: lobby.summary() });
 });
 

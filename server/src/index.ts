@@ -13,24 +13,63 @@ import { gamesRouter, usersRouter } from './users/usersRouter.js';
 import { registerSocketHandlers } from './socket/router.js';
 import { gamesManager } from './state.js';
 
+function createRateLimiter(windowMs: number, maxRequests: number, errorMsg: string) {
+  const requests = new Map<string, { count: number; resetAt: number }>();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [ip, rec] of requests.entries()) {
+      if (now > rec.resetAt) requests.delete(ip);
+    }
+  }, windowMs);
+
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const rec = requests.get(ip);
+    if (!rec || now > rec.resetAt) {
+      requests.set(ip, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+    rec.count++;
+    if (rec.count > maxRequests) {
+      res.status(429).json({ error: errorMsg });
+      return;
+    }
+    next();
+  };
+}
+
 async function main(): Promise<void> {
   await prisma.$connect();
   await gamesManager.cleanupOnBoot();
   await promoteConfiguredAdmins(env.adminUsernames);
 
   const app = express();
+  app.set('trust proxy', 1);
+
+  // Базовые заголовки безопасности
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    next();
+  });
+
   app.use(cors({ origin: env.corsOrigin, credentials: true }));
   app.use(express.json());
   app.use(cookieParser());
 
+  // In-memory rate limiting для авторизации (10 запросов в минуту на IP)
+  const authLimiter = createRateLimiter(60_000, 10, 'Слишком много попыток. Подождите минуту.');
+
   // Auth
-  app.post('/api/auth/register', register);
-  app.post('/api/auth/login', login);
+  app.post('/api/auth/register', authLimiter, register);
+  app.post('/api/auth/login', authLimiter, login);
   app.post('/api/auth/logout', logout);
   app.get('/api/auth/me', me);
 
   // REST
-  app.use('/api/lobbies', requireAuth, lobbyRouter);
+  app.use('/api/lobbies', lobbyRouter);
   app.use('/api/users', usersRouter);
   app.use('/api/games', gamesRouter);
   app.use('/api/admin', requireAuth, adminRouter);

@@ -5,11 +5,13 @@ import type { LobbySummary, LiveGameInfo, GameMode, TimeControl } from 'shared';
 import { timeControlLabel } from 'shared';
 import { getSocket, onSocketResync } from '../api/socket';
 import { api } from '../api/rest';
+import { useAuthStore } from '../stores/auth';
 import ChessBoard from '../components/ChessBoard.vue';
 import CreateLobbyModal from '../components/CreateLobbyModal.vue';
 import AppIcon from '../components/AppIcon.vue';
 
 const router = useRouter();
+const auth = useAuthStore();
 const lobbies = ref<LobbySummary[]>([]);
 const liveGames = ref<LiveGameInfo[]>([]);
 
@@ -23,7 +25,11 @@ const joinBusy = ref(false);
 
 const socket = getSocket();
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    const res = await api.get<{ lobbies: LobbySummary[] }>('/api/lobbies');
+    if (res.lobbies) lobbies.value = res.lobbies;
+  } catch {}
   socket.emit('live:subscribe');
   socket.emit('lobby-list:subscribe');
   // Реконнект сокета теряет комнаты live/lobby-list — подписаться заново
@@ -87,7 +93,19 @@ function notifyBrowser(text: string): void {
 
 // ---------- Создание и вход ----------
 
+function openCreateModal(): void {
+  if (!auth.user) {
+    router.push({ name: 'login', query: { redirect: '/' } });
+    return;
+  }
+  showCreateModal.value = true;
+}
+
 async function handleCreate(payload: { name: string; mode: GameMode; timeControl: TimeControl; isPrivate: boolean }) {
+  if (!auth.user) {
+    router.push({ name: 'login', query: { redirect: '/' } });
+    return;
+  }
   createError.value = '';
   createBusy.value = true;
   try {
@@ -106,6 +124,10 @@ async function handleCreate(payload: { name: string; mode: GameMode; timeControl
 async function joinByCode(): Promise<void> {
   const code = joinCode.value.trim().toUpperCase();
   if (!code) return;
+  if (!auth.user) {
+    router.push({ name: 'login', query: { redirect: '/' } });
+    return;
+  }
   joinError.value = '';
   joinBusy.value = true;
   try {
@@ -121,6 +143,10 @@ async function joinByCode(): Promise<void> {
 }
 
 function enterLobby(l: LobbySummary): void {
+  if (!auth.user) {
+    router.push({ name: 'login', query: { redirect: `/lobby/${l.id}` } });
+    return;
+  }
   socket.emit('lobby:join', l.id, (ack) => {
     if (ack.ok && ack.data) router.push(`/lobby/${ack.data.lobby.id}`);
   });
@@ -140,7 +166,7 @@ function modeLabel(m: string): string {
         <p class="dim">Играйте парами на одной доске или в багхаус с обменом фигурами в реальном времени.</p>
       </div>
       <div class="banner-actions">
-        <button class="primary banner-create-btn" @click="showCreateModal = true">
+        <button class="primary banner-create-btn" @click="openCreateModal">
           <AppIcon name="plus" :size="18" :stroke-width="2.4" />
           Создать стол
         </button>
@@ -263,14 +289,14 @@ function modeLabel(m: string): string {
                   ></span>
                   <span class="seats mono">{{ l.players.length }}/4</span>
                 </span>
-                <button class="primary small">Сесть за стол</button>
+                <button class="primary small" @click.stop="enterLobby(l)">Сесть за стол</button>
               </div>
             </div>
           </div>
 
           <div v-else class="empty">
             <p>Открытых столов пока нет.</p>
-            <button class="primary" @click="showCreateModal = true">Создать свой стол</button>
+            <button class="primary" @click="openCreateModal">Создать свой стол</button>
           </div>
         </div>
       </section>

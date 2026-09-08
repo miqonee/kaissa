@@ -3,12 +3,17 @@ import { computed, onMounted, ref } from 'vue';
 import type { ProfilePayload } from 'shared';
 import { api } from '../api/rest';
 import { useRoute } from 'vue-router';
+import { useAuthStore } from '../stores/auth';
+import { isMuted, toggleSound } from '../audio/sounds';
 import GameReplayModal from '../components/GameReplayModal.vue';
 
 const route = useRoute();
+const auth = useAuthStore();
 const profile = ref<ProfilePayload | null>(null);
 const error = ref('');
 const replayId = ref<number | null>(null);
+
+const isMyProfile = computed(() => auth.user?.username === profile.value?.user.username);
 
 onMounted(async () => {
   try {
@@ -82,6 +87,23 @@ function gameOutcome(g: import('shared').GameSummary): string {
       </div>
     </div>
 
+    <div class="panel" v-if="isMyProfile">
+      <div class="panel-head"><h2>Настройки</h2></div>
+      <div class="panel-body settings-row">
+        <div class="setting-info">
+          <span class="setting-title">Звуковые эффекты</span>
+          <span class="setting-desc dim">Звуки ходов, взятий, шахов и окончания партии</span>
+        </div>
+        <button
+          class="button"
+          :class="isMuted ? 'ghost' : 'primary'"
+          @click="toggleSound"
+        >
+          {{ isMuted ? 'Звук: Выкл' : 'Звук: Вкл' }}
+        </button>
+      </div>
+    </div>
+
     <div class="panel">
       <div class="panel-head"><h2>Недавние партии</h2></div>
       <table class="club" v-if="profile.recentGames.length">
@@ -136,4 +158,27 @@ function gameOutcome(g: import('shared').GameSummary): string {
 .stat-label { font-size: 13px; color: var(--ink-3); }
 
 .spark { width: 100%; height: 120px; }
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  gap: 16px;
+}
+
+.setting-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.setting-title {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.setting-desc {
+  font-size: 13px;
+}
 </style>

@@ -4,7 +4,6 @@ import { useAuthStore } from './stores/auth';
 import { useThemeStore } from './stores/theme';
 import { useConnectionStore } from './stores/connection';
 import { useToast } from './stores/toast';
-import { isMuted, toggleSound } from './audio/sounds';
 import { getSocket, resetSocket } from './api/socket';
 import AppIcon from './components/AppIcon.vue';
 
@@ -18,19 +17,14 @@ onMounted(async () => {
   if (!auth.checked) {
     await auth.check();
   }
-  if (auth.user) {
-    getSocket();
-  }
+  getSocket();
 });
 
 watch(
   () => auth.user,
-  (user) => {
-    if (user) {
-      getSocket();
-    } else {
-      resetSocket();
-    }
+  () => {
+    resetSocket();
+    getSocket();
   },
 );
 
@@ -40,10 +34,6 @@ function logout(): void {
 
 const themeTitle = computed(() =>
   theme.current === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему',
-);
-
-const soundTitle = computed(() =>
-  isMuted.value ? 'Включить звуки игры' : 'Выключить звуки игры',
 );
 
 const connLabel = computed(() => {
@@ -80,7 +70,7 @@ const connLabel = computed(() => {
           Каисса
         </router-link>
 
-        <nav v-if="auth.user">
+        <nav>
           <router-link to="/">Лобби</router-link>
           <router-link to="/history">Архив партий</router-link>
           <router-link to="/leaderboard">Рейтинг</router-link>
@@ -98,10 +88,6 @@ const connLabel = computed(() => {
             <span class="conn-dot"></span>
             <span class="conn-text" v-if="conn.state !== 'connected'">{{ connLabel }}</span>
           </span>
-
-          <button class="icon-btn" @click="toggleSound" :title="soundTitle" :aria-label="soundTitle">
-            <AppIcon :name="isMuted ? 'volume-x' : 'volume'" :size="16" />
-          </button>
 
           <button class="icon-btn" @click="theme.toggle" :title="themeTitle" :aria-label="themeTitle">
             <AppIcon :name="theme.current === 'dark' ? 'sun' : 'moon'" :size="16" />
@@ -123,6 +109,9 @@ const connLabel = computed(() => {
               <span class="rating-chip mono">{{ auth.user.rating }}</span>
             </router-link>
             <button class="logout-btn" @click="logout" title="Выйти из аккаунта">Выйти</button>
+          </template>
+          <template v-else>
+            <router-link to="/login" class="login-header-btn">Войти / Регистрация</router-link>
           </template>
         </div>
       </div>
@@ -160,6 +149,25 @@ const connLabel = computed(() => {
   background: var(--accent-1);
   color: var(--surface-1);
   border-color: var(--accent-1);
+}
+
+.login-header-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--r-s);
+  background: var(--accent-1);
+  color: var(--surface-1);
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.login-header-btn:hover {
+  opacity: 0.9;
 }
 
 .conn-indicator {

@@ -20,7 +20,8 @@ export const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore();
   if (!auth.checked) await auth.check();
-  if (to.name !== 'login' && !auth.user) {
+  const requiresAuth = to.name === 'lobby' || to.name === 'admin';
+  if (requiresAuth && !auth.user) {
     return { name: 'login', query: { redirect: to.fullPath } };
   }
   if (to.name === 'admin' && !auth.user?.isAdmin) {

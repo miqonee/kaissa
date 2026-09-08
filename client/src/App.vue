@@ -55,17 +55,11 @@ const connLabel = computed(() => {
     <header class="topbar">
       <div class="topbar-inner">
         <router-link to="/" class="brand">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 2l3 5h-6l3-5z" fill="var(--accent-2)" />
-            <path
-              d="M5 21h14M8 21v-4M16 21v-4M7 17h10l-1-4H8l-1 4z"
-              stroke="var(--accent-2)"
-              stroke-width="1.6"
-              fill="none"
-              stroke-linejoin="round"
-            />
-            <path d="M6 8h12" stroke="var(--accent-2)" stroke-width="1.6" />
-            <path d="M7 8v5h10V8" stroke="var(--accent-2)" stroke-width="1.6" fill="none" />
+          <svg class="brand-logo" width="26" height="26" viewBox="0 0 180 180" fill="none" aria-hidden="true">
+            <rect class="logo-felt" x="24" y="42" width="46" height="46" rx="12" />
+            <rect class="logo-gold" x="86" y="36" width="46" height="46" rx="12" />
+            <rect class="logo-gold" x="24" y="98" width="46" height="46" rx="12" />
+            <rect class="logo-felt" x="80" y="98" width="46" height="46" rx="12" />
           </svg>
           Каисса
         </router-link>
@@ -137,18 +131,18 @@ const connLabel = computed(() => {
   font-size: 13px;
   font-weight: 600;
   border-radius: var(--r-s);
-  background: color-mix(in srgb, var(--accent-1) 12%, transparent);
-  color: var(--accent-1);
-  border: 1px solid color-mix(in srgb, var(--accent-1) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
   text-decoration: none;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .admin-header-btn:hover {
-  background: var(--accent-1);
-  color: var(--surface-1);
-  border-color: var(--accent-1);
+  background: var(--accent);
+  color: var(--surface);
+  border-color: var(--accent);
 }
 
 .login-header-btn {
@@ -159,8 +153,8 @@ const connLabel = computed(() => {
   font-size: 13px;
   font-weight: 600;
   border-radius: var(--r-s);
-  background: var(--accent-1);
-  color: var(--surface-1);
+  background: var(--felt);
+  color: var(--felt-ink);
   text-decoration: none;
   cursor: pointer;
   transition: opacity 0.15s ease;

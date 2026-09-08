@@ -224,6 +224,24 @@ main.page {
   flex: none;
 }
 
+.brand-logo .logo-felt {
+  fill: var(--felt);
+  transition: fill var(--t-fast);
+}
+
+.brand-logo .logo-gold {
+  fill: var(--accent-2);
+  transition: fill var(--t-fast);
+}
+
+[data-theme='dark'] .brand-logo .logo-felt {
+  fill: var(--felt-2);
+}
+
+[data-theme='dark'] .brand-logo .logo-gold {
+  fill: var(--accent-2);
+}
+
 .topbar nav {
   display: flex;
   align-items: center;

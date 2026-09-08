@@ -34,8 +34,12 @@ services:
       context: .
       dockerfile: client/Dockerfile
     restart: unless-stopped
+    expose:
+      - 80
     ports:
-      - "${KAISSA_PORT:-8289}:3000"
+      - "${KAISSA_PORT:-8289}:80"
+    environment:
+      - SERVICE_FQDN_CLIENT
     depends_on:
       - server
 

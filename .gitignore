@@ -5,3 +5,4 @@ dist/
 server/prisma/dev.db
 coverage/
 graphify-out/
+docker-compose.override.yml

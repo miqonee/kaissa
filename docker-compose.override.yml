@@ -1,4 +1,0 @@
-services:
-  client:
-    ports:
-      - "${KAISSA_PORT:-8080}:80"

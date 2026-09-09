@@ -104,4 +104,41 @@ describe('Auto Lobby and Team Modes', () => {
     expect(lobby.isPaused).toBe(true);
     expect(lobby.pausedBy.size).toBe(2);
   });
+
+  it('routes multiple players clicking rematch into the exact same lobby', async () => {
+    const mgr = new LobbiesManager();
+    const players = [
+      { uid: 1, username: 'p1', rating: 1200, isBot: false },
+      { uid: 2, username: 'p2', rating: 1250, isBot: false },
+      { uid: 3, username: 'bot_novice', rating: 900, isBot: true, botLevel: 1 },
+      { uid: 4, username: 'bot_amateur', rating: 1200, isBot: true, botLevel: 2 },
+    ];
+    const opts = {
+      gameId: 42,
+      mode: 'team' as const,
+      timeControl: { kind: 'none' as const, baseMin: 0, incSec: 0 },
+    };
+
+    // Player 1 clicks rematch
+    const res1 = await mgr.rematch(1, players, opts);
+    expect(res1).not.toBeNull();
+    const lobby1Id = res1!.lobbyId;
+
+    // Player 2 clicks rematch for the same game
+    const res2 = await mgr.rematch(2, players, opts);
+    expect(res2).not.toBeNull();
+    const lobby2Id = res2!.lobbyId;
+
+    // Must be the EXACT SAME lobby ID!
+    expect(lobby2Id).toBe(lobby1Id);
+
+    const lobby = mgr.getById(lobby1Id);
+    expect(lobby).toBeDefined();
+    // Player 1, Player 2, and both bots should be in the lobby
+    expect(lobby!.members.has(1)).toBe(true);
+    expect(lobby!.members.has(2)).toBe(true);
+    expect(lobby!.members.has(3)).toBe(true);
+    expect(lobby!.members.has(4)).toBe(true);
+    expect(lobby!.members.size).toBe(4);
+  });
 });

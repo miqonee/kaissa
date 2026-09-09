@@ -49,7 +49,7 @@ export function searchBestMoves(
 
   // Итеративное углубление: от 1 до maxDepth
   for (let currentDepth = 1; currentDepth <= maxDepth; currentDepth++) {
-    if (Date.now() - startTime >= timeBudgetMs) break;
+    if (currentDepth > 1 && Date.now() - startTime >= timeBudgetMs) break;
 
     const currentRanked: ScoredMove[] = [];
     const ordered = orderMoves(rankedMoves.map((r) => r.move));
@@ -58,7 +58,7 @@ export function searchBestMoves(
     let timeExceeded = false;
 
     for (const m of ordered) {
-      if (Date.now() - startTime >= timeBudgetMs) {
+      if (currentDepth > 1 && Date.now() - startTime >= timeBudgetMs) {
         timeExceeded = true;
         break;
       }

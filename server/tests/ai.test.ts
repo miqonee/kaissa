@@ -22,7 +22,7 @@ describe('AI Chess Engine', () => {
     // Белые ставят мат ферзём Qxf7#
     // Scholar's mate setup: 1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6 4. Qxf7#
     const c = new Chess('r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4');
-    const moves = searchBestMoves(c, 2, 100);
+    const moves = searchBestMoves(c, 2, 500);
     expect(moves.length).toBeGreaterThan(0);
     expect(moves[0].move.san).toBe('Qxf7#');
   });

@@ -643,12 +643,24 @@ export class GamesManager {
   }
 
   /** Данные игроков для реванша */
-  async rematchPlayers(gameId: number): Promise<{ uid: number; username: string; rating: number }[]> {
+  async rematchPlayers(
+    gameId: number,
+  ): Promise<{ uid: number; username: string; rating: number; isBot?: boolean; botLevel?: number | null }[]> {
     const parts = await prisma.gameParticipant.findMany({
       where: { gameId },
       include: { user: true },
     });
-    return parts.map((p) => ({ uid: p.userId, username: p.user.username, rating: p.user.rating }));
+    return parts.map((p) => ({
+      uid: p.userId,
+      username: p.user.username,
+      rating: p.user.rating,
+      isBot: p.user.isBot,
+      botLevel: p.user.botLevel,
+    }));
+  }
+
+  broadcastRematch(gameId: number, lobbyId: string): void {
+    this.io?.to(this.gameRoom(gameId)).emit('game:rematch', { gameId, lobbyId });
   }
 }
 

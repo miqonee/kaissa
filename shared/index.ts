@@ -187,6 +187,7 @@ export type ServerToClientEvents = {
   'game:chat': (msg: ChatMessage & { gameId: number }) => void;
   'game:players-left': (payload: { gameId: number; left: { userId: number; username: string; reconnected: boolean; leftCount: number }[] }) => void;
   'game:summoned': (payload: { gameId: number }) => void;
+  'game:rematch': (payload: { gameId: number; lobbyId: string }) => void;
 
   // Live-трансляция на главной
   'live:new': (info: LiveGameInfo) => void;

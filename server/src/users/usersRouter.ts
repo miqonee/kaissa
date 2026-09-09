@@ -280,7 +280,10 @@ gamesRouter.post('/:id/rematch', requireAuth, async (req, res) => {
   );
   if (!r) return void res.status(500).json({ error: 'Не удалось создать лобби' });
 
-  // Уведомить остальных участников (создатель уже в лобби)
+  // Разослать событие реванша в комнату партии (всех в партии перекинет в лобби)
+  gamesManager.broadcastRematch(id, r.lobbyId);
+
+  // Уведомить остальных участников через личные сокеты (если уже вышли из комнаты игры)
   for (const p of game.participants) {
     if (p.userId === user.id) continue;
     presence.emitToUser(p.userId, 'user:notif', {

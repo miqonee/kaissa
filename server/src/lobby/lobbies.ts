@@ -581,11 +581,27 @@ export class LobbiesManager {
 
   async rematch(
     callerUid: number,
-    players: { uid: number; username: string; rating: number }[],
-    opts: { gameId: number; mode: GameMode; timeControl: TimeControl },
+    players: { uid: number; username: string; rating: number; isBot?: boolean; botLevel?: number | null }[],
+    opts: { gameId: number; mode: GameMode; timeControl: TimeControl; teamMode?: TeamMode },
   ): Promise<{ lobbyId: string; code: string } | null> {
     const me = players.find((p) => p.uid === callerUid);
     if (!me) return null;
+
+    // Проверяем, существует ли уже открытое лобби реванша для этой игры
+    const existing = [...this.lobbies.values()].find((l) => l.rematchOf === opts.gameId && !l.started);
+    if (existing) {
+      if (!existing.members.has(me.uid)) {
+        this.join(existing, {
+          uid: me.uid,
+          username: me.username,
+          rating: me.rating,
+          isBot: me.isBot,
+          botLevel: me.botLevel,
+        });
+      }
+      return { lobbyId: existing.id, code: existing.code };
+    }
+
     const id = `L${this.idSeq++}`;
     const code = genCode();
     const lobby = new Lobby(
@@ -596,11 +612,39 @@ export class LobbiesManager {
         mode: opts.mode,
         timeControl: opts.timeControl,
         private: true,
+        teamMode: opts.teamMode || 'auto',
       },
-      { uid: me.uid, username: me.username, rating: me.rating, ready: true, host: true, joinedAt: Date.now() },
+      {
+        uid: me.uid,
+        username: me.username,
+        rating: me.rating,
+        ready: true,
+        host: true,
+        joinedAt: Date.now(),
+        isBot: me.isBot,
+        botLevel: me.botLevel,
+      },
       opts.gameId,
     );
+
+    // Автоматически переносим ботов из предыдущей игры
+    for (const p of players) {
+      if (p.uid !== me.uid && p.isBot) {
+        lobby.members.set(p.uid, {
+          uid: p.uid,
+          username: p.username,
+          rating: p.rating,
+          ready: true,
+          host: false,
+          joinedAt: Date.now(),
+          isBot: true,
+          botLevel: p.botLevel,
+        });
+      }
+    }
+
     this.lobbies.set(id, lobby);
+    this.broadcastList();
     return { lobbyId: id, code };
   }
 }

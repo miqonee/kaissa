@@ -376,6 +376,11 @@ onMounted(() => {
     disconnected.value = payload.left;
   });
 
+  socket.on('game:rematch', (payload) => {
+    if (payload.gameId !== gameId) return;
+    router.push(`/lobby/${payload.lobbyId}`);
+  });
+
   // REST-запрос параллельно сокету для мгновенной загрузки стола
   api.get<{ state: GameState }>(`/api/games/${gameId}/state`).then((res) => {
     if (res.state && !state.value) {
@@ -400,6 +405,7 @@ onBeforeUnmount(() => {
   socket.off('game:end');
   socket.off('game:chat');
   socket.off('game:players-left');
+  socket.off('game:rematch');
   clearInterval(ticker);
 });
 

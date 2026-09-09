@@ -26,7 +26,7 @@ services:
     restart: unless-stopped
     environment:
       PORT: 4000
-      DATABASE_URL: ${DATABASE_URL:-postgresql://kaissa:kaissa-secret-change-me@db:5432/kaissa?schema=public}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-kaissa}:${POSTGRES_PASSWORD:-kaissa-secret-change-me}@db:5432/${POSTGRES_DB:-kaissa}?schema=public}
       JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-string}
       ABANDON_SECONDS: ${ABANDON_SECONDS:-20}
       ADMIN_USERNAMES: ${ADMIN_USERNAMES:-admin,ivan1}

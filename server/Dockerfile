@@ -1,4 +1,4 @@
-FROM node:22-alpine AS server-build
+FROM node:22-alpine
 WORKDIR /app
 ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 RUN npm config set strict-ssl false
@@ -20,15 +20,15 @@ WORKDIR /app/server
 ENV NODE_ENV=production
 ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 
-COPY --from=server-build /app/shared /app/shared
+COPY --from=0 /app/shared /app/shared
 COPY server/package.json ./
 RUN npm config set strict-ssl false && npm install --omit=dev
 
 # Копируем уже сгенерированный Prisma Client и query engine из build-стадии
-COPY --from=server-build /app/server/node_modules/.prisma ./node_modules/.prisma
-COPY --from=server-build /app/server/node_modules/@prisma ./node_modules/@prisma
+COPY --from=0 /app/server/node_modules/.prisma ./node_modules/.prisma
+COPY --from=0 /app/server/node_modules/@prisma ./node_modules/@prisma
 COPY server/prisma ./prisma
-COPY --from=server-build /app/server/dist ./dist
+COPY --from=0 /app/server/dist ./dist
 
 EXPOSE 4000
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]

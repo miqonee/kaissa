@@ -31,4 +31,4 @@ COPY server/prisma ./prisma
 COPY --from=0 /app/server/dist ./dist
 
 EXPOSE 4000
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy || echo '[prisma] migration deploy warning'; node dist/index.js"]

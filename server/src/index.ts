@@ -103,8 +103,8 @@ async function main(): Promise<void> {
   registerSocketHandlers(io);
   demoShowcase.start(gamesManager);
 
-  httpServer.listen(env.port, () => {
-    console.log(`[kaissa] server listening on :${env.port}`);
+  httpServer.listen(env.port, '0.0.0.0', () => {
+    console.log(`[kaissa] server listening on 0.0.0.0:${env.port}`);
   });
 }
 

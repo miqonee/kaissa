@@ -1,4 +1,4 @@
-FROM node:22-alpine AS client-build
+FROM node:22-alpine
 WORKDIR /app
 ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 RUN npm config set strict-ssl false
@@ -16,7 +16,7 @@ COPY client ./client
 RUN cd client && npm run build
 
 FROM nginx:1.27-alpine
-COPY --from=client-build /app/client/dist /usr/share/nginx/html
+COPY --from=0 /app/client/dist /usr/share/nginx/html
 COPY client/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Поддержка запуска в OpenShift под unprivileged пользователем (SCC restricted)

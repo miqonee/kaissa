@@ -112,7 +112,7 @@ const connLabel = computed(() => {
     </header>
 
     <main class="page">
-      <router-view />
+      <router-view :key="$route.fullPath" />
     </main>
 
     <div v-if="toast.toastText.value" class="toast" role="status">

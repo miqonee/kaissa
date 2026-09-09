@@ -68,14 +68,14 @@ const QUEEN_PST = [
 ];
 
 const KING_MID_PST = [
+  -40, -40, -40, -50, -50, -40, -40, -40,
+  -40, -40, -40, -50, -50, -40, -40, -40,
+  -40, -40, -40, -50, -50, -40, -40, -40,
   -30, -40, -40, -50, -50, -40, -40, -30,
-  -30, -40, -40, -50, -50, -40, -40, -30,
-  -30, -40, -40, -50, -50, -40, -40, -30,
-  -30, -40, -40, -50, -50, -40, -40, -30,
-  -20, -30, -30, -40, -40, -30, -30, -20,
-  -10, -20, -20, -20, -20, -20, -20, -10,
-   20,  20,   0,   0,   0,   0,  20,  20,
-   20,  30,  10,   0,   0,  10,  30,  20,
+  -20, -30, -35, -45, -45, -35, -30, -20,
+  -10, -20, -25, -35, -35, -25, -20, -10,
+   15,  15, -20, -25, -25, -20,  15,  15,
+   20,  30,  25,   0,   5,   0,  30,  20,
 ];
 
 const KING_END_PST = [
@@ -178,15 +178,62 @@ export function evaluateBoard(chess: Chess): number {
     }
   }
 
-  // Mop-up эвалюация: при перевесе зажимать короля противника к краю и вести своего короля
-  if (whiteMaterial - blackMaterial > 250) {
-    const bKingCenterDist = Math.max(3 - bKingR, bKingR - 4) + Math.max(3 - bKingC, bKingC - 4);
-    const kingsDist = Math.max(Math.abs(wKingR - bKingR), Math.abs(wKingC - bKingC));
-    score += Math.round((bKingCenterDist * 16 + (7 - kingsDist) * 22) * (0.4 + 0.6 * endgameWeight));
-  } else if (blackMaterial - whiteMaterial > 250) {
-    const wKingCenterDist = Math.max(3 - wKingR, wKingR - 4) + Math.max(3 - wKingC, wKingC - 4);
-    const kingsDist = Math.max(Math.abs(wKingR - bKingR), Math.abs(wKingC - bKingC));
-    score -= Math.round((wKingCenterDist * 16 + (7 - kingsDist) * 22) * (0.4 + 0.6 * endgameWeight));
+  // Бонусы за рокировку и пешечный/фианкетто щит в дебюте и миттельшпиле
+  if (endgameWeight < 0.7) {
+    const wRights = chess.getCastlingRights('w');
+    const bRights = chess.getCastlingRights('b');
+
+    // Белые
+    const wCastled = wKingR === 7 && (wKingC === 6 || wKingC === 2 || wKingC === 1);
+    if (wCastled) {
+      score += 35;
+      // Проверка пешечного щита на королевском фланге с поддержкой фианкетто (g3 + Bg2)
+      if (wKingC === 6) {
+        const hasF = (board[6][5]?.type === 'p' && board[6][5]?.color === 'w') || (board[5][5]?.type === 'p' && board[5][5]?.color === 'w');
+        const hasGStandard = board[6][6]?.type === 'p' && board[6][6]?.color === 'w';
+        const hasGFianchetto = board[5][6]?.type === 'p' && board[5][6]?.color === 'w' && board[6][6]?.type === 'b' && board[6][6]?.color === 'w';
+        const hasH = (board[6][7]?.type === 'p' && board[6][7]?.color === 'w') || (board[5][7]?.type === 'p' && board[5][7]?.color === 'w');
+        if (hasF) score += 8;
+        if (hasGStandard || hasGFianchetto) score += 10;
+        if (hasH) score += 8;
+      }
+    } else if (wRights.k || wRights.q) {
+      score += 15; // Сохранение права на рокировку
+    } else {
+      score -= 30; // Потеря права на рокировку королём в центре
+    }
+
+    // Чёрные
+    const bCastled = bKingR === 0 && (bKingC === 6 || bKingC === 2 || bKingC === 1);
+    if (bCastled) {
+      score -= 35;
+      if (bKingC === 6) {
+        const hasF = (board[1][5]?.type === 'p' && board[1][5]?.color === 'b') || (board[2][5]?.type === 'p' && board[2][5]?.color === 'b');
+        const hasGStandard = board[1][6]?.type === 'p' && board[1][6]?.color === 'b';
+        const hasGFianchetto = board[2][6]?.type === 'p' && board[2][6]?.color === 'b' && board[1][6]?.type === 'b' && board[1][6]?.color === 'b';
+        const hasH = (board[1][7]?.type === 'p' && board[1][7]?.color === 'b') || (board[2][7]?.type === 'p' && board[2][7]?.color === 'b');
+        if (hasF) score -= 8;
+        if (hasGStandard || hasGFianchetto) score -= 10;
+        if (hasH) score -= 8;
+      }
+    } else if (bRights.k || bRights.q) {
+      score -= 15;
+    } else {
+      score += 30;
+    }
+  }
+
+  // Mop-up эвалюация: активируется ИСКЛЮЧИТЕЛЬНО в глубоком эндшпиле без ферзей у слабейшей стороны
+  if (endgameWeight >= 0.75) {
+    if (whiteMaterial - blackMaterial >= 350 && blackNonPawn <= 330) {
+      const bKingCenterDist = Math.max(3 - bKingR, bKingR - 4) + Math.max(3 - bKingC, bKingC - 4);
+      const kingsDist = Math.max(Math.abs(wKingR - bKingR), Math.abs(wKingC - bKingC));
+      score += Math.round((bKingCenterDist * 16 + (7 - kingsDist) * 22) * endgameWeight);
+    } else if (blackMaterial - whiteMaterial >= 350 && whiteNonPawn <= 330) {
+      const wKingCenterDist = Math.max(3 - wKingR, wKingR - 4) + Math.max(3 - wKingC, wKingC - 4);
+      const kingsDist = Math.max(Math.abs(wKingR - bKingR), Math.abs(wKingC - bKingC));
+      score -= Math.round((wKingCenterDist * 16 + (7 - kingsDist) * 22) * endgameWeight);
+    }
   }
 
   return score;

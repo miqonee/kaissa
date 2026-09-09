@@ -188,6 +188,7 @@ export type ServerToClientEvents = {
   'game:players-left': (payload: { gameId: number; left: { userId: number; username: string; reconnected: boolean; leftCount: number }[] }) => void;
   'game:summoned': (payload: { gameId: number }) => void;
   'game:rematch': (payload: { gameId: number; lobbyId: string }) => void;
+  'game:next': (payload: { nextGameId: number }) => void;
 
   // Live-трансляция на главной
   'live:new': (info: LiveGameInfo) => void;
@@ -360,11 +361,11 @@ export interface BotConfig {
 }
 
 export const BOT_PRESETS: BotConfig[] = [
-  { level: 1, name: 'Новичок', username: 'bot_novice', elo: 900, depth: 2, errorRate: 0.24, errorJitter: 0.05 },
-  { level: 2, name: 'Любитель', username: 'bot_amateur', elo: 1200, depth: 3, errorRate: 0.16, errorJitter: 0.06 },
-  { level: 3, name: 'Клубный', username: 'bot_club', elo: 1450, depth: 3, errorRate: 0.10, errorJitter: 0.04 },
-  { level: 4, name: 'Опытный', username: 'bot_expert', elo: 1700, depth: 4, errorRate: 0.06, errorJitter: 0.04 },
-  { level: 5, name: 'Мастер', username: 'bot_master', elo: 2000, depth: 5, errorRate: 0.03, errorJitter: 0.02 },
+  { level: 1, name: 'Новичок', username: 'bot_novice', elo: 500, depth: 2, errorRate: 0.24, errorJitter: 0.05 },
+  { level: 2, name: 'Любитель', username: 'bot_amateur', elo: 800, depth: 3, errorRate: 0.16, errorJitter: 0.06 },
+  { level: 3, name: 'Клубный', username: 'bot_club', elo: 1050, depth: 3, errorRate: 0.10, errorJitter: 0.04 },
+  { level: 4, name: 'Опытный', username: 'bot_expert', elo: 1300, depth: 4, errorRate: 0.06, errorJitter: 0.04 },
+  { level: 5, name: 'Мастер', username: 'bot_master', elo: 1600, depth: 5, errorRate: 0.03, errorJitter: 0.02 },
 ];
 
 // ---------- Метрики платформы и ботов (Админка) ----------

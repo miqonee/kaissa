@@ -54,6 +54,26 @@ describe('TeamGame', () => {
     tg.applyMove('b', 1, 'd8', 'h4');
     expect(tg.isCheckmate()).toBe(true);
   });
+
+  it('два короля на доске — ничья по недостатку материала', () => {
+    const tg = new TeamGame();
+    tg.chess.load('4k3/8/8/8/8/8/8/4K3 w - - 0 1');
+    expect(tg.isInsufficientMaterial()).toBe(true);
+  });
+
+  it('троекратное повторение позиции фиксируется', () => {
+    const tg = new TeamGame();
+    // 1. Nf3 Nf6 2. Ng1 Ng8 3. Nf3 Nf6 4. Ng1 Ng8
+    tg.applyMove('w', 0, 'g1', 'f3');
+    tg.applyMove('b', 0, 'g8', 'f6');
+    tg.applyMove('w', 1, 'f3', 'g1');
+    tg.applyMove('b', 1, 'f6', 'g8');
+    tg.applyMove('w', 0, 'g1', 'f3');
+    tg.applyMove('b', 0, 'g8', 'f6');
+    tg.applyMove('w', 1, 'f3', 'g1');
+    tg.applyMove('b', 1, 'f6', 'g8');
+    expect(tg.isThreefoldRepetition()).toBe(true);
+  });
 });
 
 describe('Clock', () => {

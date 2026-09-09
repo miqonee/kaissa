@@ -415,14 +415,15 @@ export class LobbiesManager {
       const humans = [...lobby.members.values()].filter((m) => !m.isBot);
       if (humans.length === 0) {
         lobby.clearCountdown();
-        void this.refillAutoBots(lobby);
       } else {
+        if (!humans.some((h) => h.host)) {
+          humans[0].host = true;
+        }
         const isPaused = humans.length === 1 ? lobby.pausedBy.size === 1 : lobby.pausedBy.size === humans.length;
         lobby.isPaused = isPaused;
         this.broadcastCountdown(lobby);
       }
-      this.broadcastState(lobby);
-      this.broadcastList();
+      void this.refillAutoBots(lobby);
       return;
     }
 

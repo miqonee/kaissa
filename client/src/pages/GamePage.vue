@@ -232,6 +232,17 @@ const currentMover = computed(() => {
   return state.value.participants.find((p) => p.userId === uid) ?? null;
 });
 
+const orderedTurnParticipants = computed(() => {
+  if (!state.value || state.value.mode !== 'team') return state.value?.participants ?? [];
+  const parts = state.value.participants;
+  const w0 = parts.find((p) => p.color === 'w' && p.moveSlot === 0);
+  const b0 = parts.find((p) => p.color === 'b' && p.moveSlot === 0);
+  const w1 = parts.find((p) => p.color === 'w' && p.moveSlot === 1);
+  const b1 = parts.find((p) => p.color === 'b' && p.moveSlot === 1);
+  const list = [w0, b0, w1, b1].filter(Boolean) as GameParticipantInfo[];
+  return list.length === 4 ? list : parts;
+});
+
 // ---------- Действия ----------
 
 function onMove(b: 0 | 1, payload: { from: string; to: string; premove?: boolean }): void {
@@ -387,6 +398,12 @@ onMounted(() => {
     router.push(`/lobby/${payload.lobbyId}`);
   });
 
+  socket.on('game:next', (payload) => {
+    if (!isParticipant.value) {
+      router.push(`/game/${payload.nextGameId}`);
+    }
+  });
+
   // REST-запрос параллельно сокету для мгновенной загрузки стола
   api.get<{ state: GameState }>(`/api/games/${gameId}/state`).then((res) => {
     if (res.state && !state.value) {
@@ -413,6 +430,7 @@ onBeforeUnmount(() => {
   socket.off('game:chat');
   socket.off('game:players-left');
   socket.off('game:rematch');
+  socket.off('game:next');
   clearInterval(ticker);
 });
 
@@ -448,6 +466,8 @@ const REASONS: Record<string, string> = {
   timeout: 'Время вышло',
   stalemate: 'Пат',
   material: 'Недостаток материала',
+  repetition: 'Троекратное повторение',
+  fifty: 'Правило 50 ходов',
   abandoned: 'Партия брошена',
 };
 
@@ -455,7 +475,8 @@ function resultHeadline(): string {
   if (!state.value || state.value.status === 'active') return '';
   const s = state.value;
   const reason = REASONS[s.reason ?? ''] ?? s.reason ?? '';
-  if (s.status === 'abandoned' || s.result === '*') return `Партия брошена (${reason})`;
+  if (s.status === 'abandoned') return `Партия брошена (${reason})`;
+  if (s.result === '*') return `Ничья (${reason})`;
   const winnerTeam = s.result === '1-0' ? 1 : 2;
   const winners = s.participants.filter((p) => p.team === winnerTeam).map((p) => p.username);
   return `Победа команды: ${winners.join(' / ')} (${reason})`;
@@ -685,23 +706,23 @@ function resultHeadline(): string {
           <div class="panel-body queue-body">
             <div v-if="state.mode === 'team'" class="queue-explain">
               <p class="dim small-hint">
-                Напарники чередуются через ход: слот 1 → слот 2 → слот 1.
+                Чередование ходов: Белые → Черные → Белые → Черные
               </p>
               <div class="queue-list">
                 <div
-                  v-for="p in state.participants"
+                  v-for="(p, idx) in orderedTurnParticipants"
                   :key="p.userId"
                   class="queue-item"
                   :class="[roleOf(p), { current: isPlayerTurn(p.userId) }]"
                 >
                   <span class="queue-dot" :class="{ on: isPlayerTurn(p.userId) }"></span>
+                  <span class="queue-order mono dim">{{ idx + 1 }}</span>
                   <span class="color-tag" :class="p.color">
                     {{ p.color === 'w' ? 'Белые' : 'Черные' }}
                   </span>
                   <span class="queue-name">{{ p.username }}</span>
                   <span v-if="roleOf(p) === 'me'" class="member-role me">Вы</span>
                   <span v-else-if="roleOf(p) === 'partner'" class="member-role partner">Напарник</span>
-                  <span class="dim mono slot-note">слот {{ p.moveSlot + 1 }}</span>
                   <span v-if="isPlayerTurn(p.userId)" class="turn-now-chip">СЕЙЧАС ХОД</span>
                 </div>
               </div>
@@ -787,6 +808,7 @@ function resultHeadline(): string {
         <div class="modal-body">
           <div class="headline-box">
             <h3>{{ resultHeadline() }}</h3>
+            <p v-if="!isParticipant" class="dim next-game-hint">Следующая автопартия начнётся автоматически…</p>
           </div>
 
           <!-- Таблица изменений рейтинга -->
@@ -1250,6 +1272,14 @@ function resultHeadline(): string {
   font-size: 12.5px;
 }
 
+.queue-order {
+  font-size: 11px;
+  font-weight: 700;
+  width: 12px;
+  text-align: center;
+  opacity: 0.7;
+}
+
 .queue-item.me {
   border-color: var(--accent-2);
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
@@ -1369,6 +1399,11 @@ function resultHeadline(): string {
 .headline-box h3 {
   font-size: 18px;
   color: var(--accent);
+}
+
+.next-game-hint {
+  font-size: 13px;
+  margin-top: 6px;
 }
 
 .rating-delta {

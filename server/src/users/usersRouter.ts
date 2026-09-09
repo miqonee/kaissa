@@ -3,7 +3,8 @@ import { currentUser, requireAuth, toPublic } from '../auth/auth.js';
 import { prisma } from '../prisma.js';
 import { gamesManager, lobbies } from '../state.js';
 import { presence } from '../socket/presence.js';
-import { buildPgn } from '../games/pgn.js';
+import { buildPgn, type PgnGame, type PgnMove } from '../games/pgn.js';
+import { TeamGame } from '../game/teamGame.js';
 import type { GameSummary, LeaderboardRow, ProfilePayload } from 'shared';
 
 export const usersRouter = Router();
@@ -32,7 +33,7 @@ usersRouter.get('/search', async (req, res) => {
   const q = String(req.query.q ?? '').trim();
   if (q.length < 2) return void res.json({ users: [] });
   const users = await prisma.user.findMany({
-    where: { username: { contains: q, mode: 'insensitive' } },
+    where: { isBot: false, username: { contains: q, mode: 'insensitive' } },
     take: 10,
     orderBy: { rating: 'desc' },
   });
@@ -86,11 +87,18 @@ gamesRouter.get('/mine', requireAuth, async (req, res) => {
   res.json({ games: parts.map((p) => dbGameToSummary(p.game)) });
 });
 
-/** Архив клуба: все завершённые партии */
+/** Архив клуба: все завершённые партии с участием людей */
 gamesRouter.get('/archive', requireAuth, async (req, res) => {
   const take = Math.min(200, Math.max(1, parseInt(String(req.query.limit ?? '100'), 10) || 100));
   const games = await prisma.game.findMany({
-    where: { status: { in: ['finished', 'abandoned'] } },
+    where: {
+      status: { in: ['finished', 'abandoned'] },
+      participants: {
+        some: {
+          user: { isBot: false },
+        },
+      },
+    },
     orderBy: { startedAt: 'desc' },
     take,
     include: { participants: { include: { user: true } } },
@@ -98,10 +106,7 @@ gamesRouter.get('/archive', requireAuth, async (req, res) => {
   res.json({ games: games.map(dbGameToSummary) });
 });
 
-/** PGN партии: скачивание/анализ во внешних движках */
-gamesRouter.get('/:id/pgn', async (req, res) => {
-  const id = parseInt(String(req.params.id), 10);
-  if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
+async function getPgnData(id: number): Promise<{ game: PgnGame; moves: PgnMove[]; mode: string } | null> {
   const game = await prisma.game.findUnique({
     where: { id },
     include: {
@@ -109,22 +114,60 @@ gamesRouter.get('/:id/pgn', async (req, res) => {
       moves: { orderBy: [{ ply: 'asc' }] },
     },
   });
-  if (!game) return void res.status(404).json({ error: 'Партия не найдена' });
 
-  const boardQuery = req.query.board !== undefined ? parseInt(String(req.query.board), 10) : undefined;
-  const pgn = buildPgn(
-    {
-      id: game.id,
-      mode: game.mode as 'team' | 'bughouse',
-      result: game.result,
-      reason: game.reason,
-      baseMin: game.baseMin,
-      incSec: game.incSec,
-      noClock: game.noClock,
-      startedAt: game.startedAt,
-      endedAt: game.endedAt,
-      participants: game.participants.map((p) => ({
-        username: p.user.username,
+  if (game) {
+    return {
+      mode: game.mode,
+      game: {
+        id: game.id,
+        mode: game.mode as 'team' | 'bughouse',
+        result: game.result,
+        reason: game.reason,
+        baseMin: game.baseMin,
+        incSec: game.incSec,
+        noClock: game.noClock,
+        startedAt: game.startedAt,
+        endedAt: game.endedAt,
+        participants: game.participants.map((p) => ({
+          username: p.user.username,
+          team: p.team,
+          color: p.color,
+          boardIndex: p.boardIndex,
+          moveSlot: p.moveSlot,
+          ratingBefore: p.ratingBefore,
+        })),
+      },
+      moves: game.moves.map((m) => ({
+        boardIndex: m.boardIndex,
+        ply: m.ply,
+        from: m.from,
+        to: m.to,
+        promotion: m.promotion,
+        dropPiece: m.dropPiece,
+      })),
+    };
+  }
+
+  // Если партии нет в БД (например, in-memory демо-партия ботов на TV), берём из памяти
+  const active = gamesManager.getActive(id);
+  if (!active) return null;
+  const tg = active.engine as TeamGame;
+  const historyMoves = tg.chess ? tg.chess.history({ verbose: true }) : [];
+
+  return {
+    mode: active.mode,
+    game: {
+      id: active.id,
+      mode: active.mode,
+      result: active.result,
+      reason: active.reason,
+      baseMin: active.timeControl.baseMin,
+      incSec: active.timeControl.incSec,
+      noClock: active.timeControl.kind === 'none',
+      startedAt: new Date(active.startedAt),
+      endedAt: new Date(),
+      participants: active.participants.map((p) => ({
+        username: p.username,
         team: p.team,
         color: p.color,
         boardIndex: p.boardIndex,
@@ -132,16 +175,26 @@ gamesRouter.get('/:id/pgn', async (req, res) => {
         ratingBefore: p.ratingBefore,
       })),
     },
-    game.moves.map((m) => ({
-      boardIndex: m.boardIndex,
-      ply: m.ply,
+    moves: historyMoves.map((m, i) => ({
+      boardIndex: 0,
+      ply: i + 1,
       from: m.from,
       to: m.to,
-      promotion: m.promotion,
-      dropPiece: m.dropPiece,
+      promotion: (m.promotion as string) ?? null,
+      dropPiece: null,
     })),
-    boardQuery,
-  );
+  };
+}
+
+/** PGN партии: скачивание/анализ во внешних движках */
+gamesRouter.get('/:id/pgn', async (req, res) => {
+  const id = parseInt(String(req.params.id), 10);
+  if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
+  const data = await getPgnData(id);
+  if (!data) return void res.status(404).json({ error: 'Партия не найдена' });
+
+  const boardQuery = req.query.board !== undefined ? parseInt(String(req.query.board), 10) : undefined;
+  const pgn = buildPgn(data.game, data.moves, boardQuery);
 
   if (String(req.query.download ?? '') === '1') {
     const filename = boardQuery !== undefined ? `kaissa-game-${id}-board-${boardQuery + 1}.pgn` : `kaissa-game-${id}.pgn`;
@@ -163,50 +216,16 @@ gamesRouter.get('/:id/state', (req, res) => {
 gamesRouter.post('/:id/lichess-import', requireAuth, async (req, res) => {
   const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
-  const game = await prisma.game.findUnique({
-    where: { id },
-    include: {
-      participants: { include: { user: true } },
-      moves: { orderBy: [{ ply: 'asc' }] },
-    },
-  });
-  if (!game) return void res.status(404).json({ error: 'Партия не найдена' });
+  const data = await getPgnData(id);
+  if (!data) return void res.status(404).json({ error: 'Партия не найдена' });
 
-  const pgn = buildPgn(
-    {
-      id: game.id,
-      mode: game.mode as 'team' | 'bughouse',
-      result: game.result,
-      reason: game.reason,
-      baseMin: game.baseMin,
-      incSec: game.incSec,
-      noClock: game.noClock,
-      startedAt: game.startedAt,
-      endedAt: game.endedAt,
-      participants: game.participants.map((p) => ({
-        username: p.user.username,
-        team: p.team,
-        color: p.color,
-        boardIndex: p.boardIndex,
-        moveSlot: p.moveSlot,
-        ratingBefore: p.ratingBefore,
-      })),
-    },
-    game.moves.map((m) => ({
-      boardIndex: m.boardIndex,
-      ply: m.ply,
-      from: m.from,
-      to: m.to,
-      promotion: m.promotion,
-      dropPiece: m.dropPiece,
-    })),
-  );
+  const pgn = buildPgn(data.game, data.moves);
 
   try {
     const boardIdx = parseInt(String(req.query.board ?? '0'), 10);
     // Для багхауса в PGN две партии, разделенные \n\n[Event
     let pgnToSend = pgn;
-    if (game.mode === 'bughouse') {
+    if (data.mode === 'bughouse') {
       const parts = pgn.split(/\n(?=\[Event )/);
       pgnToSend = parts[boardIdx] || parts[0];
     }

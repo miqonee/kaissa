@@ -40,6 +40,8 @@ export interface CreateGameOpts {
   timeControl: TimeControl;
   team1: ParticipantSetup[];
   team2: ParticipantSetup[];
+  isDemo?: boolean;
+  fixedId?: number;
 }
 
 interface ActiveParticipant {
@@ -70,6 +72,7 @@ interface ActiveGame {
   reason: EndReason | null;
   disconnected: Set<number>;
   chatIdSeq: number;
+  isDemo?: boolean;
 }
 
 const TEAM_COLORS_BUGHOUSE: Record<Team, Record<Board, SideColor>> = {
@@ -144,6 +147,10 @@ export class GamesManager {
     return `game:${id}`;
   }
 
+  broadcastNextDemo(prevGameId: number, nextGameId: number): void {
+    this.io?.to(this.gameRoom(prevGameId)).emit('game:next', { nextGameId });
+  }
+
   getActive(id: number): ActiveGame | undefined {
     return this.games.get(id);
   }
@@ -168,32 +175,39 @@ export class GamesManager {
     const incMs = opts.timeControl.incSec * 1000;
 
     const participants = buildParticipants(opts.mode, team1, team2);
-    const dbGame = await prisma.game.create({
-      data: {
-        mode: opts.mode,
-        status: 'active',
-        baseMin: opts.timeControl.baseMin,
-        incSec: opts.timeControl.incSec,
-        noClock,
-        participants: {
-          create: participants.map((p) => ({
-            userId: p.uid,
-            team: p.team,
-            color: p.color,
-            boardIndex: p.boardIndex,
-            moveSlot: p.moveSlot,
-            ratingBefore: p.ratingBefore,
-          })),
+    let gameId: number;
+
+    if (opts.isDemo && opts.fixedId) {
+      gameId = opts.fixedId;
+    } else {
+      const dbGame = await prisma.game.create({
+        data: {
+          mode: opts.mode,
+          status: 'active',
+          baseMin: opts.timeControl.baseMin,
+          incSec: opts.timeControl.incSec,
+          noClock,
+          participants: {
+            create: participants.map((p) => ({
+              userId: p.uid,
+              team: p.team,
+              color: p.color,
+              boardIndex: p.boardIndex,
+              moveSlot: p.moveSlot,
+              ratingBefore: p.ratingBefore,
+            })),
+          },
         },
-      },
-    });
+      });
+      gameId = dbGame.id;
+    }
 
     const engine = opts.mode === 'bughouse' ? new BughouseGame() : new TeamGame();
     const clockCount = opts.mode === 'bughouse' ? 2 : 1;
     const clocks = Array.from({ length: clockCount }, () => initClock(baseMs, incMs));
 
     const game: ActiveGame = {
-      id: dbGame.id,
+      id: gameId,
       mode: opts.mode,
       timeControl: opts.timeControl,
       participants,
@@ -206,6 +220,7 @@ export class GamesManager {
       reason: null,
       disconnected: new Set(),
       chatIdSeq: 1,
+      isDemo: Boolean(opts.isDemo),
     };
     this.games.set(game.id, game);
     this.io?.to('live').emit('live:new', this.liveInfo(game));
@@ -304,6 +319,7 @@ export class GamesManager {
     fen: string,
     clocksAfter: [number, number] | null,
   ): Promise<void> {
+    if (g.isDemo) return;
     await prisma.gameMove.create({
       data: {
         gameId: g.id,
@@ -340,11 +356,14 @@ export class GamesManager {
     if (tg.isCheckmate()) {
       await this.finish(g, tg.turn() === 'w' ? '0-1' : '1-0', 'checkmate');
     } else if (tg.isStalemate()) {
-      // Пат в командном 2v2 без ничьих: зажатая сторона проиграла
-      await this.finish(g, tg.turn() === 'w' ? '0-1' : '1-0', 'stalemate');
+      await this.finish(g, '*', 'stalemate');
+    } else if (tg.isInsufficientMaterial()) {
+      await this.finish(g, '*', 'material');
+    } else if (tg.isThreefoldRepetition()) {
+      await this.finish(g, '*', 'repetition');
+    } else if (tg.isFiftyMoves()) {
+      await this.finish(g, '*', 'fifty');
     }
-    // Троекратное повторение, 50 ходов и недостаток материала не завершают партию:
-    // ничьих нет, игроки могут завершить сдачей или часами.
   }
 
   // ---------------- Часы ----------------
@@ -380,19 +399,17 @@ export class GamesManager {
     await this.finish(g, p.team === 1 ? '0-1' : '1-0', 'resign');
   }
 
-  private async finish(g: ActiveGame, result: '1-0' | '0-1', reason: EndReason): Promise<void> {
+  private async finish(g: ActiveGame, result: '1-0' | '0-1' | '*', reason: EndReason): Promise<void> {
     if (g.status !== 'active') return;
     this.cancelBotTimers(g.id);
     g.status = 'finished';
     g.result = result;
     g.reason = reason;
 
-    const winnerTeam: Team = result === '1-0' ? 1 : 2;
-    const winners = g.participants.filter((p) => p.team === winnerTeam);
-    const losers = g.participants.filter((p) => p.team !== winnerTeam);
-
-    const humanWinners = winners.filter((p) => !p.isBot);
-    const humanLosers = losers.filter((p) => !p.isBot);
+    const isDraw = result === '*';
+    const winnerTeam: Team | null = isDraw ? null : (result === '1-0' ? 1 : 2);
+    const winners = winnerTeam ? g.participants.filter((p) => p.team === winnerTeam) : [];
+    const losers = winnerTeam ? g.participants.filter((p) => p.team !== winnerTeam) : [];
 
     const avg = (arr: ActiveParticipant[]) =>
       arr.length ? arr.reduce((s, p) => s + p.ratingBefore, 0) / arr.length : 1200;
@@ -401,10 +418,12 @@ export class GamesManager {
       if (p.isBot) {
         // У ботов рейтинг зафиксирован на номинале
         p.ratingAfter = p.ratingBefore;
-        await prisma.gameParticipant.update({
-          where: { gameId_userId: { gameId: g.id, userId: p.uid } },
-          data: { ratingAfter: p.ratingBefore },
-        });
+        if (!g.isDemo) {
+          await prisma.gameParticipant.update({
+            where: { gameId_userId: { gameId: g.id, userId: p.uid } },
+            data: { ratingAfter: p.ratingBefore },
+          });
+        }
         continue;
       }
 
@@ -414,15 +433,18 @@ export class GamesManager {
       if (!isVsHuman) {
         // Матч только против ботов: рейтинг не меняется
         p.ratingAfter = p.ratingBefore;
-        await prisma.gameParticipant.update({
-          where: { gameId_userId: { gameId: g.id, userId: p.uid } },
-          data: { ratingAfter: p.ratingBefore },
-        });
+        if (!g.isDemo) {
+          await prisma.gameParticipant.update({
+            where: { gameId_userId: { gameId: g.id, userId: p.uid } },
+            data: { ratingAfter: p.ratingBefore },
+          });
+        }
         await prisma.user.update({
           where: { id: p.uid },
           data: {
-            wins: { increment: p.team === winnerTeam ? 1 : 0 },
-            losses: { increment: p.team !== winnerTeam ? 1 : 0 },
+            wins: { increment: !isDraw && p.team === winnerTeam ? 1 : 0 },
+            losses: { increment: !isDraw && p.team !== winnerTeam ? 1 : 0 },
+            draws: { increment: isDraw ? 1 : 0 },
           },
         });
         continue;
@@ -430,31 +452,38 @@ export class GamesManager {
 
       // Матч против людей: рейтинг считается против живых соперников
       const opponent = avg(opposingHumans);
-      const score: 0 | 1 = p.team === winnerTeam ? 1 : 0;
+      const score: 0 | 0.5 | 1 = isDraw ? 0.5 : (p.team === winnerTeam ? 1 : 0);
       const delta = eloDelta(p.ratingBefore, opponent, score);
       const after = Math.max(100, p.ratingBefore + delta);
       p.ratingAfter = after;
-      await prisma.gameParticipant.update({
-        where: { gameId_userId: { gameId: g.id, userId: p.uid } },
-        data: { ratingAfter: after },
-      });
+      if (!g.isDemo) {
+        await prisma.gameParticipant.update({
+          where: { gameId_userId: { gameId: g.id, userId: p.uid } },
+          data: { ratingAfter: after },
+        });
+      }
       await prisma.user.update({
         where: { id: p.uid },
         data: {
           rating: after,
-          wins: { increment: p.team === winnerTeam ? 1 : 0 },
-          losses: { increment: p.team !== winnerTeam ? 1 : 0 },
+          wins: { increment: !isDraw && p.team === winnerTeam ? 1 : 0 },
+          losses: { increment: !isDraw && p.team !== winnerTeam ? 1 : 0 },
+          draws: { increment: isDraw ? 1 : 0 },
         },
       });
-      await prisma.ratingHistory.create({
-        data: { userId: p.uid, delta, value: after, gameId: g.id },
-      });
+      if (!g.isDemo) {
+        await prisma.ratingHistory.create({
+          data: { userId: p.uid, delta, value: after, gameId: g.id },
+        });
+      }
     }
 
-    await prisma.game.update({
-      where: { id: g.id },
-      data: { status: 'finished', result, reason, endedAt: new Date() },
-    });
+    if (!g.isDemo) {
+      await prisma.game.update({
+        where: { id: g.id },
+        data: { status: 'finished', result, reason, endedAt: new Date() },
+      });
+    }
 
     this.io?.to(this.gameRoom(g.id)).emit('game:end', {
       gameId: g.id,
@@ -464,7 +493,7 @@ export class GamesManager {
     });
     this.io?.to('live').emit('live:end', { gameId: g.id, result });
 
-    setTimeout(() => this.games.delete(g.id), 30 * 60_000);
+    setTimeout(() => this.games.delete(g.id), g.isDemo ? 10_000 : 30 * 60_000);
   }
 
   // ---------------- Отключения ----------------
@@ -520,10 +549,12 @@ export class GamesManager {
     this.cancelBotTimers(g.id);
     g.status = 'abandoned';
     g.reason = 'abandoned';
-    await prisma.game.update({
-      where: { id: g.id },
-      data: { status: 'abandoned', reason: 'abandoned', endedAt: new Date() },
-    });
+    if (!g.isDemo) {
+      await prisma.game.update({
+        where: { id: g.id },
+        data: { status: 'abandoned', reason: 'abandoned', endedAt: new Date() },
+      });
+    }
     this.io?.to(this.gameRoom(g.id)).emit('game:end', {
       gameId: g.id,
       result: '*',
@@ -531,7 +562,7 @@ export class GamesManager {
       participants: g.participants.map(toParticipantInfo),
     });
     this.io?.to('live').emit('live:end', { gameId: g.id, result: '*' });
-    setTimeout(() => this.games.delete(g.id), 60_000);
+    setTimeout(() => this.games.delete(g.id), g.isDemo ? 10_000 : 60_000);
   }
 
   async cleanupOnBoot(): Promise<void> {

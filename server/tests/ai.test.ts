@@ -65,4 +65,27 @@ describe('AI Chess Engine', () => {
     // Любой ход активного сжатия кольца: Qa7, Qe5+, Ke2 и т.д.
     expect(dec?.from).toBeDefined();
   });
+
+  it('castled king with pawn shield scores higher than exposed king on e2', () => {
+    // 1. Позиция с рокированным королём на g1
+    const castled = new Chess('r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQ1RK1 w - - 6 5');
+    // 2. Позиция, где белый король вышел на e2
+    const exposed = new Chess('r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPPKPPP/R1BQ3R w - - 6 5');
+    const castledScore = evaluateBoard(castled);
+    const exposedScore = evaluateBoard(exposed);
+    expect(castledScore).toBeGreaterThan(exposedScore + 40);
+  });
+
+  it('fianchetto structure g3 + Bg2 is recognized and rewarded', () => {
+    // Король на g1 с фианкетто g3 + слон g2
+    const fianchetto = new Chess('rnbqk2r/ppppppbp/5np1/8/8/5NP1/PPPPPPBP/RNBQ1RK1 w kq - 2 4');
+    const score = evaluateBoard(fianchetto);
+    // Позиция должна быть сбалансированной/позитивной для белых без штрафов за пешку g3
+    expect(score).toBeGreaterThanOrEqual(-15);
+  });
+
+  it('game with 2 kings returns null from chooseBotMove without hang', () => {
+    const dec = chooseBotMove('4k3/8/8/8/8/8/8/4K3 w - - 0 1', 2);
+    expect(dec).toBeNull();
+  });
 });

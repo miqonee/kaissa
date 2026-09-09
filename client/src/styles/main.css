@@ -557,6 +557,27 @@ cg-board square.oc.move-dest {
   background: radial-gradient(transparent 0%, transparent 76%, rgba(217, 74, 61, 0.5) 78%);
 }
 
+/* Премув: синяя подсветка заготовленного хода (Lichess style) */
+cg-board square.current-premove {
+  background-color: color-mix(in srgb, var(--info) 55%, transparent);
+}
+
+cg-board square.premove-dest {
+  background: radial-gradient(color-mix(in srgb, var(--info) 50%, transparent) 22%, rgba(0, 0, 0, 0) 24%);
+}
+
+[data-theme='dark'] cg-board square.premove-dest {
+  background: radial-gradient(color-mix(in srgb, #5c9ce6 65%, transparent) 22%, rgba(0, 0, 0, 0) 24%);
+}
+
+cg-board square.premove-dest:hover {
+  background: color-mix(in srgb, var(--info) 35%, transparent);
+}
+
+cg-board square.oc.premove-dest {
+  background: radial-gradient(transparent 0%, transparent 76%, color-mix(in srgb, var(--info) 55%, transparent) 78%);
+}
+
 /* ШАХ: мягкое свечение клетки короля.
    Основной сигнал — радиальный градиент под фигурой;
    обводка через box-shadow на square::after, чтобы не

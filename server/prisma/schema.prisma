@@ -16,6 +16,8 @@ model User {
   losses       Int      @default(0)
   draws        Int      @default(0)
   isAdmin      Boolean  @default(false)
+  isBot        Boolean  @default(false)
+  botLevel     Int?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -24,6 +26,7 @@ model User {
   moves          GameMove[]
 
   @@index([rating])
+  @@index([isBot])
 }
 
 model RatingHistory {

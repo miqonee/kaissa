@@ -12,6 +12,8 @@ import { lobbyRouter } from './lobby/lobbyRouter.js';
 import { gamesRouter, usersRouter } from './users/usersRouter.js';
 import { registerSocketHandlers } from './socket/router.js';
 import { gamesManager } from './state.js';
+import { seedBots } from './ai/botsSeed.js';
+import { demoShowcase } from './ai/demoShowcase.js';
 
 function createRateLimiter(windowMs: number, maxRequests: number, errorMsg: string) {
   const requests = new Map<string, { count: number; resetAt: number }>();
@@ -42,6 +44,7 @@ function createRateLimiter(windowMs: number, maxRequests: number, errorMsg: stri
 async function main(): Promise<void> {
   await prisma.$connect();
   await gamesManager.cleanupOnBoot();
+  await seedBots();
   await promoteConfiguredAdmins(env.adminUsernames);
 
   const app = express();
@@ -98,6 +101,7 @@ async function main(): Promise<void> {
     pingTimeout: 25_000,
   });
   registerSocketHandlers(io);
+  demoShowcase.start(gamesManager);
 
   httpServer.listen(env.port, () => {
     console.log(`[kaissa] server listening on :${env.port}`);

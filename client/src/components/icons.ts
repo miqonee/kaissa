@@ -28,6 +28,7 @@ export type IconName =
   | 'plus'
   | 'eye'
   | 'trash'
+  | 'bolt'
   | 'flag';
 
 /** Иконки, которые рисуются заливкой, а не обводкой */
@@ -81,5 +82,6 @@ export const ICON_PATHS: Record<IconName, string[]> = {
   trash: [
     'M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
   ],
+  bolt: ['M13 2L3 14h9l-1 8 10-12h-9l1-8z'],
   flag: ['M4 3v18', 'M4 4h12l-2 4 2 4H4z'],
 };

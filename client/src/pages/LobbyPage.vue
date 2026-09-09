@@ -23,8 +23,14 @@ const me = computed(() => auth.user);
 const isHost = computed(() => lobby.value?.players.find((p) => p.userId === auth.user?.id)?.host ?? false);
 const iAmReady = computed(() => lobby.value?.players.find((p) => p.userId === auth.user?.id)?.ready ?? false);
 const allReady = computed(() => lobby.value?.players.length === 4 && lobby.value.players.every((p) => p.ready));
-const offlinePlayers = computed(() => lobby.value?.players.filter((p) => !p.online) ?? []);
+const offlinePlayers = computed(() => lobby.value?.players.filter((p) => !p.online && !p.isBot) ?? []);
 const link = computed(() => `${location.origin}/lobby/${lobbyId.value}`);
+
+const countdown = ref<{ seconds: number | null; paused: boolean; pausedCount: number; neededCount: number } | null>(null);
+const isPausedByMe = computed(() => {
+  if (!lobby.value || !auth.user) return false;
+  return lobby.value.pausedBy?.includes(auth.user.id) ?? false;
+});
 
 const toastText = ref('');
 let toastTimer: number | undefined;
@@ -62,6 +68,19 @@ onMounted(() => {
   socket.on('lobby:state', (state) => {
     if (state.id !== lobbyId.value) return;
     lobby.value = state;
+    if (state.autoCountdown !== undefined && state.autoCountdown !== null) {
+      countdown.value = {
+        seconds: state.autoCountdown,
+        paused: state.pausedBy?.length ? true : false,
+        pausedCount: state.pausedBy?.length || 0,
+        neededCount: state.players.filter((p) => !p.isBot).length,
+      };
+    }
+  });
+  socket.on('lobby:countdown', (payload) => {
+    if (payload.lobbyId === lobbyId.value) {
+      countdown.value = payload;
+    }
   });
   socket.on('lobby:chat', (msg) => {
     chat.value.push(msg);
@@ -83,6 +102,7 @@ onBeforeUnmount(() => {
     socket.emit('lobby:leave');
   }
   socket.off('lobby:state');
+  socket.off('lobby:countdown');
   socket.off('lobby:chat');
   socket.off('lobby:started');
   socket.off('lobby:closed');
@@ -90,6 +110,18 @@ onBeforeUnmount(() => {
 
 function setReady(): void {
   socket.emit('lobby:ready', !iAmReady.value);
+}
+
+function togglePause(): void {
+  socket.emit('lobby:pause-toggle');
+}
+
+function setTeamMode(m: 'auto' | 'random' | 'manual'): void {
+  socket.emit('lobby:set-team-mode', m);
+}
+
+function chooseTeam(team: 1 | 2 | null): void {
+  socket.emit('lobby:set-team', team);
 }
 
 function kick(userId: number): void {
@@ -188,6 +220,57 @@ function modeLabel(m: string): string {
         </div>
 
         <div class="panel-body">
+          <!-- Баннер Быстрого стола (Автолобби) -->
+          <div v-if="lobby.isAuto" class="auto-lobby-banner">
+            <div class="auto-banner-info">
+              <span class="countdown-chip" :class="{ paused: countdown?.paused }">
+                <span v-if="countdown?.paused">⏸ Пауза ({{ countdown?.pausedCount }}/{{ countdown?.neededCount }})</span>
+                <span v-else>⏱ Автостарт через {{ countdown?.seconds ?? 10 }} с</span>
+              </span>
+              <p class="dim tiny auto-hint">
+                Вход человека вытесняет бота. При 2 игроках команды балансируются адаптивно.
+              </p>
+            </div>
+            <button
+              class="small brass pause-btn"
+              :class="{ active: isPausedByMe }"
+              @click="togglePause"
+            >
+              {{ isPausedByMe ? 'Снять паузу' : 'Подождать' }}
+            </button>
+          </div>
+
+          <!-- Режим команд (для хоста обычных столов) -->
+          <div v-else-if="isHost" class="team-mode-selector">
+            <span class="dim tiny">Режим команд:</span>
+            <div class="team-mode-pills">
+              <button
+                type="button"
+                class="tiny pill"
+                :class="{ active: lobby.teamMode === 'auto' }"
+                @click="setTeamMode('auto')"
+              >
+                Авто (по Elo)
+              </button>
+              <button
+                type="button"
+                class="tiny pill"
+                :class="{ active: lobby.teamMode === 'random' }"
+                @click="setTeamMode('random')"
+              >
+                Случайно
+              </button>
+              <button
+                type="button"
+                class="tiny pill"
+                :class="{ active: lobby.teamMode === 'manual' }"
+                @click="setTeamMode('manual')"
+              >
+                Ручной
+              </button>
+            </div>
+          </div>
+
           <div class="slots">
             <div
               v-for="(p, i) in lobby.players"
@@ -202,9 +285,32 @@ function modeLabel(m: string): string {
               <div class="slot-info">
                 <div class="slot-name-row">
                   <span class="slot-name">{{ p.username }}</span>
+                  <span v-if="p.isBot" class="bot-badge" :title="`Бот ${p.botLevel} уровня`">
+                    Бот Ур.{{ p.botLevel || 1 }}
+                  </span>
                   <span v-if="p.host" class="host-crown" title="Создатель стола">
                     <AppIcon name="crown" :size="12" /> Хост
                   </span>
+                </div>
+                <div v-if="lobby.teamMode === 'manual'" class="team-picker">
+                  <button
+                    type="button"
+                    class="tiny pill"
+                    :class="{ active: p.teamChoice === 1 }"
+                    :disabled="p.userId !== me?.id"
+                    @click="chooseTeam(1)"
+                  >
+                    Белые
+                  </button>
+                  <button
+                    type="button"
+                    class="tiny pill"
+                    :class="{ active: p.teamChoice === 2 }"
+                    :disabled="p.userId !== me?.id"
+                    @click="chooseTeam(2)"
+                  >
+                    Чёрные
+                  </button>
                 </div>
                 <span class="slot-rating mono dim">Рейтинг: {{ p.rating }}</span>
               </div>
@@ -630,6 +736,77 @@ function modeLabel(m: string): string {
   background: color-mix(in srgb, var(--ok) 16%, var(--surface-2));
   color: var(--ok);
   border-color: var(--ok);
+}
+
+.auto-lobby-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-inset));
+  border: 1px solid var(--accent-2);
+  border-radius: var(--r-m);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  gap: 12px;
+}
+
+.countdown-chip {
+  display: inline-flex;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--accent-2);
+}
+
+.countdown-chip.paused {
+  color: var(--warn, #e5a50a);
+}
+
+.auto-hint {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+}
+
+.pause-btn.active {
+  background: var(--warn, #e5a50a);
+  color: #000;
+}
+
+.bot-badge {
+  font-size: 11px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
+  color: var(--accent-2);
+  border: 1px solid var(--accent-2);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+
+.team-mode-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.team-mode-pills, .team-picker {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.pill {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-inset);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+
+.pill.active {
+  background: var(--accent-2);
+  color: var(--surface);
+  border-color: var(--accent-2);
 }
 
 .toast {

@@ -4,3 +4,4 @@ dist/
 .env
 server/prisma/dev.db
 coverage/
+graphify-out/

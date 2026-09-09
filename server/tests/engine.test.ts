@@ -83,6 +83,16 @@ describe('Clock', () => {
     expect(r.clock.blackMs).toBe(0);
   });
 
+  it('премув / лагокомпенсация: ход до 100 мс списывает 0 мс', () => {
+    let c = initClock(5 * 60_000, 2000);
+    c = clockOnMove(c, 'w', 0).clock; // активен b, t=0
+    // премув чёрных пришёл через 40 мс
+    const r = clockOnMove(c, 'b', 40);
+    // 0 мс списано, но инкремент 2000 мс начислен
+    expect(r.clock.blackMs).toBe(5 * 60_000 + 2000);
+    expect(r.flagged).toBeNull();
+  });
+
   it('snapshot корректно показывает списание', () => {
     let c = initClock(60_000, 0);
     c = clockOnMove(c, 'w', 0).clock; // активен b

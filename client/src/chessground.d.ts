@@ -20,7 +20,7 @@ declare module 'chessground-types' {
     showDests?: boolean;
     dests?: Dests;
     events?: {
-      after?: (orig: Key, dest: Key, meta?: unknown) => void;
+      after?: (orig: Key, dest: Key, meta?: { premove?: boolean; [key: string]: unknown }) => void;
       afterNewPiece?: (role: Role, key: Key, meta?: unknown) => void;
     };
   }
@@ -34,8 +34,19 @@ declare module 'chessground-types' {
     viewOnly?: boolean;
     coordinates?: boolean;
     autoCastle?: boolean;
+    disableContextMenu?: boolean;
     movable?: MovableOptions;
-    premovable?: { enabled?: boolean; showDests?: boolean; events?: unknown };
+    premovable?: {
+      enabled?: boolean;
+      showDests?: boolean;
+      castle?: boolean;
+      dests?: Key[];
+      customDests?: Dests;
+      events?: {
+        set?: (orig: Key, dest: Key, meta?: unknown) => void;
+        unset?: () => void;
+      };
+    };
     draggable?: { showGhost?: boolean; distance?: number; autoDistance?: boolean; centeredGhost?: boolean };
     selectable?: { enabled?: boolean };
     events?: {

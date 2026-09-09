@@ -3,6 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Каисса — командные шахматы 2×2 и Багхаус онлайн</title>
+    <meta name="description" content="Каисса — платформа для командных шахмат в реальном времени. Играйте парами 2х2 на одной доске или в шведские шахматы (багхаус) с обменом фигурами и ИИ-ботами." />
+    <meta name="keywords" content="шахматы, командные шахматы, 2х2 шахматы, багхаус, шведские шахматы, шведки, bughouse chess, онлайн шахматы, шахматный клуб" />
+    <meta name="theme-color" content="#1a1816" />
+
+    <!-- OpenGraph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Каисса — командные шахматы 2×2 и Багхаус онлайн" />
+    <meta property="og:description" content="Платформа для командных шахмат в реальном времени. Играйте 2х2 на одной доске или в багхаус с обменом фигурами." />
+    <meta property="og:image" content="/home.png" />
+    <meta property="og:locale" content="ru_RU" />
+
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Каисса — командные шахматы 2×2 и Багхаус онлайн" />
+    <meta name="twitter:description" content="Платформа для командных шахмат в реальном времени. Играйте 2х2 на одной доске или в багхаус с обменом фигурами." />
+    <meta name="twitter:image" content="/home.png" />
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -10,10 +28,38 @@
       href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <title>Каисса — командные шахматы 2×2</title>
   </head>
   <body>
     <div id="app"></div>
+
+    <!-- Семантический контент для поисковых ботов и пользователей без JS -->
+    <noscript>
+      <header>
+        <h1>Каисса — Командный шахматный клуб 2×2 и Багхаус</h1>
+        <p>Онлайн-платформа для совместной игры в шахматы парами.</p>
+      </header>
+      <main>
+        <section>
+          <h2>Режим 2×2 на одной доске</h2>
+          <p>
+            Команда из двух игроков управляет фигурами одного цвета. Партнёры ходят строго по очереди через один ход.
+            Пат считается поражением зажатой стороны. Поддерживаются рокировка, взятие на проходе и превращение пешек.
+          </p>
+        </section>
+        <section>
+          <h2>Багхаус (Шведские шахматы)</h2>
+          <p>
+            Две доски параллельно. Партнёры по команде играют фигурами противоположных цветов. Сбитая фигура меняет цвет,
+            попадает в карман партнёра и может быть выставлена на любое свободное поле вместо обычного хода.
+          </p>
+        </section>
+        <section>
+          <h2>ИИ и тренировочные боты</h2>
+          <p>5 уровней сложности ИИ от новичка до мастера с адаптивным подбором баланса команд и быстрым стартом.</p>
+        </section>
+      </main>
+    </noscript>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -10,6 +10,8 @@ const props = withDefaults(
     orientation?: 'white' | 'black';
     /** цвет, которым разрешено двигать (null — только просмотр) */
     movableColor?: 'white' | 'black' | null;
+    /** разрешён ли премув (ход до наступления своей очереди) */
+    canPremove?: boolean;
     /** легальные ходы: { e2: ['e3','e4'], ... } */
     dests?: Record<string, string[]>;
     coordinates?: boolean;
@@ -23,6 +25,7 @@ const props = withDefaults(
   {
     orientation: 'white',
     movableColor: null,
+    canPremove: false,
     dests: () => ({}),
     coordinates: true,
     mini: false,
@@ -33,8 +36,10 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  (e: 'move', payload: { from: string; to: string }): void;
+  (e: 'move', payload: { from: string; to: string; premove?: boolean }): void;
   (e: 'drop', payload: { piece: PieceType; to: string }): void;
+  (e: 'premoveSet', payload: { from: string; to: string }): void;
+  (e: 'premoveUnset'): void;
 }>();
 
 const el = ref<HTMLElement | null>(null);
@@ -86,16 +91,26 @@ function config() {
     turnColor: (props.fen.split(' ')[1] === 'b' ? 'black' : 'white') as CgColor,
     lastMove: lastMoveKeys(),
     check: props.checkSquare ? true : false,
+    disableContextMenu: true,
     movable: {
       free: false,
       color: interactive ? (props.movableColor as CgColor) : undefined,
       showDests: true,
       dests: destsMap(),
       events: {
-        after: (orig: Key, dest: Key) => emit('move', { from: orig, to: dest }),
+        after: (orig: Key, dest: Key, meta?: { premove?: boolean }) =>
+          emit('move', { from: orig, to: dest, premove: !!meta?.premove }),
       },
     },
-    premovable: { enabled: false },
+    premovable: {
+      enabled: props.canPremove,
+      showDests: true,
+      castle: true,
+      events: {
+        set: (orig: Key, dest: Key) => emit('premoveSet', { from: orig, to: dest }),
+        unset: () => emit('premoveUnset'),
+      },
+    },
     draggable: {
       enabled: interactive,
       distance: 3,
@@ -141,15 +156,22 @@ watch(
         color: interactive ? (props.movableColor as CgColor) : undefined,
         dests: destsMap(),
       },
+      premovable: {
+        enabled: props.canPremove,
+      },
       draggable: {
         enabled: interactive,
       },
     } as never);
+
+    if (props.movableColor && turnColor === props.movableColor) {
+      cg.playPremove();
+    }
   },
 );
 
 watch(
-  () => [props.movableColor, props.dests, props.dropPiece],
+  () => [props.movableColor, props.canPremove, props.dests, props.dropPiece],
   () => {
     if (!cg) return;
     const interactive = props.movableColor !== null;
@@ -158,10 +180,16 @@ watch(
         color: interactive ? (props.movableColor as CgColor) : undefined,
         dests: destsMap(),
       },
+      premovable: {
+        enabled: props.canPremove,
+      },
       draggable: {
         enabled: interactive,
       },
     } as never);
+    if (!props.canPremove && props.movableColor !== (props.fen.split(' ')[1] === 'b' ? 'black' : 'white')) {
+      cg.cancelPremove();
+    }
   },
   { deep: true },
 );
@@ -195,10 +223,20 @@ onBeforeUnmount(() => {
   cg?.destroy();
   cg = null;
 });
+
+function onRightClick(): void {
+  cg?.cancelPremove();
+}
+
+function cancelPremove(): void {
+  cg?.cancelPremove();
+}
+
+defineExpose({ cancelPremove });
 </script>
 
 <template>
-  <div class="board-wrap" :class="{ mini: mini }">
+  <div class="board-wrap" :class="{ mini: mini }" @contextmenu.prevent="onRightClick">
     <div ref="el" class="cg-wrap-item"></div>
   </div>
 </template>

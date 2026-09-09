@@ -1,30 +1,35 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import type { AdminUserRow } from 'shared';
+import type { AdminUserRow, PlatformMetrics } from 'shared';
 import { api } from '../api/rest';
 import { useAuthStore } from '../stores/auth';
 import AppIcon from '../components/AppIcon.vue';
 
 const auth = useAuthStore();
 const users = ref<AdminUserRow[]>([]);
+const metrics = ref<PlatformMetrics | null>(null);
 const loading = ref(true);
 const error = ref('');
 const busyId = ref<number | null>(null);
 
-async function loadUsers() {
+async function loadData() {
   loading.value = true;
   error.value = '';
   try {
-    const res = await api.get<{ users: AdminUserRow[] }>('/api/admin/users');
-    users.value = res.users;
+    const [uRes, mRes] = await Promise.all([
+      api.get<{ users: AdminUserRow[] }>('/api/admin/users'),
+      api.get<PlatformMetrics>('/api/admin/metrics'),
+    ]);
+    users.value = uRes.users;
+    metrics.value = mRes;
   } catch (e: any) {
-    error.value = e.message || 'Ошибка загрузки игроков';
+    error.value = e.message || 'Ошибка загрузки данных';
   } finally {
     loading.value = false;
   }
 }
 
-onMounted(loadUsers);
+onMounted(loadData);
 
 async function deleteUser(u: AdminUserRow) {
   if (!confirm(`Вы действительно хотите удалить аккаунт «${u.username}» и ВСЕ его партии?`)) {
@@ -42,7 +47,7 @@ async function deleteUser(u: AdminUserRow) {
     }
   } finally {
     busyId.value = null;
-    await loadUsers();
+    await loadData();
   }
 }
 
@@ -51,7 +56,7 @@ async function resetRating(u: AdminUserRow) {
   busyId.value = u.id;
   try {
     await api.post(`/api/admin/users/${u.id}/reset`, {});
-    await loadUsers();
+    await loadData();
   } catch (e: any) {
     alert(e.message || 'Ошибка сброса');
   } finally {
@@ -63,7 +68,7 @@ async function toggleAdmin(u: AdminUserRow) {
   busyId.value = u.id;
   try {
     await api.post(`/api/admin/users/${u.id}/admin`, { isAdmin: !u.isAdmin });
-    await loadUsers();
+    await loadData();
   } catch (e: any) {
     alert(e.message || 'Ошибка смены прав');
   } finally {
@@ -74,6 +79,14 @@ async function toggleAdmin(u: AdminUserRow) {
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
 }
+
+function fmtDuration(sec: number): string {
+  if (!sec) return '0с';
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  if (!m) return `${s}с`;
+  return `${m}м ${s}с`;
+}
 </script>
 
 <template>
@@ -82,11 +95,84 @@ function fmtDate(iso: string) {
       <div class="panel-head">
         <div>
           <h2>Панель администратора</h2>
-          <span class="hint">Управление игроками для тестирования и балансировки</span>
+          <span class="hint">Метрики платформы, балансировка ботов и управление игроками</span>
         </div>
-        <button class="small ghost" @click="loadUsers">
+        <button class="small ghost" @click="loadData">
           <AppIcon name="refresh" :size="14" /> Обновить
         </button>
+      </div>
+
+      <!-- Общие метрики платформы -->
+      <div v-if="metrics" class="metrics-grid">
+        <div class="metric-card">
+          <span class="dim tiny">Онлайн</span>
+          <span class="metric-val mono">{{ metrics.onlineUsers }}</span>
+        </div>
+        <div class="metric-card">
+          <span class="dim tiny">Пользователей</span>
+          <span class="metric-val mono">{{ metrics.totalUsers }}</span>
+        </div>
+        <div class="metric-card">
+          <span class="dim tiny">Всего партий</span>
+          <span class="metric-val mono">{{ metrics.totalGames }}</span>
+        </div>
+        <div class="metric-card">
+          <span class="dim tiny">Всего ходов</span>
+          <span class="metric-val mono">{{ metrics.totalMoves }}</span>
+        </div>
+        <div class="metric-card">
+          <span class="dim tiny">Ср. длительность</span>
+          <span class="metric-val mono">{{ fmtDuration(metrics.avgGameDurationSec) }}</span>
+        </div>
+      </div>
+
+      <!-- Балансировка ботов (5 уровней) -->
+      <div v-if="metrics?.botMetrics?.length" class="panel-body bot-metrics-wrap">
+        <h3 class="section-title">Балансировка ИИ-ботов (5 уровней)</h3>
+        <div class="table-wrap">
+          <table class="club">
+            <thead>
+              <tr>
+                <th>Уровень</th>
+                <th>Номинал Elo</th>
+                <th>Игр</th>
+                <th>В / П / Н</th>
+                <th>Win Rate</th>
+                <th>Мат / Флаг / Пат</th>
+                <th>Ср. ходов</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="b in metrics.botMetrics" :key="b.level">
+                <td><strong>Ур.{{ b.level }} {{ b.name }}</strong></td>
+                <td class="mono">{{ b.elo }}</td>
+                <td class="mono dim">{{ b.totalGames }}</td>
+                <td class="mono dim">{{ b.wins }} / {{ b.losses }} / {{ b.draws }}</td>
+                <td>
+                  <span
+                    class="badge mono"
+                    :class="{
+                      ok: b.winRate >= 40 && b.winRate <= 60,
+                      danger: b.winRate > 60,
+                      dim: b.winRate < 40,
+                    }"
+                  >
+                    {{ b.winRate }}%
+                  </span>
+                </td>
+                <td class="mono dim">{{ b.checkmateCount }} / {{ b.timeoutCount }} / {{ b.stalemateCount }}</td>
+                <td class="mono dim">{{ b.avgMoves }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel-head user-head">
+        <div>
+          <h3>Список пользователей</h3>
+          <span class="hint">Управление аккаунтами и сброс рейтингов</span>
+        </div>
       </div>
 
       <div v-if="error" class="panel-body">
@@ -174,6 +260,41 @@ function fmtDate(iso: string) {
 
 .table-wrap {
   overflow-x: auto;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-inset);
+}
+
+.metric-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metric-val {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.bot-metrics-wrap {
+  border-bottom: 1px solid var(--line);
+  padding: 16px;
+}
+
+.section-title {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+}
+
+.user-head {
+  padding-top: 16px;
 }
 
 .is-me {

@@ -12,6 +12,7 @@ const createSchema = z.object({
     z.object({ kind: z.literal('clock'), baseMin: z.number().int().min(1).max(120), incSec: z.number().int().min(0).max(60) }),
   ]),
   private: z.boolean().optional().default(false),
+  teamMode: z.enum(['auto', 'random', 'manual']).optional().default('auto'),
 });
 
 export const lobbyRouter = Router();

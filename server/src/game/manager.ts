@@ -16,6 +16,7 @@ import { presence } from '../socket/presence.js';
 import { BughouseGame, type Board, type SideColor } from './bughouse.js';
 import { TeamGame } from './teamGame.js';
 import { clockOnMove, clockSnapshot, initClock, type ClockState } from './clock.js';
+import { chooseBotMove, getBotThinkingDelayMs } from '../ai/engine.js';
 
 // ============================================================
 // GamesManager: активные партии в памяти + запись ходов в БД.
@@ -30,6 +31,8 @@ export interface ParticipantSetup {
   uid: number;
   username: string;
   rating: number;
+  isBot?: boolean;
+  botLevel?: number | null;
 }
 
 export interface CreateGameOpts {
@@ -48,6 +51,9 @@ interface ActiveParticipant {
   moveSlot: 0 | 1;
   ratingBefore: number;
   ratingAfter: number | null;
+  isBot?: boolean;
+  botLevel?: number | null;
+  botJitter?: number;
 }
 
 interface ActiveGame {
@@ -76,6 +82,56 @@ export class GamesManager {
   private io: SocketServer | null = null;
   private chatGlobalSeq = 1;
   private flagInterval: NodeJS.Timeout | null = null;
+  private botTimers = new Map<string, NodeJS.Timeout>();
+
+  cancelBotTimers(gameId: number): void {
+    for (const [key, timer] of this.botTimers.entries()) {
+      if (key.startsWith(`${gameId}:`)) {
+        clearTimeout(timer);
+        this.botTimers.delete(key);
+      }
+    }
+  }
+
+  triggerBotTurn(gameId: number): void {
+    const g = this.games.get(gameId);
+    if (!g || g.status !== 'active') return;
+
+    const state = this.toGameState(g);
+    const boardsCount = g.mode === 'bughouse' ? 2 : 1;
+
+    for (let b = 0; b < boardsCount; b++) {
+      const moverUid = state.turnUserIds[b];
+      const participant = g.participants.find((p) => p.uid === moverUid);
+      if (!participant?.isBot) continue;
+
+      const key = `${gameId}:${b}:${participant.uid}`;
+      if (this.botTimers.has(key)) continue;
+
+      const delayMs = getBotThinkingDelayMs();
+      const timer = setTimeout(async () => {
+        this.botTimers.delete(key);
+        const currentGame = this.games.get(gameId);
+        if (!currentGame || currentGame.status !== 'active') return;
+
+        const curState = this.toGameState(currentGame);
+        if (curState.turnUserIds[b] !== participant.uid) return;
+
+        const fen = curState.fens[b];
+        const move = chooseBotMove(fen, participant.botLevel || 2, participant.botJitter);
+        if (!move) return;
+
+        await this.applyMove(gameId, participant.uid, {
+          boardIndex: b as 0 | 1,
+          from: move.from,
+          to: move.to,
+          promotion: move.promotion,
+        });
+      }, delayMs);
+
+      this.botTimers.set(key, timer);
+    }
+  }
 
   attach(io: SocketServer): void {
     this.io = io;
@@ -153,6 +209,7 @@ export class GamesManager {
     };
     this.games.set(game.id, game);
     this.io?.to('live').emit('live:new', this.liveInfo(game));
+    this.triggerBotTurn(game.id);
     return game.id;
   }
 
@@ -234,6 +291,9 @@ export class GamesManager {
     this.io?.to('live').emit('live:update', this.liveInfo(g));
 
     await this.checkEndAfterMove(g, data.boardIndex as Board);
+    if (g.status === 'active') {
+      this.triggerBotTurn(g.id);
+    }
     return { ok: true };
   }
 
@@ -322,6 +382,7 @@ export class GamesManager {
 
   private async finish(g: ActiveGame, result: '1-0' | '0-1', reason: EndReason): Promise<void> {
     if (g.status !== 'active') return;
+    this.cancelBotTimers(g.id);
     g.status = 'finished';
     g.result = result;
     g.reason = reason;
@@ -329,11 +390,28 @@ export class GamesManager {
     const winnerTeam: Team = result === '1-0' ? 1 : 2;
     const winners = g.participants.filter((p) => p.team === winnerTeam);
     const losers = g.participants.filter((p) => p.team !== winnerTeam);
-    const avg = (arr: ActiveParticipant[]) => arr.reduce((s, p) => s + p.ratingBefore, 0) / arr.length;
-    const avgWin = avg(winners);
-    const avgLose = avg(losers);
+
+    const humanWinners = winners.filter((p) => !p.isBot);
+    const humanLosers = losers.filter((p) => !p.isBot);
+
+    const avg = (arr: ActiveParticipant[]) =>
+      arr.length ? arr.reduce((s, p) => s + p.ratingBefore, 0) / arr.length : 1200;
+
+    // «Человек + Бот vs Человек + Бот»: рейтинг людей считается напрямую друг против друга
+    const avgWin = humanWinners.length && humanLosers.length ? avg(humanWinners) : avg(winners);
+    const avgLose = humanWinners.length && humanLosers.length ? avg(humanLosers) : avg(losers);
 
     for (const p of g.participants) {
+      if (p.isBot) {
+        // У ботов рейтинг зафиксирован на номинале
+        p.ratingAfter = p.ratingBefore;
+        await prisma.gameParticipant.update({
+          where: { gameId_userId: { gameId: g.id, userId: p.uid } },
+          data: { ratingAfter: p.ratingBefore },
+        });
+        continue;
+      }
+
       const opponent = p.team === winnerTeam ? avgLose : avgWin;
       const score: 0 | 1 = p.team === winnerTeam ? 1 : 0;
       const delta = eloDelta(p.ratingBefore, opponent, score);
@@ -422,6 +500,7 @@ export class GamesManager {
 
   private async abandon(g: ActiveGame): Promise<void> {
     if (g.status !== 'active') return;
+    this.cancelBotTimers(g.id);
     g.status = 'abandoned';
     g.reason = 'abandoned';
     await prisma.game.update({
@@ -536,6 +615,13 @@ export class GamesManager {
       pockets = g.participants.map((p) => bg.pocketOf(p.boardIndex, p.color));
     }
 
+    const turnSlots = !isBug
+      ? {
+          w: (g.engine as TeamGame).nextSlotFor('w'),
+          b: (g.engine as TeamGame).nextSlotFor('b'),
+        }
+      : undefined;
+
     return {
       gameId: g.id,
       mode: g.mode,
@@ -549,6 +635,7 @@ export class GamesManager {
       moveNumber: g.ply,
       turns,
       turnUserIds,
+      turnSlots,
       clocks,
       clocksActive,
       startedAt: g.startedAt,
@@ -583,6 +670,8 @@ function toParticipantInfo(p: ActiveParticipant): import('shared').GameParticipa
     moveSlot: p.moveSlot,
     ratingBefore: p.ratingBefore,
     ratingAfter: p.ratingAfter,
+    isBot: p.isBot,
+    botLevel: p.botLevel,
   };
 }
 
@@ -596,6 +685,9 @@ function buildParticipants(mode: GameMode, team1: ParticipantSetup[], team2: Par
     moveSlot,
     ratingBefore: s.rating,
     ratingAfter: null,
+    isBot: s.isBot,
+    botLevel: s.botLevel,
+    botJitter: (Math.random() * 2 - 1) * 0.05,
   });
   if (mode === 'bughouse') {
     return [

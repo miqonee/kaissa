@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { MODE_INFO, type GameMode, type TimeControl } from 'shared';
+import { MODE_INFO, type GameMode, type TeamMode, type TimeControl } from 'shared';
 import AppIcon from './AppIcon.vue';
 
 const emit = defineEmits<{
   (e: 'close'): void;
-  (e: 'create', payload: { name: string; mode: GameMode; timeControl: TimeControl; isPrivate: boolean }): void;
+  (e: 'create', payload: { name: string; mode: GameMode; timeControl: TimeControl; isPrivate: boolean; teamMode: TeamMode }): void;
 }>();
 
 defineProps<{
@@ -16,6 +16,7 @@ defineProps<{
 const selectedMode = ref<GameMode>('bughouse');
 const lobbyName = ref('');
 const isPrivate = ref(false);
+const selectedTeamMode = ref<TeamMode>('auto');
 
 const TC_PRESETS: { label: string; tc: TimeControl }[] = [
   { label: '3+2 блиц', tc: { kind: 'clock', baseMin: 3, incSec: 2 } },
@@ -34,6 +35,7 @@ function submit() {
     mode: selectedMode.value,
     timeControl: tc,
     isPrivate: isPrivate.value,
+    teamMode: selectedTeamMode.value,
   });
 }
 </script>
@@ -97,6 +99,37 @@ function submit() {
               @click="selectedTcIdx = i"
             >
               {{ p.label }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Режим распределения команд -->
+        <div class="form-row">
+          <label class="field-label">Распределение команд</label>
+          <div class="tc-grid">
+            <button
+              type="button"
+              class="tc-btn"
+              :class="{ active: selectedTeamMode === 'auto' }"
+              @click="selectedTeamMode = 'auto'"
+            >
+              Авто (по Elo)
+            </button>
+            <button
+              type="button"
+              class="tc-btn"
+              :class="{ active: selectedTeamMode === 'random' }"
+              @click="selectedTeamMode = 'random'"
+            >
+              Случайно
+            </button>
+            <button
+              type="button"
+              class="tc-btn"
+              :class="{ active: selectedTeamMode === 'manual' }"
+              @click="selectedTeamMode = 'manual'"
+            >
+              Свои команды (ручной)
             </button>
           </div>
         </div>

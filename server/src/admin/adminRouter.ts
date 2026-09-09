@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import type { AdminUserRow } from 'shared';
+import type { AdminUserRow, BotLevelMetric, PlatformMetrics } from 'shared';
+import { BOT_PRESETS } from 'shared';
 import { currentUser, requireAdmin } from '../auth/auth.js';
 import { prisma } from '../prisma.js';
 import { presence } from '../socket/presence.js';
@@ -12,6 +13,96 @@ import { presence } from '../socket/presence.js';
 export const adminRouter = Router();
 
 adminRouter.use(requireAdmin);
+
+/** Общие метрики платформы и балансировки ботов */
+adminRouter.get('/metrics', async (_req, res) => {
+  const [totalUsers, totalGames, totalMoves, finishedGames, users] = await Promise.all([
+    prisma.user.count({ where: { isBot: false } }),
+    prisma.game.count(),
+    prisma.gameMove.count(),
+    prisma.game.findMany({
+      where: { status: 'finished', endedAt: { not: null } },
+      select: { startedAt: true, endedAt: true },
+      take: 200,
+    }),
+    prisma.user.findMany({ select: { id: true } }),
+  ]);
+
+  let totalDurationSec = 0;
+  for (const g of finishedGames) {
+    if (g.endedAt) {
+      totalDurationSec += Math.max(0, (g.endedAt.getTime() - g.startedAt.getTime()) / 1000);
+    }
+  }
+  const avgGameDurationSec = finishedGames.length ? Math.round(totalDurationSec / finishedGames.length) : 0;
+  const onlineUsers = users.filter((u) => presence.isOnline(u.id)).length;
+
+  const botMetrics: BotLevelMetric[] = [];
+
+  for (const preset of BOT_PRESETS) {
+    const parts = await prisma.gameParticipant.findMany({
+      where: { user: { isBot: true, botLevel: preset.level } },
+      include: {
+        game: {
+          include: {
+            _count: { select: { moves: true } },
+          },
+        },
+      },
+    });
+
+    let wins = 0;
+    let losses = 0;
+    let checkmateCount = 0;
+    let timeoutCount = 0;
+    let stalemateCount = 0;
+    let totalMovesInGames = 0;
+
+    for (const p of parts) {
+      const g = p.game;
+      totalMovesInGames += g._count.moves;
+      const isWinner = (g.result === '1-0' && p.team === 1) || (g.result === '0-1' && p.team === 2);
+      const isLoser = (g.result === '1-0' && p.team === 2) || (g.result === '0-1' && p.team === 1);
+      if (isWinner) wins++;
+      else if (isLoser) losses++;
+
+      if (g.reason === 'checkmate') checkmateCount++;
+      else if (g.reason === 'timeout') timeoutCount++;
+      else if (g.reason === 'stalemate') stalemateCount++;
+    }
+
+    const totalGamesBot = parts.length;
+    const draws = totalGamesBot - wins - losses;
+    const winRate = totalGamesBot ? Math.round((wins / totalGamesBot) * 100) : 0;
+    const avgMoves = totalGamesBot ? Math.round(totalMovesInGames / totalGamesBot) : 0;
+
+    botMetrics.push({
+      level: preset.level,
+      name: preset.name,
+      elo: preset.elo,
+      totalGames: totalGamesBot,
+      wins,
+      losses,
+      draws,
+      winRate,
+      checkmateCount,
+      timeoutCount,
+      stalemateCount,
+      avgMoves,
+    });
+  }
+
+  const payload: PlatformMetrics = {
+    onlineUsers,
+    totalUsers,
+    totalGames,
+    totalMoves,
+    avgGameDurationSec,
+    botMetrics,
+  };
+
+  res.json(payload);
+});
 
 /** Список всех игроков */
 adminRouter.get('/users', async (_req, res) => {

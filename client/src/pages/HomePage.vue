@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref } from 'vue';
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import type { LobbySummary, LiveGameInfo, GameMode, TimeControl } from 'shared';
+import type { LobbySummary, LiveGameInfo, GameMode, TimeControl, TeamMode } from 'shared';
 import { timeControlLabel } from 'shared';
 import { getSocket, onSocketResync } from '../api/socket';
 import { api } from '../api/rest';
@@ -14,6 +14,8 @@ const router = useRouter();
 const auth = useAuthStore();
 const lobbies = ref<LobbySummary[]>([]);
 const liveGames = ref<LiveGameInfo[]>([]);
+
+const autoLobby = computed(() => lobbies.value.find((l) => l.isAuto));
 
 const showCreateModal = ref(false);
 const createBusy = ref(false);
@@ -101,7 +103,7 @@ function openCreateModal(): void {
   showCreateModal.value = true;
 }
 
-async function handleCreate(payload: { name: string; mode: GameMode; timeControl: TimeControl; isPrivate: boolean }) {
+async function handleCreate(payload: { name: string; mode: GameMode; timeControl: TimeControl; isPrivate: boolean; teamMode?: TeamMode }) {
   if (!auth.user) {
     router.push({ name: 'login', query: { redirect: '/' } });
     return;
@@ -155,6 +157,12 @@ function enterLobby(l: LobbySummary): void {
 function modeLabel(m: string): string {
   return m === 'bughouse' ? 'Багхаус' : '2×2 одна доска';
 }
+
+function teamAvgRating(players: { team: number; rating: number }[], team: number): number {
+  const tp = players.filter((p) => p.team === team);
+  if (!tp.length) return 1200;
+  return Math.round(tp.reduce((s, p) => s + p.rating, 0) / tp.length);
+}
 </script>
 
 <template>
@@ -166,6 +174,11 @@ function modeLabel(m: string): string {
         <p class="dim">Играйте парами на одной доске или в багхаус с обменом фигурами в реальном времени.</p>
       </div>
       <div class="banner-actions">
+        <button v-if="autoLobby" class="brass banner-create-btn" @click="enterLobby(autoLobby)">
+          <AppIcon name="bolt" :size="18" />
+          Быстрый старт 2×2
+        </button>
+
         <button class="primary banner-create-btn" @click="openCreateModal">
           <AppIcon name="plus" :size="18" :stroke-width="2.4" />
           Создать стол
@@ -218,10 +231,12 @@ function modeLabel(m: string): string {
                 <div class="players-line">
                   <span class="team t1">
                     {{ g.players.filter((p) => p.team === 1).map((p) => p.username).join(' / ') }}
+                    <small class="mono dim">({{ teamAvgRating(g.players, 1) }})</small>
                   </span>
                   <span class="vs">vs</span>
                   <span class="team t2">
                     {{ g.players.filter((p) => p.team === 2).map((p) => p.username).join(' / ') }}
+                    <small class="mono dim">({{ teamAvgRating(g.players, 2) }})</small>
                   </span>
                 </div>
                 <div class="meta-row">
@@ -260,6 +275,7 @@ function modeLabel(m: string): string {
               <div class="lobby-card-main">
                 <div class="lobby-title-row">
                   <span class="lobby-name">{{ l.name }}</span>
+                  <span v-if="l.isAuto" class="badge auto-chip">Быстрый старт</span>
                 </div>
                 <div class="lobby-players">
                   <span

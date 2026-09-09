@@ -126,6 +126,8 @@ export function toPublic(user: {
   losses: number;
   draws: number;
   isAdmin: boolean;
+  isBot?: boolean;
+  botLevel?: number | null;
   createdAt: Date;
 }): PublicUser {
   return {
@@ -136,6 +138,8 @@ export function toPublic(user: {
     losses: user.losses,
     draws: user.draws,
     isAdmin: user.isAdmin,
+    isBot: Boolean(user.isBot),
+    botLevel: user.botLevel ?? null,
     createdAt: user.createdAt.toISOString(),
   };
 }

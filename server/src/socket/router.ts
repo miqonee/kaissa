@@ -111,6 +111,18 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
       lobbies.summon(ctx.lobbyId, ctx.uid);
     });
 
+    socket.on('lobby:pause-toggle', () => {
+      if (ctx?.lobbyId) lobbies.pauseToggle(ctx.lobbyId, ctx.uid);
+    });
+
+    socket.on('lobby:set-team', (team) => {
+      if (ctx?.lobbyId) lobbies.setTeamChoice(ctx.lobbyId, ctx.uid, team);
+    });
+
+    socket.on('lobby:set-team-mode', (mode) => {
+      if (ctx?.lobbyId) lobbies.setTeamMode(ctx.lobbyId, ctx.uid, mode);
+    });
+
     socket.on('lobby:start', async (cb) => {
       if (!ctx?.lobbyId) {
         cb({ ok: false, error: 'Вы не в лобби' });

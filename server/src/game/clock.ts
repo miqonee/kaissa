@@ -16,6 +16,8 @@ export interface ClockState {
   incMs: number;
 }
 
+export const PREMOVE_LAG_COMPENSATION_MS = 100;
+
 export function initClock(baseMs: number, incMs: number): ClockState {
   return { whiteMs: baseMs, blackMs: baseMs, active: null, sinceMs: 0, incMs };
 }
@@ -38,7 +40,8 @@ export function clockOnMove(
   }
   if (c.active !== moverColor) return { clock: c, flagged: null };
   const elapsed = atMs - c.sinceMs;
-  const remaining = Math.max(0, (moverColor === 'w' ? c.whiteMs : c.blackMs) - elapsed);
+  const effectiveElapsed = elapsed <= PREMOVE_LAG_COMPENSATION_MS ? 0 : elapsed;
+  const remaining = Math.max(0, (moverColor === 'w' ? c.whiteMs : c.blackMs) - effectiveElapsed);
   let flagged: 'w' | 'b' | null = null;
   if (remaining <= 0) flagged = moverColor;
   const next: ClockState = {

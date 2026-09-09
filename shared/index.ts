@@ -29,6 +29,8 @@ export interface PublicUser {
   draws: number;
   createdAt: string;
   isAdmin: boolean;
+  isBot?: boolean;
+  botLevel?: number | null;
 }
 
 /** Строка списка пользователей в админке */
@@ -41,6 +43,8 @@ export interface AdminUserRow {
   games: number;
   isAdmin: boolean;
   online: boolean;
+  isBot?: boolean;
+  botLevel?: number | null;
   createdAt: string;
 }
 
@@ -51,7 +55,12 @@ export interface LobbyPlayer {
   ready: boolean;
   online: boolean;
   host: boolean;
+  isBot?: boolean;
+  botLevel?: number | null;
+  teamChoice?: 1 | 2 | null;
 }
+
+export type TeamMode = 'auto' | 'random' | 'manual';
 
 export interface LobbySummary {
   id: string;
@@ -61,6 +70,10 @@ export interface LobbySummary {
   players: LobbyPlayer[];
   code: string;
   started: boolean;
+  isAuto?: boolean;
+  teamMode?: TeamMode;
+  autoCountdown?: number | null;
+  pausedBy?: number[];
 }
 
 export type GameStatus = 'active' | 'finished' | 'abandoned';
@@ -86,6 +99,8 @@ export interface GameParticipantInfo {
   moveSlot: 0 | 1;         // порядок хода внутри команды (team-режим)
   ratingBefore: number;
   ratingAfter: number | null;
+  isBot?: boolean;
+  botLevel?: number | null;
 }
 
 export interface GameSummary {
@@ -122,6 +137,7 @@ export interface CreateLobbyPayload {
   mode: GameMode;
   timeControl: TimeControl;
   private: boolean;
+  teamMode?: TeamMode;
 }
 
 // ---------- WebSocket события ----------
@@ -137,6 +153,9 @@ export type ClientToServerEvents = {
   'lobby:summon': () => void;
   'lobby:start': (cb: (res: Ack<{ gameId: number } | null>) => void) => void;
   'lobby:rematch': (cb: (res: Ack<{ lobbyId: string } | null>) => void) => void;
+  'lobby:set-team': (team: 1 | 2 | null) => void;
+  'lobby:pause-toggle': () => void;
+  'lobby:set-team-mode': (mode: TeamMode) => void;
 
   // Игра
   'game:move': (data: { gameId: number; boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: PieceType }, cb: (res: Ack<null>) => void) => void;
@@ -158,6 +177,7 @@ export type ServerToClientEvents = {
   'lobby:summoned': (payload: { lobbyId: string; lobbyName: string }) => void;
   'lobby:started': (payload: { gameId: number }) => void;
   'lobby:closed': (reason: string) => void;
+  'lobby:countdown': (payload: { lobbyId: string; seconds: number | null; paused: boolean; pausedCount: number; neededCount: number }) => void;
 
   // Игра
   'game:state': (state: GameState) => void;
@@ -212,6 +232,8 @@ export interface GameState {
   turns: ('w' | 'b')[];
   /** кто должен ходить на каждой доске (userId; в team-режиме 1 элемент) */
   turnUserIds: number[];
+  /** текущий слот хода для каждой стороны (только team-режим) */
+  turnSlots?: Record<'w' | 'b', 0 | 1>;
   /** часы в мс по доскам: [board][colorIdx] colorIdx: 0=w, 1=b */
   clocks: [number, number][];
   /** какой цвет тикает на каждой доске (null — часы стоят) */
@@ -323,3 +345,50 @@ export const MODE_INFO: ModeInfo[] = [
     ],
   },
 ];
+
+// ---------- Боты и ИИ ----------
+
+export interface BotConfig {
+  level: number; // 1 to 5
+  name: string;
+  username: string;
+  elo: number;
+  depth: number;
+  errorRate: number; // базовая вероятность ошибки
+  errorJitter: number; // разброс ошибки (+- на партию)
+}
+
+export const BOT_PRESETS: BotConfig[] = [
+  { level: 1, name: 'Новичок', username: 'bot_novice', elo: 900, depth: 2, errorRate: 0.24, errorJitter: 0.05 },
+  { level: 2, name: 'Любитель', username: 'bot_amateur', elo: 1200, depth: 3, errorRate: 0.16, errorJitter: 0.06 },
+  { level: 3, name: 'Клубный', username: 'bot_club', elo: 1450, depth: 3, errorRate: 0.10, errorJitter: 0.04 },
+  { level: 4, name: 'Опытный', username: 'bot_expert', elo: 1700, depth: 4, errorRate: 0.06, errorJitter: 0.04 },
+  { level: 5, name: 'Мастер', username: 'bot_master', elo: 2000, depth: 5, errorRate: 0.03, errorJitter: 0.02 },
+];
+
+// ---------- Метрики платформы и ботов (Админка) ----------
+
+export interface BotLevelMetric {
+  level: number;
+  name: string;
+  elo: number;
+  totalGames: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+  checkmateCount: number;
+  timeoutCount: number;
+  stalemateCount: number;
+  avgMoves: number;
+}
+
+export interface PlatformMetrics {
+  onlineUsers: number;
+  totalUsers: number;
+  totalGames: number;
+  totalMoves: number;
+  avgGameDurationSec: number;
+  botMetrics: BotLevelMetric[];
+}
+

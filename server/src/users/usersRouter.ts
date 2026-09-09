@@ -11,6 +11,7 @@ export const usersRouter = Router();
 /** Лидерборд */
 usersRouter.get('/leaderboard', async (_req, res) => {
   const rows = await prisma.user.findMany({
+    where: { isBot: false },
     orderBy: [{ rating: 'desc' }],
     take: 20,
   });

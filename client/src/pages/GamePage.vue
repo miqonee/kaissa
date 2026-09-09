@@ -76,8 +76,26 @@ function myTurnOn(b: 0 | 1): boolean {
   return uid === myId.value;
 }
 
+function canPremoveOn(b: 0 | 1): boolean {
+  if (!state.value || state.value.status !== 'active') return false;
+  if (!isParticipant.value) return false;
+  const p = myParticipant.value;
+  if (!p) return false;
+  if (state.value.mode === 'bughouse') {
+    if (p.boardIndex !== b) return false;
+    return !myTurnOn(b);
+  }
+  // team-режим: 1 доска
+  if (myTurnOn(0)) return false;
+  const currentTurnColor = state.value.turns[0];
+  if (p.color === currentTurnColor) return false; // сейчас ход напарника
+  // Сейчас ход соперников. Премув доступен, если наш слот следующий для нашей стороны
+  const nextSlot = state.value.turnSlots ? state.value.turnSlots[p.color] : p.moveSlot;
+  return p.moveSlot === nextSlot;
+}
+
 function movableOn(b: 0 | 1): 'white' | 'black' | null {
-  if (!myTurnOn(b)) return null;
+  if (!myTurnOn(b) && !canPremoveOn(b)) return null;
   return myParticipant.value?.color === 'w' ? 'white' : 'black';
 }
 
@@ -210,7 +228,7 @@ const currentMover = computed(() => {
 
 // ---------- Действия ----------
 
-function onMove(b: 0 | 1, payload: { from: string; to: string }): void {
+function onMove(b: 0 | 1, payload: { from: string; to: string; premove?: boolean }): void {
   let c: Chess;
   try {
     c = new Chess(fenOf(b));
@@ -221,6 +239,10 @@ function onMove(b: 0 | 1, payload: { from: string; to: string }): void {
   const movingColor = c.turn();
   const lastRank = movingColor === 'w' ? '8' : '1';
   if (piece && piece.type === 'p' && payload.to[1] === lastRank) {
+    if (payload.premove) {
+      sendMove(b, payload.from, payload.to, 'q');
+      return;
+    }
     promoDialog.value = { board: b, from: payload.from, to: payload.to };
     return;
   }
@@ -513,6 +535,7 @@ function resultHeadline(): string {
               :fen="fenOf(0)"
               :orientation="orientationOf(0)"
               :movable-color="movableOn(0)"
+              :can-premove="canPremoveOn(0)"
               :dests="destsByBoard[0]"
               :check-square="checkByBoard[0]"
               :last-move="lastMoveOf(0)"
@@ -594,6 +617,7 @@ function resultHeadline(): string {
               :fen="fenOf(bc.index)"
               :orientation="orientationOf(bc.index)"
               :movable-color="movableOn(bc.index)"
+              :can-premove="canPremoveOn(bc.index)"
               :dests="destsByBoard[bc.index]"
               :check-square="checkByBoard[bc.index]"
               :last-move="lastMoveOf(bc.index)"

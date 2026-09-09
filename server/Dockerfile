@@ -1,6 +1,7 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 ENV NODE_TLS_REJECT_UNAUTHORIZED=0
+RUN npm config set strict-ssl false
 
 COPY shared ./shared
 RUN cd shared && npm install && npm run build

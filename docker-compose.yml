@@ -36,8 +36,6 @@ services:
     restart: unless-stopped
     expose:
       - 80
-    ports:
-      - "${KAISSA_PORT:-8289}:80"
     depends_on:
       - server
 

@@ -397,10 +397,6 @@ export class GamesManager {
     const avg = (arr: ActiveParticipant[]) =>
       arr.length ? arr.reduce((s, p) => s + p.ratingBefore, 0) / arr.length : 1200;
 
-    // «Человек + Бот vs Человек + Бот»: рейтинг людей считается напрямую друг против друга
-    const avgWin = humanWinners.length && humanLosers.length ? avg(humanWinners) : avg(winners);
-    const avgLose = humanWinners.length && humanLosers.length ? avg(humanLosers) : avg(losers);
-
     for (const p of g.participants) {
       if (p.isBot) {
         // У ботов рейтинг зафиксирован на номинале
@@ -412,7 +408,28 @@ export class GamesManager {
         continue;
       }
 
-      const opponent = p.team === winnerTeam ? avgLose : avgWin;
+      const opposingHumans = g.participants.filter((x) => x.team !== p.team && !x.isBot);
+      const isVsHuman = opposingHumans.length > 0;
+
+      if (!isVsHuman) {
+        // Матч только против ботов: рейтинг не меняется
+        p.ratingAfter = p.ratingBefore;
+        await prisma.gameParticipant.update({
+          where: { gameId_userId: { gameId: g.id, userId: p.uid } },
+          data: { ratingAfter: p.ratingBefore },
+        });
+        await prisma.user.update({
+          where: { id: p.uid },
+          data: {
+            wins: { increment: p.team === winnerTeam ? 1 : 0 },
+            losses: { increment: p.team !== winnerTeam ? 1 : 0 },
+          },
+        });
+        continue;
+      }
+
+      // Матч против людей: рейтинг считается против живых соперников
+      const opponent = avg(opposingHumans);
       const score: 0 | 1 = p.team === winnerTeam ? 1 : 0;
       const delta = eloDelta(p.ratingBefore, opponent, score);
       const after = Math.max(100, p.ratingBefore + delta);

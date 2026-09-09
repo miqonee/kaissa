@@ -27,6 +27,8 @@ const offlinePlayers = computed(() => lobby.value?.players.filter((p) => !p.onli
 const link = computed(() => `${location.origin}/lobby/${lobbyId.value}`);
 
 const countdown = ref<{ seconds: number | null; paused: boolean; pausedCount: number; neededCount: number } | null>(null);
+const team1Count = computed(() => lobby.value?.players.filter((p) => p.teamChoice === 1).length ?? 0);
+const team2Count = computed(() => lobby.value?.players.filter((p) => p.teamChoice === 2).length ?? 0);
 const isPausedByMe = computed(() => {
   if (!lobby.value || !auth.user) return false;
   return lobby.value.pausedBy?.includes(auth.user.id) ?? false;
@@ -75,6 +77,8 @@ onMounted(() => {
         pausedCount: state.pausedBy?.length || 0,
         neededCount: state.players.filter((p) => !p.isBot).length,
       };
+    } else {
+      countdown.value = null;
     }
   });
   socket.on('lobby:countdown', (payload) => {
@@ -297,19 +301,19 @@ function modeLabel(m: string): string {
                     type="button"
                     class="tiny pill"
                     :class="{ active: p.teamChoice === 1 }"
-                    :disabled="p.userId !== me?.id"
-                    @click="chooseTeam(1)"
+                    :disabled="p.userId !== me?.id || (p.teamChoice !== 1 && team1Count >= 2)"
+                    @click="chooseTeam(p.teamChoice === 1 ? null : 1)"
                   >
-                    Белые
+                    Белые ({{ team1Count }}/2)
                   </button>
                   <button
                     type="button"
                     class="tiny pill"
                     :class="{ active: p.teamChoice === 2 }"
-                    :disabled="p.userId !== me?.id"
-                    @click="chooseTeam(2)"
+                    :disabled="p.userId !== me?.id || (p.teamChoice !== 2 && team2Count >= 2)"
+                    @click="chooseTeam(p.teamChoice === 2 ? null : 2)"
                   >
-                    Чёрные
+                    Чёрные ({{ team2Count }}/2)
                   </button>
                 </div>
                 <span class="slot-rating mono dim">Рейтинг: {{ p.rating }}</span>
@@ -320,7 +324,7 @@ function modeLabel(m: string): string {
                   <AppIcon v-if="p.ready" name="check" :size="12" /><span>{{ p.ready ? 'Готов' : 'Ждём…' }}</span>
                 </span>
                 <button
-                  v-if="isHost && p.userId !== me?.id"
+                  v-if="isHost && !lobby.isAuto && p.userId !== me?.id && !p.isBot"
                   class="small danger icon-only"
                   title="Исключить игрока"
                   :aria-label="`Исключить ${p.username}`"

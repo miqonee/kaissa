@@ -99,7 +99,7 @@ gamesRouter.get('/archive', requireAuth, async (req, res) => {
 });
 
 /** PGN партии: скачивание/анализ во внешних движках */
-gamesRouter.get('/:id/pgn', requireAuth, async (req, res) => {
+gamesRouter.get('/:id/pgn', async (req, res) => {
   const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
   const game = await prisma.game.findUnique({
@@ -151,7 +151,7 @@ gamesRouter.get('/:id/pgn', requireAuth, async (req, res) => {
 });
 
 /** Мгновенное получение актуального состояния активной игры (HTTP fallback / initial render) */
-gamesRouter.get('/:id/state', requireAuth, (req, res) => {
+gamesRouter.get('/:id/state', (req, res) => {
   const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
   const g = gamesManager.getActive(id);
@@ -230,7 +230,7 @@ gamesRouter.post('/:id/lichess-import', requireAuth, async (req, res) => {
 });
 
 /** Одна партия (для replay) */
-gamesRouter.get('/:id', requireAuth, async (req, res) => {
+gamesRouter.get('/:id', async (req, res) => {
   const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
   const game = await prisma.game.findUnique({

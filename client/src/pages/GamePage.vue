@@ -149,15 +149,21 @@ function pocketOfBoard(b: 0 | 1, color: 'w' | 'b') {
 // ---------- Часы ----------
 const localClocks = ref<[number, number][]>([]);
 let ticker: number | undefined;
+let lastTickAt = Date.now();
 
 function rebuildLocalClocks(): void {
   if (!state.value) return;
   localClocks.value = state.value.clocks.map((c) => [c[0], c[1]] as [number, number]);
+  lastTickAt = Date.now();
 }
 
 watch(() => state.value?.clocks, rebuildLocalClocks, { deep: true });
 
 function tickClocks(): void {
+  const now = Date.now();
+  const elapsed = now - lastTickAt;
+  lastTickAt = now;
+
   if (!state.value || state.value.status !== 'active') return;
   const st = state.value;
   st.clocks.forEach((_, b) => {
@@ -165,7 +171,7 @@ function tickClocks(): void {
     if (!active) return;
     const colorIdx = active === 'w' ? 0 : 1;
     const cur = localClocks.value[b]?.[colorIdx] ?? 0;
-    if (localClocks.value[b]) localClocks.value[b][colorIdx] = Math.max(0, cur - 500);
+    if (localClocks.value[b]) localClocks.value[b][colorIdx] = Math.max(0, cur - elapsed);
   });
 }
 
@@ -393,7 +399,8 @@ onMounted(() => {
   requestWatch(3);
   offResync = onSocketResync(() => requestWatch(2));
 
-  ticker = window.setInterval(tickClocks, 500);
+  lastTickAt = Date.now();
+  ticker = window.setInterval(tickClocks, 100);
 });
 
 onBeforeUnmount(() => {
@@ -502,6 +509,7 @@ function resultHeadline(): string {
               >
                 <span class="slot-num mono">1</span>
                 <span class="member-name">{{ teamModeSides.top.players[0].username }}</span>
+                <span v-if="teamModeSides.top.players[0].isBot" class="bot-badge tiny">Бот</span>
                 <span class="member-rating mono">({{ teamModeSides.top.players[0].ratingBefore }})</span>
                 <span v-if="roleOf(teamModeSides.top.players[0]) === 'me'" class="member-role me">Вы</span>
                 <span v-else-if="roleOf(teamModeSides.top.players[0]) === 'partner'" class="member-role partner">Напарник</span>
@@ -525,6 +533,7 @@ function resultHeadline(): string {
               >
                 <span class="slot-num mono">2</span>
                 <span class="member-name">{{ teamModeSides.top.players[1].username }}</span>
+                <span v-if="teamModeSides.top.players[1].isBot" class="bot-badge tiny">Бот</span>
                 <span class="member-rating mono">({{ teamModeSides.top.players[1].ratingBefore }})</span>
                 <span v-if="roleOf(teamModeSides.top.players[1]) === 'me'" class="member-role me">Вы</span>
                 <span v-else-if="roleOf(teamModeSides.top.players[1]) === 'partner'" class="member-role partner">Напарник</span>
@@ -547,6 +556,7 @@ function resultHeadline(): string {
               :last-move="lastMoveOf(0)"
               :coordinates="true"
               @move="onMove(0, $event)"
+              @premove-set="playMoveSound"
             />
           </div>
 
@@ -561,6 +571,7 @@ function resultHeadline(): string {
               >
                 <span class="slot-num mono">1</span>
                 <span class="member-name">{{ teamModeSides.bottom.players[0].username }}</span>
+                <span v-if="teamModeSides.bottom.players[0].isBot" class="bot-badge tiny">Бот</span>
                 <span class="member-rating mono">({{ teamModeSides.bottom.players[0].ratingBefore }})</span>
                 <span v-if="roleOf(teamModeSides.bottom.players[0]) === 'me'" class="member-role me">Вы</span>
                 <span v-else-if="roleOf(teamModeSides.bottom.players[0]) === 'partner'" class="member-role partner">Напарник</span>
@@ -584,6 +595,7 @@ function resultHeadline(): string {
               >
                 <span class="slot-num mono">2</span>
                 <span class="member-name">{{ teamModeSides.bottom.players[1].username }}</span>
+                <span v-if="teamModeSides.bottom.players[1].isBot" class="bot-badge tiny">Бот</span>
                 <span class="member-rating mono">({{ teamModeSides.bottom.players[1].ratingBefore }})</span>
                 <span v-if="roleOf(teamModeSides.bottom.players[1]) === 'me'" class="member-role me">Вы</span>
                 <span v-else-if="roleOf(teamModeSides.bottom.players[1]) === 'partner'" class="member-role partner">Напарник</span>
@@ -631,6 +643,7 @@ function resultHeadline(): string {
               :coordinates="true"
               @move="onMove(bc.index, $event)"
               @drop="onDrop(bc.index, $event)"
+              @premove-set="playMoveSound"
             />
           </div>
 
@@ -791,17 +804,19 @@ function resultHeadline(): string {
               <tr v-for="p in state.participants" :key="p.userId">
                 <td>
                   <strong class="player-name">{{ p.username }}</strong>
+                  <span v-if="p.isBot" class="bot-badge tiny" style="margin-left: 6px;">Бот</span>
                 </td>
                 <td class="dim">Команда {{ p.team }} ({{ p.color === 'w' ? 'белые' : 'черные' }})</td>
                 <td class="mono dim num">{{ p.ratingBefore }}</td>
                 <td class="num">
                   <span
-                    v-if="p.ratingAfter !== null"
+                    v-if="p.ratingAfter !== null && (p.ratingAfter - p.ratingBefore) !== 0"
                     class="rating-delta"
-                    :class="{ plus: (p.ratingAfter ?? p.ratingBefore) > p.ratingBefore, minus: (p.ratingAfter ?? p.ratingBefore) < p.ratingBefore }"
+                    :class="{ plus: p.ratingAfter > p.ratingBefore, minus: p.ratingAfter < p.ratingBefore }"
                   >
                     {{ p.ratingAfter - p.ratingBefore > 0 ? '+' : '' }}{{ p.ratingAfter - p.ratingBefore }}
                   </span>
+                  <span v-else class="rating-delta mono dim">±0</span>
                 </td>
                 <td class="mono num" style="font-weight: 700;">{{ p.ratingAfter ?? p.ratingBefore }}</td>
               </tr>

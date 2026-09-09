@@ -78,6 +78,17 @@ const KING_MID_PST = [
    20,  30,  10,   0,   0,  10,  30,  20,
 ];
 
+const KING_END_PST = [
+  -50, -30, -30, -30, -30, -30, -30, -50,
+  -30, -10,   0,   0,   0,   0, -10, -30,
+  -30, -10,  20,  30,  30,  20, -10, -30,
+  -30, -10,  30,  40,  40,  30, -10, -30,
+  -30, -10,  30,  40,  40,  30, -10, -30,
+  -30, -10,  20,  30,  30,  20, -10, -30,
+  -30, -20, -10,   0,   0, -10, -20, -30,
+  -50, -40, -30, -20, -20, -30, -40, -50,
+];
+
 const PST_MAP: Record<PieceSymbol, number[]> = {
   p: PAWN_PST,
   n: KNIGHT_PST,
@@ -99,7 +110,38 @@ export function evaluateBoard(chess: Chess): number {
   }
 
   let score = 0;
+  let whiteMaterial = 0;
+  let blackMaterial = 0;
+  let whiteNonPawn = 0;
+  let blackNonPawn = 0;
+
+  let wKingR = 7, wKingC = 4;
+  let bKingR = 0, bKingC = 4;
+
   const board = chess.board();
+
+  // Первый проход: сбор материала и позиций королей
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const piece = board[r][c];
+      if (!piece) continue;
+
+      const val = PIECE_VALUES[piece.type];
+      if (piece.color === 'w') {
+        whiteMaterial += val;
+        if (piece.type !== 'p' && piece.type !== 'k') whiteNonPawn += val;
+        if (piece.type === 'k') { wKingR = r; wKingC = c; }
+      } else {
+        blackMaterial += val;
+        if (piece.type !== 'p' && piece.type !== 'k') blackNonPawn += val;
+        if (piece.type === 'k') { bKingR = r; bKingC = c; }
+      }
+    }
+  }
+
+  // Вес эндшпиля: 0 (дебют/миттельшпиль) -> 1 (глубокий эндшпиль)
+  const nonPawnTotal = whiteNonPawn + blackNonPawn;
+  const endgameWeight = Math.max(0, Math.min(1, (2600 - nonPawnTotal) / 2000));
 
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
@@ -108,9 +150,24 @@ export function evaluateBoard(chess: Chess): number {
 
       const val = PIECE_VALUES[piece.type];
       const pst = PST_MAP[piece.type];
-      // Для белых r=0..7, для чёрных зеркалим строку: 7 - r
       const pstIdx = piece.color === 'w' ? r * 8 + c : (7 - r) * 8 + c;
-      const posBonus = pst[pstIdx] || 0;
+
+      let posBonus = 0;
+      if (piece.type === 'k') {
+        // Динамический переход короля в центр в эндшпиле
+        const midScore = KING_MID_PST[pstIdx];
+        const endScore = KING_END_PST[pstIdx];
+        posBonus = Math.round((1 - endgameWeight) * midScore + endgameWeight * endScore);
+      } else if (piece.type === 'p') {
+        posBonus = pst[pstIdx] || 0;
+        // Экспоненциальный бонус за продвинутые пешки в эндшпиле
+        const rankAdv = piece.color === 'w' ? (7 - r) : r;
+        if (rankAdv >= 4) {
+          posBonus += Math.round((rankAdv - 3) * 18 * endgameWeight);
+        }
+      } else {
+        posBonus = pst[pstIdx] || 0;
+      }
 
       const pieceTotal = val + posBonus;
       if (piece.color === 'w') {
@@ -119,6 +176,17 @@ export function evaluateBoard(chess: Chess): number {
         score -= pieceTotal;
       }
     }
+  }
+
+  // Mop-up эвалюация: при перевесе зажимать короля противника к краю и вести своего короля
+  if (whiteMaterial - blackMaterial > 250) {
+    const bKingCenterDist = Math.max(3 - bKingR, bKingR - 4) + Math.max(3 - bKingC, bKingC - 4);
+    const kingsDist = Math.max(Math.abs(wKingR - bKingR), Math.abs(wKingC - bKingC));
+    score += Math.round((bKingCenterDist * 16 + (7 - kingsDist) * 22) * (0.4 + 0.6 * endgameWeight));
+  } else if (blackMaterial - whiteMaterial > 250) {
+    const wKingCenterDist = Math.max(3 - wKingR, wKingR - 4) + Math.max(3 - wKingC, wKingC - 4);
+    const kingsDist = Math.max(Math.abs(wKingR - bKingR), Math.abs(wKingC - bKingC));
+    score -= Math.round((wKingCenterDist * 16 + (7 - kingsDist) * 22) * (0.4 + 0.6 * endgameWeight));
   }
 
   return score;

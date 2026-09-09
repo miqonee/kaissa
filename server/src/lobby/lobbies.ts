@@ -203,6 +203,8 @@ export class LobbiesManager {
         });
       }
     }
+    this.broadcastState(lobby);
+    this.broadcastList();
   }
 
   async joinWithUser(lobbyId: string, uid: number): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -376,6 +378,20 @@ export class LobbiesManager {
     if (!lobby || lobby.teamMode !== 'manual') return;
     const m = lobby.members.get(uid);
     if (!m) return;
+
+    // Повторный клик снимает выбор
+    if (m.teamChoice === team) {
+      m.teamChoice = null;
+      this.broadcastState(lobby);
+      return;
+    }
+
+    // Не даём занять команду, где уже 2 игрока
+    if (team !== null) {
+      const count = [...lobby.members.values()].filter((x) => x.teamChoice === team && x.uid !== uid).length;
+      if (count >= 2) return;
+    }
+
     m.teamChoice = team;
     this.broadcastState(lobby);
   }
@@ -516,6 +532,14 @@ export class LobbiesManager {
       for (const u of unassigned) {
         if (team1.length < 2) team1.push(u);
         else team2.push(u);
+      }
+
+      // Страховка от перекоса: гарантируем строго по 2 игрока в каждой команде
+      while (team1.length > 2) {
+        team2.push(team1.pop()!);
+      }
+      while (team2.length > 2) {
+        team1.push(team2.pop()!);
       }
     } else if (lobby.teamMode === 'random') {
       const shuffled = [...membersList].sort(() => Math.random() - 0.5);

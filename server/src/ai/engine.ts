@@ -46,12 +46,26 @@ export function chooseBotMove(
 
   let chosenIndex = 0;
 
-  // Механика зевков: выбор 2-го или 3-го хода вместо оптимального
-  if (Math.random() < errorRate && scored.length > 1) {
-    if (scored.length > 2 && Math.random() < 0.35) {
-      chosenIndex = 2;
-    } else {
-      chosenIndex = 1;
+  // Механика ошибок: контролируемые неточности вместо слепого хаоса
+  const isMate = Math.abs(scored[0].score) >= 90000;
+  if (!isMate && Math.random() < errorRate && scored.length > 1) {
+    const isWhite = chess.turn() === 'w';
+    const bestScore = scored[0].score;
+
+    // Допустимый коридор неточности (cp) в зависимости от уровня
+    const maxDeltaByLevel = [0, 250, 180, 120, 75, 40];
+    const maxDelta = maxDeltaByLevel[cfg.level] ?? 150;
+
+    const acceptableMoves: number[] = [];
+    for (let i = 1; i < scored.length; i++) {
+      const delta = isWhite ? (bestScore - scored[i].score) : (scored[i].score - bestScore);
+      if (delta > 0 && delta <= maxDelta) {
+        acceptableMoves.push(i);
+      }
+    }
+
+    if (acceptableMoves.length > 0) {
+      chosenIndex = acceptableMoves[Math.floor(Math.random() * acceptableMoves.length)];
     }
   }
 

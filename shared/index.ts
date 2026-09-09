@@ -391,5 +391,7 @@ export interface PlatformMetrics {
   totalMoves: number;
   avgGameDurationSec: number;
   botMetrics: BotLevelMetric[];
+  botMetricsVsHuman: BotLevelMetric[];
+  botMetricsVsBot: BotLevelMetric[];
 }
 

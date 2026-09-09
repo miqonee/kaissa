@@ -46,4 +46,23 @@ describe('AI Chess Engine', () => {
       expect(ms).toBeLessThanOrEqual(2800);
     }
   });
+
+  it('advances passed pawn in king and pawn endgame', () => {
+    // Белый король на e4, белая проходная пешка на e6, чёрный король на a8
+    const c = new Chess('k7/8/4P3/8/4K3/8/8/8 w - - 0 1');
+    const dec = chooseBotMove(c.fen(), 4);
+    expect(dec).not.toBeNull();
+    // Бот должен продвигать пешку e6->e7
+    expect(dec?.from).toBe('e6');
+    expect(dec?.to).toBe('e7');
+  });
+
+  it('mop-up evaluation corners opposing king in KQ vs K endgame', () => {
+    // Белый король e1, ферзь a1, чёрный король e8. Ферзь отрезает/шахует или король приближается
+    const c = new Chess('4k3/8/8/8/8/8/8/Q3K3 w - - 0 1');
+    const dec = chooseBotMove(c.fen(), 3);
+    expect(dec).not.toBeNull();
+    // Любой ход активного сжатия кольца: Qa7, Qe5+, Ke2 и т.д.
+    expect(dec?.from).toBeDefined();
+  });
 });

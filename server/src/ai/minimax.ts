@@ -95,8 +95,15 @@ function alphaBeta(
   startTime: number,
   timeBudgetMs: number,
 ): number {
-  if (depth === 0 || chess.isGameOver()) {
-    return evaluateBoard(chess);
+  if (chess.isGameOver()) {
+    if (chess.isCheckmate()) {
+      return isMaximizing ? -(100000 + depth * 100) : (100000 + depth * 100);
+    }
+    return 0; // ничья/пат
+  }
+
+  if (depth === 0) {
+    return quiescence(chess, alpha, beta, isMaximizing, startTime, timeBudgetMs);
   }
 
   if (Date.now() - startTime >= timeBudgetMs) {
@@ -127,6 +134,65 @@ function alphaBeta(
       beta = Math.min(beta, ev);
       if (beta <= alpha) break;
       if (Date.now() - startTime >= timeBudgetMs) break;
+    }
+    return minEval;
+  }
+}
+
+/**
+ * Quiescence search — доигрывание цепочек взятий на нулевой глубине,
+ * устраняет эффект горизонта и глупые зевки фигур.
+ */
+function quiescence(
+  chess: Chess,
+  alpha: number,
+  beta: number,
+  isMaximizing: boolean,
+  startTime: number,
+  timeBudgetMs: number,
+  qDepth = 3,
+): number {
+  if (Date.now() - startTime >= timeBudgetMs) {
+    return evaluateBoard(chess);
+  }
+
+  const standPat = evaluateBoard(chess);
+
+  if (isMaximizing) {
+    if (standPat >= beta) return beta;
+    if (standPat > alpha) alpha = standPat;
+  } else {
+    if (standPat <= alpha) return alpha;
+    if (standPat < beta) beta = standPat;
+  }
+
+  if (qDepth <= 0 || chess.isGameOver()) return standPat;
+
+  const captures = chess.moves({ verbose: true }).filter((m) => m.captured || m.promotion);
+  if (!captures.length) return standPat;
+
+  const ordered = orderMoves(captures);
+
+  if (isMaximizing) {
+    let maxEval = standPat;
+    for (const m of ordered) {
+      chess.move(m);
+      const ev = quiescence(chess, alpha, beta, false, startTime, timeBudgetMs, qDepth - 1);
+      chess.undo();
+      maxEval = Math.max(maxEval, ev);
+      alpha = Math.max(alpha, ev);
+      if (beta <= alpha || Date.now() - startTime >= timeBudgetMs) break;
+    }
+    return maxEval;
+  } else {
+    let minEval = standPat;
+    for (const m of ordered) {
+      chess.move(m);
+      const ev = quiescence(chess, alpha, beta, true, startTime, timeBudgetMs, qDepth - 1);
+      chess.undo();
+      minEval = Math.min(minEval, ev);
+      beta = Math.min(beta, ev);
+      if (beta <= alpha || Date.now() - startTime >= timeBudgetMs) break;
     }
     return minEval;
   }

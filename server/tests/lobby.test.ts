@@ -141,4 +141,44 @@ describe('Auto Lobby and Team Modes', () => {
     expect(lobby!.members.has(4)).toBe(true);
     expect(lobby!.members.size).toBe(4);
   });
+
+  it('caps manual team choice to 2 players and allows toggle off', () => {
+    const mgr = new LobbiesManager();
+    const lobby = new Lobby(
+      {
+        id: 'L_MANUAL',
+        code: 'MANU01',
+        name: 'Ручной стол',
+        mode: 'team',
+        timeControl: { kind: 'none', baseMin: 0, incSec: 0 },
+        private: false,
+        teamMode: 'manual',
+      },
+      { uid: 1, username: 'p1', rating: 1200, ready: true, host: true, joinedAt: Date.now() },
+    );
+    lobby.members.set(2, { uid: 2, username: 'p2', rating: 1200, ready: true, host: false, joinedAt: Date.now() });
+    lobby.members.set(3, { uid: 3, username: 'p3', rating: 1200, ready: true, host: false, joinedAt: Date.now() });
+    lobby.members.set(4, { uid: 4, username: 'p4', rating: 1200, ready: true, host: false, joinedAt: Date.now() });
+    (mgr as any).lobbies.set(lobby.id, lobby);
+
+    // Player 1 chooses Team 1
+    mgr.setTeamChoice(lobby.id, 1, 1);
+    expect(lobby.members.get(1)?.teamChoice).toBe(1);
+
+    // Player 2 chooses Team 1
+    mgr.setTeamChoice(lobby.id, 2, 1);
+    expect(lobby.members.get(2)?.teamChoice).toBe(1);
+
+    // Player 3 tries to choose Team 1 -> team is full (2/2), ignored
+    mgr.setTeamChoice(lobby.id, 3, 1);
+    expect(lobby.members.get(3)?.teamChoice).toBeUndefined();
+
+    // Player 1 toggles off Team 1
+    mgr.setTeamChoice(lobby.id, 1, 1);
+    expect(lobby.members.get(1)?.teamChoice).toBeNull();
+
+    // Now Player 3 can choose Team 1
+    mgr.setTeamChoice(lobby.id, 3, 1);
+    expect(lobby.members.get(3)?.teamChoice).toBe(1);
+  });
 });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import type { AdminUserRow, PlatformMetrics } from 'shared';
 import { api } from '../api/rest';
 import { useAuthStore } from '../stores/auth';
@@ -11,6 +11,14 @@ const metrics = ref<PlatformMetrics | null>(null);
 const loading = ref(true);
 const error = ref('');
 const busyId = ref<number | null>(null);
+const botTab = ref<'human' | 'bot'>('human');
+
+const currentBotMetrics = computed(() => {
+  if (!metrics.value) return [];
+  return botTab.value === 'human'
+    ? (metrics.value.botMetricsVsHuman || metrics.value.botMetrics || [])
+    : (metrics.value.botMetricsVsBot || []);
+});
 
 async function loadData() {
   loading.value = true;
@@ -37,17 +45,12 @@ async function deleteUser(u: AdminUserRow) {
   }
   busyId.value = u.id;
   try {
-    await api.post(`/api/admin/users/${u.id}`, undefined); // router handles DELETE
-  } catch (e) {
-    // try direct fetch for DELETE method
-    const res = await fetch(`/api/admin/users/${u.id}`, { method: 'DELETE', credentials: 'include' });
-    if (!res.ok) {
-      const err = await res.json();
-      alert(err.error || 'Ошибка удаления');
-    }
+    await api.delete(`/api/admin/users/${u.id}`);
+    await loadData();
+  } catch (e: any) {
+    alert(e.message || 'Ошибка удаления');
   } finally {
     busyId.value = null;
-    await loadData();
   }
 }
 
@@ -127,8 +130,29 @@ function fmtDuration(sec: number): string {
       </div>
 
       <!-- Балансировка ботов (5 уровней) -->
-      <div v-if="metrics?.botMetrics?.length" class="panel-body bot-metrics-wrap">
-        <h3 class="section-title">Балансировка ИИ-ботов (5 уровней)</h3>
+      <div v-if="metrics" class="panel-body bot-metrics-wrap">
+        <div class="metrics-header-row">
+          <h3 class="section-title">Балансировка ИИ-ботов (5 уровней)</h3>
+          <div class="tab-pills">
+            <button
+              type="button"
+              class="tiny pill"
+              :class="{ active: botTab === 'human' }"
+              @click="botTab = 'human'"
+            >
+              Против людей
+            </button>
+            <button
+              type="button"
+              class="tiny pill"
+              :class="{ active: botTab === 'bot' }"
+              @click="botTab = 'bot'"
+            >
+              ИИ vs ИИ (Демо/Тюнинг)
+            </button>
+          </div>
+        </div>
+
         <div class="table-wrap">
           <table class="club">
             <thead>
@@ -143,7 +167,7 @@ function fmtDuration(sec: number): string {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="b in metrics.botMetrics" :key="b.level">
+              <tr v-for="b in currentBotMetrics" :key="b.level">
                 <td><strong>Ур.{{ b.level }} {{ b.name }}</strong></td>
                 <td class="mono">{{ b.elo }}</td>
                 <td class="mono dim">{{ b.totalGames }}</td>
@@ -289,8 +313,22 @@ function fmtDuration(sec: number): string {
 }
 
 .section-title {
-  margin: 0 0 12px 0;
+  margin: 0;
   font-size: 16px;
+}
+
+.metrics-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tab-pills {
+  display: flex;
+  gap: 6px;
 }
 
 .user-head {

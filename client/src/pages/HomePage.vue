@@ -16,6 +16,7 @@ const lobbies = ref<LobbySummary[]>([]);
 const liveGames = ref<LiveGameInfo[]>([]);
 
 const autoLobby = computed(() => lobbies.value.find((l) => l.isAuto));
+const userLobbies = computed(() => lobbies.value.filter((l) => !l.isAuto));
 
 const showCreateModal = ref(false);
 const createBusy = ref(false);
@@ -174,11 +175,6 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
         <p class="dim">Играйте парами на одной доске или в багхаус с обменом фигурами в реальном времени.</p>
       </div>
       <div class="banner-actions">
-        <button v-if="autoLobby" class="brass banner-create-btn" @click="enterLobby(autoLobby)">
-          <AppIcon name="bolt" :size="18" />
-          Быстрый старт 2×2
-        </button>
-
         <button class="primary banner-create-btn" @click="openCreateModal">
           <AppIcon name="plus" :size="18" :stroke-width="2.4" />
           Создать стол
@@ -266,8 +262,47 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
           </div>
 
           <div class="panel-body lobby-rows" v-if="lobbies.length">
+            <!-- Быстрый стол 2х2 (закреплён во главе) -->
             <div
-              v-for="l in lobbies"
+              v-if="autoLobby"
+              class="lobby-card auto-lobby-card"
+              @click="enterLobby(autoLobby)"
+            >
+              <div class="lobby-card-main">
+                <div class="lobby-title-row">
+                  <span class="lobby-name">{{ autoLobby.name }}</span>
+                  <span class="badge auto-chip">
+                    <AppIcon name="bolt" :size="12" /> Быстрый старт
+                  </span>
+                </div>
+                <div class="lobby-players">
+                  <span
+                    v-for="p in autoLobby.players"
+                    :key="p.userId"
+                    class="lp"
+                    :class="{ offline: !p.online }"
+                  >
+                    <span class="dot" :class="p.isBot ? 'bot-dot' : 'on'"></span>
+                    {{ p.username }}
+                    <span class="mono dim">({{ p.rating }})</span>
+                  </span>
+                </div>
+              </div>
+
+              <div class="lobby-card-meta">
+                <div class="tags">
+                  <span class="badge">{{ modeLabel(autoLobby.mode) }}</span>
+                  <span class="badge mono">{{ timeControlLabel(autoLobby.timeControl) }}</span>
+                </div>
+                <button class="brass small" @click.stop="enterLobby(autoLobby)">
+                  <AppIcon name="bolt" :size="14" /> Сесть за стол
+                </button>
+              </div>
+            </div>
+
+            <!-- Открытые пользовательские столы -->
+            <div
+              v-for="l in userLobbies"
               :key="l.id"
               class="lobby-card"
               @click="enterLobby(l)"
@@ -275,7 +310,6 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
               <div class="lobby-card-main">
                 <div class="lobby-title-row">
                   <span class="lobby-name">{{ l.name }}</span>
-                  <span v-if="l.isAuto" class="badge auto-chip">Быстрый старт</span>
                 </div>
                 <div class="lobby-players">
                   <span
@@ -541,6 +575,31 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
 .lobby-card:hover {
   border-color: var(--accent-2);
   background: var(--surface-2);
+}
+
+.auto-lobby-card {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: linear-gradient(135deg, var(--surface-inset) 0%, color-mix(in srgb, var(--felt) 10%, var(--surface-inset)) 100%);
+}
+
+.auto-lobby-card:hover {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.auto-chip {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bot-dot {
+  background: var(--ink-3);
+  box-shadow: none;
 }
 
 .lobby-card-main {

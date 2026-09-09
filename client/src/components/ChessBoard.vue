@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Chessground } from '@lichess-org/chessground';
 import type { Api as CgApi, Color as CgColor, Key } from 'chessground-types';
+import { Chess } from 'chess.js';
 import type { PieceType } from 'shared';
 
 const props = withDefaults(
@@ -80,6 +81,30 @@ function lastMoveKeys(): Key[] | undefined {
   return m.length ? (m as Key[]) : undefined;
 }
 
+function pawnPremoveFilter(ctx: any): boolean {
+  if (ctx.role !== 'pawn') return true;
+  // Прямой ход пешки вперёд
+  if (ctx.orig.pos[0] === ctx.dest.pos[0]) return true;
+
+  // Диагональный ход пешки (взятие):
+  // 1) Клетка уже занята вражеской фигурой
+  if (ctx.enemies?.has(ctx.dest.key)) return true;
+
+  // 2) Поле взятия на проходе в FEN
+  const fenParts = props.fen.split(' ');
+  const epSquare = fenParts[3];
+  if (epSquare && epSquare !== '-' && epSquare === ctx.dest.key) return true;
+
+  // 3) Вражеская фигура может прийти на это поле на своём ближайшем ходу (перехват)
+  try {
+    const c = new Chess(props.fen);
+    const opponentMoves = c.moves({ verbose: true });
+    return opponentMoves.some((m) => m.to === ctx.dest.key);
+  } catch {
+    return false;
+  }
+}
+
 // ---------- конфигурация ----------
 
 function config() {
@@ -106,6 +131,7 @@ function config() {
       enabled: props.canPremove,
       showDests: true,
       castle: true,
+      additionalPremoveRequirements: pawnPremoveFilter,
       events: {
         set: (orig: Key, dest: Key) => emit('premoveSet', { from: orig, to: dest }),
         unset: () => emit('premoveUnset'),
@@ -158,6 +184,7 @@ watch(
       },
       premovable: {
         enabled: props.canPremove,
+        additionalPremoveRequirements: pawnPremoveFilter,
       },
       draggable: {
         enabled: interactive,
@@ -182,6 +209,7 @@ watch(
       },
       premovable: {
         enabled: props.canPremove,
+        additionalPremoveRequirements: pawnPremoveFilter,
       },
       draggable: {
         enabled: interactive,

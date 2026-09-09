@@ -37,7 +37,8 @@ adminRouter.get('/metrics', async (_req, res) => {
   const avgGameDurationSec = finishedGames.length ? Math.round(totalDurationSec / finishedGames.length) : 0;
   const onlineUsers = users.filter((u) => presence.isOnline(u.id)).length;
 
-  const botMetrics: BotLevelMetric[] = [];
+  const botMetricsVsHuman: BotLevelMetric[] = [];
+  const botMetricsVsBot: BotLevelMetric[] = [];
 
   for (const preset of BOT_PRESETS) {
     const parts = await prisma.gameParticipant.findMany({
@@ -46,50 +47,64 @@ adminRouter.get('/metrics', async (_req, res) => {
         game: {
           include: {
             _count: { select: { moves: true } },
+            participants: { select: { user: { select: { isBot: true } } } },
           },
         },
       },
     });
 
-    let wins = 0;
-    let losses = 0;
-    let checkmateCount = 0;
-    let timeoutCount = 0;
-    let stalemateCount = 0;
-    let totalMovesInGames = 0;
+    const createAcc = () => ({
+      totalGames: 0,
+      wins: 0,
+      losses: 0,
+      checkmateCount: 0,
+      timeoutCount: 0,
+      stalemateCount: 0,
+      totalMovesInGames: 0,
+    });
+
+    const humanAcc = createAcc();
+    const botAcc = createAcc();
 
     for (const p of parts) {
       const g = p.game;
-      totalMovesInGames += g._count.moves;
+      const isVsHuman = g.participants.some((x) => !x.user.isBot);
+      const acc = isVsHuman ? humanAcc : botAcc;
+
+      acc.totalGames++;
+      acc.totalMovesInGames += g._count.moves;
       const isWinner = (g.result === '1-0' && p.team === 1) || (g.result === '0-1' && p.team === 2);
       const isLoser = (g.result === '1-0' && p.team === 2) || (g.result === '0-1' && p.team === 1);
-      if (isWinner) wins++;
-      else if (isLoser) losses++;
+      if (isWinner) acc.wins++;
+      else if (isLoser) acc.losses++;
 
-      if (g.reason === 'checkmate') checkmateCount++;
-      else if (g.reason === 'timeout') timeoutCount++;
-      else if (g.reason === 'stalemate') stalemateCount++;
+      if (g.reason === 'checkmate') acc.checkmateCount++;
+      else if (g.reason === 'timeout') acc.timeoutCount++;
+      else if (g.reason === 'stalemate') acc.stalemateCount++;
     }
 
-    const totalGamesBot = parts.length;
-    const draws = totalGamesBot - wins - losses;
-    const winRate = totalGamesBot ? Math.round((wins / totalGamesBot) * 100) : 0;
-    const avgMoves = totalGamesBot ? Math.round(totalMovesInGames / totalGamesBot) : 0;
+    const finalize = (acc: ReturnType<typeof createAcc>): BotLevelMetric => {
+      const draws = acc.totalGames - acc.wins - acc.losses;
+      const winRate = acc.totalGames ? Math.round((acc.wins / acc.totalGames) * 100) : 0;
+      const avgMoves = acc.totalGames ? Math.round(acc.totalMovesInGames / acc.totalGames) : 0;
+      return {
+        level: preset.level,
+        name: preset.name,
+        elo: preset.elo,
+        totalGames: acc.totalGames,
+        wins: acc.wins,
+        losses: acc.losses,
+        draws,
+        winRate,
+        checkmateCount: acc.checkmateCount,
+        timeoutCount: acc.timeoutCount,
+        stalemateCount: acc.stalemateCount,
+        avgMoves,
+      };
+    };
 
-    botMetrics.push({
-      level: preset.level,
-      name: preset.name,
-      elo: preset.elo,
-      totalGames: totalGamesBot,
-      wins,
-      losses,
-      draws,
-      winRate,
-      checkmateCount,
-      timeoutCount,
-      stalemateCount,
-      avgMoves,
-    });
+    botMetricsVsHuman.push(finalize(humanAcc));
+    botMetricsVsBot.push(finalize(botAcc));
   }
 
   const payload: PlatformMetrics = {
@@ -98,7 +113,9 @@ adminRouter.get('/metrics', async (_req, res) => {
     totalGames,
     totalMoves,
     avgGameDurationSec,
-    botMetrics,
+    botMetrics: botMetricsVsHuman,
+    botMetricsVsHuman,
+    botMetricsVsBot,
   };
 
   res.json(payload);

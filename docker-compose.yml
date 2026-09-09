@@ -68,7 +68,7 @@ services:
           - client
 
 volumes:
-  pgdata:
+  pgdata_2:
 
 networks:
   default:

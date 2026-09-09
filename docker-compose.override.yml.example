@@ -1,0 +1,6 @@
+# Скопируйте этот файл в docker-compose.override.yml для локальной разработки:
+# cp docker-compose.override.yml.example docker-compose.override.yml
+services:
+  client:
+    ports:
+      - "${KAISSA_PORT:-8080}:80"

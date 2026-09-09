@@ -13,6 +13,10 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
+    networks:
+      kaissa:
+        aliases:
+          - db
 
   server:
     build:
@@ -28,6 +32,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      kaissa:
+        aliases:
+          - server
 
   client:
     build:
@@ -38,6 +46,13 @@ services:
       - 80
     depends_on:
       - server
+    networks:
+      kaissa:
+        aliases:
+          - client
 
 volumes:
   pgdata:
+
+networks:
+  kaissa:

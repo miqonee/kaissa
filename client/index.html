@@ -7,19 +7,52 @@
     <meta name="description" content="Каисса — платформа для командных шахмат в реальном времени. Играйте парами 2х2 на одной доске или в шведские шахматы (багхаус) с обменом фигурами и ИИ-ботами." />
     <meta name="keywords" content="шахматы, командные шахматы, 2х2 шахматы, багхаус, шведские шахматы, шведки, bughouse chess, онлайн шахматы, шахматный клуб" />
     <meta name="theme-color" content="#1a1816" />
+    <link rel="canonical" href="https://duochess.ru/" />
 
     <!-- OpenGraph -->
+    <meta property="og:site_name" content="Каисса" />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://duochess.ru/" />
     <meta property="og:title" content="Каисса — командные шахматы 2×2 и Багхаус онлайн" />
-    <meta property="og:description" content="Платформа для командных шахмат в реальном времени. Играйте 2х2 на одной доске или в багхаус с обменом фигурами." />
-    <meta property="og:image" content="/home.png" />
+    <meta property="og:description" content="Платформа для командных шахмат в реальном времени. Играйте 2х2 на одной доске или в багхаус с обменом фигурами и ИИ-ботами." />
+    <meta property="og:image" content="https://duochess.ru/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Каисса — платформа для командных шахмат 2х2 и Багхаус" />
     <meta property="og:locale" content="ru_RU" />
 
     <!-- Twitter Cards -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Каисса — командные шахматы 2×2 и Багхаус онлайн" />
     <meta name="twitter:description" content="Платформа для командных шахмат в реальном времени. Играйте 2х2 на одной доске или в багхаус с обменом фигурами." />
-    <meta name="twitter:image" content="/home.png" />
+    <meta name="twitter:image" content="https://duochess.ru/og-image.png" />
+
+    <!-- Schema.org JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Каисса",
+      "url": "https://duochess.ru/",
+      "description": "Платформа для командных шахмат в реальном времени. Играйте 2х2 на одной доске или в шведские шахматы (багхаус) с обменом фигурами и ИИ-ботами Stockfish WASM.",
+      "applicationCategory": "GameApplication",
+      "genre": "Chess",
+      "operatingSystem": "All",
+      "browserRequirements": "Requires JavaScript and a modern Web browser",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "RUB"
+      },
+      "inLanguage": "ru",
+      "image": "https://duochess.ru/og-image.png",
+      "author": {
+        "@type": "Organization",
+        "name": "Каисса",
+        "url": "https://duochess.ru/"
+      }
+    }
+    </script>
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -54,8 +87,12 @@
           </p>
         </section>
         <section>
-          <h2>ИИ и тренировочные боты</h2>
-          <p>5 уровней сложности ИИ от новичка до мастера с адаптивным подбором баланса команд и быстрым стартом.</p>
+          <h2>Движок Stockfish WASM и персоналии ботов</h2>
+          <p>
+            12 уровней сложности на базе профессионального шахматного движка Stockfish 18 (WASM) и уникальные стили
+            легендарных гроссмейстеров (Михаил Таль, Анатолий Карпов, Гарри Каспаров, Пол Морфи, Бобби Фишер, Магнус Карлсен
+            и др.) с адаптивным динамическим рейтингом Elo и сбалансированным быстрым стартом.
+          </p>
         </section>
       </main>
     </noscript>

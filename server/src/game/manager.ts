@@ -674,6 +674,8 @@ export class GamesManager {
         }
       : undefined;
 
+    const moves = !isBug ? (g.engine as TeamGame).chess.history() : undefined;
+
     return {
       gameId: g.id,
       mode: g.mode,
@@ -685,6 +687,7 @@ export class GamesManager {
       fens,
       pockets,
       moveNumber: g.ply,
+      moves,
       turns,
       turnUserIds,
       turnSlots,

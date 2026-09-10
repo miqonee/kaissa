@@ -6,7 +6,7 @@ import { chooseBotMove, getBotConfig, getBotThinkingDelayMs } from '../src/ai/en
 import { stockfish } from '../src/ai/stockfish.js';
 import { selectMoveByPersonality } from '../src/ai/personalities.js';
 import { getOpeningBookMove } from '../src/ai/openings.js';
-import { BOT_PERSONALITIES, eloToLevel, levelToElo, getBotPersonality, getBotTooltip } from 'shared';
+import { BOT_PERSONALITIES, detectOpening, eloToLevel, levelToElo, getBotPersonality, getBotTooltip } from 'shared';
 
 describe('AI Chess Engine & Stockfish WASM', () => {
   it('evaluates initial board neutrally', () => {
@@ -131,5 +131,33 @@ describe('AI Chess Engine & Stockfish WASM', () => {
   it('game with 2 kings returns null from chooseBotMove without hang', async () => {
     const dec = await chooseBotMove('4k3/8/8/8/8/8/8/4K3 w - - 0 1', 2);
     expect(dec).toBeNull();
+  });
+
+  it('detectOpening recognizes openings and strategic plans without emojis', () => {
+    // 1. Initial position
+    const start = detectOpening([]);
+    expect(start.eco).toBe('A00');
+    expect(start.stage).toBe('start');
+    expect(start.planRu).toBeDefined();
+
+    // 2. Italian Game (Giuoco Piano)
+    const italian = detectOpening(['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5']);
+    expect(italian.eco).toBe('C50');
+    expect(italian.nameRu).toBe('Итальянская партия');
+    expect(italian.variationRu).toBe('Вариант Джоко Пиано');
+    expect(italian.stage).toBe('theory');
+    expect(italian.planRu).toContain('Белые готовят захват центра');
+
+    // 3. Sicilian Najdorf
+    const najdorf = detectOpening(['e4', 'c5', 'Nf3', 'd6', 'd4', 'cxd4', 'Nxd4', 'Nf6', 'Nc3', 'a6']);
+    expect(najdorf.eco).toBe('B90');
+    expect(najdorf.nameRu).toBe('Сицилианская защита');
+    expect(najdorf.variationRu).toBe('Вариант Найдорфа');
+
+    // 4. Transition to middlegame
+    const midgameMoves = ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5', 'c3', 'Nf6', 'd4', 'exd4', 'cxd4', 'Bb4+'];
+    const mid = detectOpening(midgameMoves);
+    expect(mid.eco).toBe('C50');
+    expect(mid.stage).toBe('middlegame');
   });
 });

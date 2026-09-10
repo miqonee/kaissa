@@ -230,6 +230,8 @@ export interface GameState {
   /** карманы по игрокам в порядке participants (только bughouse) */
   pockets: Pocket[] | null;
   moveNumber: number;
+  /** история ходов SAN (для team-режима) */
+  moves?: string[];
   /** чей ход на каждой доске ('w'|'b') */
   turns: ('w' | 'b')[];
   /** кто должен ходить на каждой доске (userId; в team-режиме 1 элемент) */
@@ -580,4 +582,7 @@ export interface PlatformMetrics {
   botMetricsVsHuman: BotLevelMetric[];
   botMetricsVsBot: BotLevelMetric[];
 }
+
+export * from './openings.js';
+
 

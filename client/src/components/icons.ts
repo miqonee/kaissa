@@ -19,6 +19,10 @@ export type IconName =
   | 'skip-forward'
   | 'chevron-left'
   | 'chevron-right'
+  | 'chevron-up'
+  | 'chevron-down'
+  | 'message-square'
+  | 'book-open'
   | 'external'
   | 'download'
   | 'refresh'
@@ -71,6 +75,13 @@ export const ICON_PATHS: Record<IconName, string[]> = {
   'skip-forward': ['M4 5v14l10.5-7z', 'M19 5v14'],
   'chevron-left': ['M15 18l-6-6 6-6'],
   'chevron-right': ['M9 18l6-6-6-6'],
+  'chevron-up': ['M18 15l-6-6-6 6'],
+  'chevron-down': ['M6 9l6 6 6-6'],
+  'message-square': ['M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'],
+  'book-open': [
+    'M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z',
+    'M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z',
+  ],
   external: ['M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6', 'M15 3h6v6', 'M10 14 21 3'],
   download: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'M7 10l5 5 5-5', 'M12 15V3'],
   refresh: ['M23 4v6h-6', 'M20.5 15a9 9 0 1 1-2.1-9.4L23 10'],

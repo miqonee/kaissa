@@ -3,4 +3,5 @@ Allow: /
 Disallow: /admin
 Disallow: /api/
 
+Host: https://duochess.ru
 Sitemap: https://duochess.ru/sitemap.xml

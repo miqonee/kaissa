@@ -247,11 +247,13 @@ function roleOf(p: GameParticipantInfo): PlayerRole {
   return 'opponent';
 }
 
-const currentMover = computed(() => {
-  if (!state.value || state.value.status !== 'active') return null;
-  const uid = state.value.turnUserIds[0] ?? 0;
-  return state.value.participants.find((p) => p.userId === uid) ?? null;
-});
+// Отображаемое имя: у ботов технический username (bot_xxx) не показываем —
+// только «Бот · badge», полный стиль виден при наведении на бейдж.
+function displayName(p: GameParticipantInfo): string {
+  if (!p.isBot) return p.username;
+  const badge = getBotPersonality(p.username)?.badge;
+  return badge ? `Бот · ${badge}` : 'Бот';
+}
 
 const orderedTurnParticipants = computed(() => {
   if (!state.value || state.value.mode !== 'team') return state.value?.participants ?? [];
@@ -569,8 +571,8 @@ function resultHeadline(): string {
                 class="member-pill compact"
                 :class="[roleOf(teamModeSides.top.players[0]), { 'active-turn': isPlayerTurn(teamModeSides.top.players[0].userId) }]"
               >
-                <span class="slot-num mono">1</span>
-                <span class="member-name" :title="teamModeSides.top.players[0].isBot ? getBotTooltip(teamModeSides.top.players[0].username, teamModeSides.top.players[0].ratingBefore) : undefined">{{ teamModeSides.top.players[0].username }}</span>
+                <span v-if="!teamModeSides.top.players[0].isBot" class="slot-num mono">1</span>
+                <span v-if="!teamModeSides.top.players[0].isBot" class="member-name">{{ teamModeSides.top.players[0].username }}</span>
                 <span v-if="teamModeSides.top.players[0].isBot" class="bot-badge tiny" :title="getBotTooltip(teamModeSides.top.players[0].username, teamModeSides.top.players[0].ratingBefore)">
                   {{ getBotPersonality(teamModeSides.top.players[0].username)?.badge ? 'Бот · ' + getBotPersonality(teamModeSides.top.players[0].username)?.badge : 'Бот' }}
                 </span>
@@ -595,8 +597,8 @@ function resultHeadline(): string {
                 class="member-pill compact"
                 :class="[roleOf(teamModeSides.top.players[1]), { 'active-turn': isPlayerTurn(teamModeSides.top.players[1].userId) }]"
               >
-                <span class="slot-num mono">2</span>
-                <span class="member-name" :title="teamModeSides.top.players[1].isBot ? getBotTooltip(teamModeSides.top.players[1].username, teamModeSides.top.players[1].ratingBefore) : undefined">{{ teamModeSides.top.players[1].username }}</span>
+                <span v-if="!teamModeSides.top.players[1].isBot" class="slot-num mono">2</span>
+                <span v-if="!teamModeSides.top.players[1].isBot" class="member-name">{{ teamModeSides.top.players[1].username }}</span>
                 <span v-if="teamModeSides.top.players[1].isBot" class="bot-badge tiny" :title="getBotTooltip(teamModeSides.top.players[1].username, teamModeSides.top.players[1].ratingBefore)">
                   {{ getBotPersonality(teamModeSides.top.players[1].username)?.badge ? 'Бот · ' + getBotPersonality(teamModeSides.top.players[1].username)?.badge : 'Бот' }}
                 </span>
@@ -635,8 +637,8 @@ function resultHeadline(): string {
                 class="member-pill compact"
                 :class="[roleOf(teamModeSides.bottom.players[0]), { 'active-turn': isPlayerTurn(teamModeSides.bottom.players[0].userId) }]"
               >
-                <span class="slot-num mono">1</span>
-                <span class="member-name" :title="teamModeSides.bottom.players[0].isBot ? getBotTooltip(teamModeSides.bottom.players[0].username, teamModeSides.bottom.players[0].ratingBefore) : undefined">{{ teamModeSides.bottom.players[0].username }}</span>
+                <span v-if="!teamModeSides.bottom.players[0].isBot" class="slot-num mono">1</span>
+                <span v-if="!teamModeSides.bottom.players[0].isBot" class="member-name">{{ teamModeSides.bottom.players[0].username }}</span>
                 <span v-if="teamModeSides.bottom.players[0].isBot" class="bot-badge tiny" :title="getBotTooltip(teamModeSides.bottom.players[0].username, teamModeSides.bottom.players[0].ratingBefore)">
                   {{ getBotPersonality(teamModeSides.bottom.players[0].username)?.badge ? 'Бот · ' + getBotPersonality(teamModeSides.bottom.players[0].username)?.badge : 'Бот' }}
                 </span>
@@ -661,8 +663,8 @@ function resultHeadline(): string {
                 class="member-pill compact"
                 :class="[roleOf(teamModeSides.bottom.players[1]), { 'active-turn': isPlayerTurn(teamModeSides.bottom.players[1].userId) }]"
               >
-                <span class="slot-num mono">2</span>
-                <span class="member-name" :title="teamModeSides.bottom.players[1].isBot ? getBotTooltip(teamModeSides.bottom.players[1].username, teamModeSides.bottom.players[1].ratingBefore) : undefined">{{ teamModeSides.bottom.players[1].username }}</span>
+                <span v-if="!teamModeSides.bottom.players[1].isBot" class="slot-num mono">2</span>
+                <span v-if="!teamModeSides.bottom.players[1].isBot" class="member-name">{{ teamModeSides.bottom.players[1].username }}</span>
                 <span v-if="teamModeSides.bottom.players[1].isBot" class="bot-badge tiny" :title="getBotTooltip(teamModeSides.bottom.players[1].username, teamModeSides.bottom.players[1].ratingBefore)">
                   {{ getBotPersonality(teamModeSides.bottom.players[1].username)?.badge ? 'Бот · ' + getBotPersonality(teamModeSides.bottom.players[1].username)?.badge : 'Бот' }}
                 </span>
@@ -754,9 +756,6 @@ function resultHeadline(): string {
           </div>
           <div class="panel-body queue-body">
             <div v-if="state.mode === 'team'" class="queue-explain">
-              <p class="dim small-hint">
-                Чередование ходов: Белые → Черные → Белые → Черные
-              </p>
               <div class="queue-list">
                 <div
                   v-for="(p, idx) in orderedTurnParticipants"
@@ -769,7 +768,7 @@ function resultHeadline(): string {
                   <span class="color-tag" :class="p.color">
                     {{ p.color === 'w' ? 'Белые' : 'Черные' }}
                   </span>
-                  <span class="queue-name">{{ p.username }}</span>
+                  <span class="queue-name" :title="p.isBot ? getBotTooltip(p.username, p.ratingBefore) : undefined">{{ displayName(p) }}</span>
                   <span v-if="roleOf(p) === 'me'" class="member-role me">Вы</span>
                   <span v-else-if="roleOf(p) === 'partner'" class="member-role partner">Напарник</span>
                   <span v-if="isPlayerTurn(p.userId)" class="turn-now-chip">ХОД</span>
@@ -782,10 +781,6 @@ function resultHeadline(): string {
                 Обе доски играют одновременно. Кликните по фигуре в кармане и затем по пустой клетке для дропа.
               </p>
             </div>
-
-            <p v-if="currentMover && state.mode === 'team'" class="small-hint dim">
-              Ход: <strong>{{ currentMover.username }}</strong>
-            </p>
 
             <p v-if="disconnected.length" class="warn-text">
               Отключились: {{ disconnected.map((d) => d.username).join(', ') }}
@@ -853,7 +848,7 @@ function resultHeadline(): string {
               <div
                 v-if="movesSanHistory.length > 0"
                 class="development-row"
-                :title="`Не выведены: ${[...currentAnalysis.development.whiteUndeveloped, ...currentAnalysis.development.blackUndeveloped].join(', ') || 'все развиты'}`"
+                :title="currentAnalysis.development.complete ? 'Фигуры развиты, короли в безопасности — дальше план по структуре' : `Не выведены: ${[...currentAnalysis.development.whiteUndeveloped, ...currentAnalysis.development.blackUndeveloped].join(', ')}`"
               >
                 <span class="dim small-label">Развитие:</span>
                 <span class="mono dev-score">{{ currentAnalysis.development.whiteDeveloped }}/{{ currentAnalysis.development.whiteTotal }} — {{ currentAnalysis.development.blackDeveloped }}/{{ currentAnalysis.development.blackTotal }}</span>

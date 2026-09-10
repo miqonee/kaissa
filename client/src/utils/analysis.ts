@@ -23,6 +23,7 @@ export interface DevelopmentInfo {
   blackTotal: number;
   whiteUndeveloped: string[];
   blackUndeveloped: string[];
+  complete: boolean;
   summaryRu: string;
 }
 
@@ -278,13 +279,14 @@ function analyzeDevelopment(chess: Chess): DevelopmentInfo {
 
   const w = evalSide('w');
   const b = evalSide('b');
+  const complete = w.developed === w.total && b.developed === b.total;
   const parts: string[] = [];
   if (w.undeveloped.length && w.developed < w.total) parts.push(`белые дома: ${w.undeveloped.join(', ')}`);
   if (b.undeveloped.length && b.developed < b.total) parts.push(`чёрные дома: ${b.undeveloped.join(', ')}`);
-  const summaryRu =
-    w.developed === w.total && b.developed === b.total
-      ? 'Фигуры развиты, короли в безопасности — дальше план по структуре'
-      : `Развитие ${w.developed}/${w.total} — ${b.developed}/${b.total}${parts.length ? ` · ${parts.join(' · ')}` : ''}`;
+  // Полное пояснение при завершённом развитии живёт в тултипе (см. GamePage), в строке — коротко.
+  const summaryRu = complete
+    ? 'Развитие завершено'
+    : `Развитие ${w.developed}/${w.total} — ${b.developed}/${b.total}${parts.length ? ` · ${parts.join(' · ')}` : ''}`;
 
   return {
     whiteDeveloped: w.developed,
@@ -293,6 +295,7 @@ function analyzeDevelopment(chess: Chess): DevelopmentInfo {
     blackTotal: b.total,
     whiteUndeveloped: w.undeveloped,
     blackUndeveloped: b.undeveloped,
+    complete,
     summaryRu,
   };
 }
@@ -305,6 +308,7 @@ function emptyDevelopment(): DevelopmentInfo {
     blackTotal: 6,
     whiteUndeveloped: [],
     blackUndeveloped: [],
+    complete: false,
     summaryRu: 'Начальная расстановка — выводите коней и слонов, рокируйтесь',
   };
 }

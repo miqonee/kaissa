@@ -184,11 +184,12 @@ function teamPlayers(g: LiveGameInfo, team: number): LiveGameInfo['players'] {
   return g.players.filter((p) => p.team === team);
 }
 
-// Подпись игрока в live-ленте: боты — «Бейдж · Elo» с полным тултипом, люди — ник.
+// Подпись игрока в live-ленте: боты — только бейдж стиля (личный Elo не пишем,
+// достаточно командного среднего в скобках), люди — ник. Полное инфо — в тултипе.
 function livePlayerLabel(p: LiveGameInfo['players'][number]): string {
   if (!p.isBot) return p.username;
   const perso = getBotPersonality(p.username);
-  return perso ? `${perso.badge} · ${p.rating}` : `Бот · ${p.rating}`;
+  return perso ? perso.badge : 'Бот';
 }
 
 function livePlayerTitle(p: LiveGameInfo['players'][number]): string {
@@ -590,11 +591,11 @@ function lobbyRosterTitle(l: LobbySummary): string {
 }
 
 .players-line {
-  font-size: 13.5px;
+  font-size: 12px;
   font-weight: 500;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
@@ -606,6 +607,10 @@ function lobbyRosterTitle(l: LobbySummary): string {
 
 .team {
   color: var(--ink);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .meta-row {
@@ -693,7 +698,8 @@ function lobbyRosterTitle(l: LobbySummary): string {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  min-width: 0;
   white-space: nowrap;
 }
 
@@ -713,6 +719,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
 .auto-hint-text {
   font-size: 11px;
   color: var(--ink-3);
+  flex-basis: 100%;
 }
 
 .auto-lobby-desc {

@@ -48,7 +48,8 @@ function meOf(g: GameSummary) {
 
 function outcome(g: GameSummary): { text: string; cls: string } {
   if (g.status === 'active') return { text: 'Идёт', cls: 'live' };
-  if (g.status === 'abandoned' || g.result === '*') return { text: 'Брошена', cls: 'dim' };
+  if (g.status === 'abandoned') return { text: 'Брошена', cls: 'dim' };
+  if (g.result === '*' || g.result === '1/2-1/2') return { text: 'Ничья', cls: 'dim' };
   if (tab.value === 'all') {
     return { text: g.result === '1-0' ? 'Победа белых' : 'Победа черных', cls: '' };
   }

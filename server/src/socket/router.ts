@@ -1,5 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import type { Ack, ClientToServerEvents, ServerToClientEvents } from 'shared';
+import { Chess } from 'chess.js';
 import { gamesManager, lobbies } from '../state.js';
 import { presence } from './presence.js';
 import { socketAuth } from './authSocket.js';
@@ -189,6 +190,19 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
       if (dbGame) {
         const lastFen0 = dbGame.moves.filter((m: { boardIndex: number; fenAfter: string }) => m.boardIndex === 0).at(-1)?.fenAfter || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
         const lastFen1 = dbGame.moves.filter((m: { boardIndex: number; fenAfter: string }) => m.boardIndex === 1).at(-1)?.fenAfter || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+        let moves: string[] | undefined;
+        if (dbGame.mode !== 'bughouse') {
+          try {
+            const c = new Chess();
+            const b0Moves = dbGame.moves.filter((m: any) => m.boardIndex === 0).sort((a: any, b: any) => a.ply - b.ply);
+            for (const m of b0Moves) {
+              c.move({ from: m.from, to: m.to, ...(m.promotion ? { promotion: m.promotion as any } : {}) });
+            }
+            moves = c.history();
+          } catch {
+            moves = [];
+          }
+        }
         socket.emit('game:state', {
           gameId: dbGame.id,
           mode: dbGame.mode as any,
@@ -213,9 +227,14 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
           result: dbGame.result as any,
           reason: dbGame.reason as any,
           moveNumber: Math.floor(dbGame.moves.length / 2) + 1,
+          moves,
           startedAt: dbGame.startedAt.getTime(),
         });
       }
+    });
+
+    socket.on('game:leave', (gameId: number) => {
+      socket.leave(gamesManager.gameRoom(Number(gameId)));
     });
 
     socket.on('live:subscribe', () => {

@@ -8,6 +8,7 @@ import { getSocket, onSocketResync } from '../api/socket';
 import { useAuthStore } from '../stores/auth';
 import { api } from '../api/rest';
 import { openLichessAnalysis } from '../api/lichess';
+import { analyzePosition } from '../utils/analysis';
 import {
   playMoveSound,
   playCaptureSound,
@@ -49,6 +50,8 @@ function toggleChat(): void {
 }
 
 const recognizedOpening = computed(() => detectOpening(movesSanHistory.value));
+const board0Fen = computed(() => fenOf(0));
+const currentAnalysis = computed(() => analyzePosition(board0Fen.value));
 
 const selectedDrop = ref<PieceType | null>(null);
 const promoDialog = ref<{ board: 0 | 1; from: string; to: string } | null>(null);
@@ -343,7 +346,7 @@ onMounted(() => {
     if (st.gameId !== gameId) return;
     clearTimeout(watchRetryTimer);
     state.value = st;
-    if (st.moves) {
+    if (st.moves && Array.isArray(st.moves)) {
       movesSanHistory.value = [...st.moves];
     }
     if (st.status !== 'active') showResult.value = true;
@@ -371,7 +374,10 @@ onMounted(() => {
           ...(mv.promotion ? { promotion: mv.promotion as 'q' } : {}),
         });
         if (mv.boardIndex === 0 && m?.san) {
-          movesSanHistory.value.push(m.san);
+          // Защита: не пушим одиночный ход как ход #1, если партия уже в разгаре
+          if (movesSanHistory.value.length > 0 || prevFen.startsWith('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR')) {
+            movesSanHistory.value.push(m.san);
+          }
         }
         if (m.captured === 'q') {
           playQueenLossSound();
@@ -431,10 +437,12 @@ onMounted(() => {
 
   // REST-запрос параллельно сокету для мгновенной загрузки стола
   api.get<{ state: GameState }>(`/api/games/${gameId}/state`).then((res) => {
-    if (res.state && !state.value) {
-      state.value = res.state;
-      if (res.state.moves) {
-        movesSanHistory.value = [...res.state.moves];
+    if (res.state) {
+      if (!state.value) state.value = res.state;
+      if (res.state.moves && Array.isArray(res.state.moves)) {
+        if (movesSanHistory.value.length === 0 || res.state.moves.length >= movesSanHistory.value.length) {
+          movesSanHistory.value = [...res.state.moves];
+        }
       }
       if (res.state.status !== 'active') showResult.value = true;
       rebuildLocalClocks();
@@ -449,6 +457,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  socket.emit('game:leave', gameId);
   clearTimeout(watchRetryTimer);
   offResync?.();
   offResync = null;
@@ -503,11 +512,13 @@ function resultHeadline(): string {
   if (!state.value || state.value.status === 'active') return '';
   const s = state.value;
   const reason = REASONS[s.reason ?? ''] ?? s.reason ?? '';
-  if (s.status === 'abandoned') return `Партия брошена (${reason})`;
-  if (s.result === '*') return `Ничья (${reason})`;
-  const winnerTeam = s.result === '1-0' ? 1 : 2;
+  if (s.status === 'abandoned') return `Партия брошена (${reason || 'выход игроков'})`;
+  if (s.result === '*' || s.result === '1/2-1/2') return `Ничья (${reason || 'по правилам'})`;
+  const winnerTeam = s.result === '1-0' ? 1 : (s.result === '0-1' ? 2 : null);
+  if (!winnerTeam) return `Партия завершена (${reason})`;
   const winners = s.participants.filter((p) => p.team === winnerTeam).map((p) => p.username);
-  return `Победа команды: ${winners.join(' / ')} (${reason})`;
+  const sideColor = winnerTeam === 1 ? 'Белые' : 'Чёрные';
+  return `Победа (${sideColor}): ${winners.join(' / ')} (${reason})`;
 }
 </script>
 
@@ -781,12 +792,12 @@ function resultHeadline(): string {
           </div>
         </div>
 
-        <!-- Панель дебюта -->
+        <!-- Панель дебюта и анализа -->
         <div class="panel opening-panel">
           <div class="panel-head">
             <div class="opening-head-title">
               <AppIcon name="book-open" :size="15" />
-              <h3>Дебют партии</h3>
+              <h3>Дебют и анализ</h3>
             </div>
             <div class="opening-badges">
               <span v-if="state.mode === 'team'" class="eco-badge mono">{{ recognizedOpening.eco }}</span>
@@ -795,19 +806,44 @@ function resultHeadline(): string {
                 class="stage-badge"
                 :class="recognizedOpening.stage"
               >
-                {{
-                  recognizedOpening.stage === 'theory'
-                    ? 'Теория'
-                    : recognizedOpening.stage === 'middlegame'
-                    ? 'Миттельшпиль'
-                    : 'Начало'
-                }}
+                {{ recognizedOpening.stageLabelRu }}
+              </span>
+              <span
+                v-if="state.mode === 'team'"
+                class="eval-pill mono"
+                :class="{
+                  'eval-w': currentAnalysis.scoreCp > 35,
+                  'eval-b': currentAnalysis.scoreCp < -35,
+                  'eval-eq': Math.abs(currentAnalysis.scoreCp) <= 35
+                }"
+                :title="`Оценка: ${currentAnalysis.evalText} (${currentAnalysis.verdictRu})`"
+              >
+                {{ currentAnalysis.evalText }}
               </span>
             </div>
           </div>
 
           <div class="panel-body opening-body">
             <template v-if="state.mode === 'team'">
+              <!-- Оценка позиции и шкала перевеса -->
+              <div class="eval-section">
+                <div class="eval-bar-track" :title="`Шансы сторон: белые ${currentAnalysis.evalPercent}% / чёрные ${100 - currentAnalysis.evalPercent}%`">
+                  <div class="eval-bar-fill white" :style="{ width: `${currentAnalysis.evalPercent}%` }"></div>
+                  <div class="eval-bar-fill black" :style="{ width: `${100 - currentAnalysis.evalPercent}%` }"></div>
+                </div>
+                <div class="eval-meta-row">
+                  <span class="eval-verdict-text dim">{{ currentAnalysis.verdictRu }}</span>
+                  <span
+                    v-if="currentAnalysis.materialDiff !== 0"
+                    class="material-badge mono"
+                    :class="{ 'mat-w': currentAnalysis.materialDiff > 0, 'mat-b': currentAnalysis.materialDiff < 0 }"
+                  >
+                    {{ currentAnalysis.materialDiff > 0 ? `Белые +${currentAnalysis.materialDiff}` : `Чёрные +${Math.abs(currentAnalysis.materialDiff)}` }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Название дебюта и варианта -->
               <div class="opening-name-block">
                 <h4 class="opening-title">{{ recognizedOpening.nameRu }}</h4>
                 <p v-if="recognizedOpening.variationRu" class="opening-variation">
@@ -816,11 +852,34 @@ function resultHeadline(): string {
                 <span class="opening-name-en dim mono">{{ recognizedOpening.nameEn }}</span>
               </div>
 
-              <div v-if="recognizedOpening.movesSan && recognizedOpening.movesSan !== '—'" class="opening-moves-row">
-                <span class="dim small-label">Ходы:</span>
-                <span class="moves-text mono">{{ recognizedOpening.movesSan }}</span>
+              <!-- Теоретические продолжения (вариации из текущей позиции) -->
+              <div v-if="recognizedOpening.continuations && recognizedOpening.continuations.length > 0" class="continuations-block">
+                <span class="dim small-label">Варианты теории:</span>
+                <div class="continuation-chips">
+                  <span
+                    v-for="c in recognizedOpening.continuations"
+                    :key="c.moveSan"
+                    class="cont-chip"
+                    :title="c.variationRu ? `${c.nameRu}: ${c.variationRu}` : c.nameRu"
+                  >
+                    <strong class="mono cont-move">{{ c.moveSan }}</strong>
+                    <span v-if="c.variationRu" class="cont-var dim">{{ c.variationRu }}</span>
+                  </span>
+                </div>
               </div>
 
+              <!-- Сыгранные ходы партии (полная нотация) -->
+              <div v-if="recognizedOpening.playedMovesSan && recognizedOpening.playedMovesSan !== '—'" class="opening-moves-row">
+                <div class="moves-header-row">
+                  <span class="dim small-label">Ходы партии:</span>
+                  <span class="dim tiny mono">{{ movesSanHistory.length }} полуходов</span>
+                </div>
+                <div class="moves-history-box mono">
+                  {{ recognizedOpening.playedMovesSan }}
+                </div>
+              </div>
+
+              <!-- Стратегический план стороны -->
               <div class="opening-plan-box">
                 <span class="dim small-label">Стратегический план:</span>
                 <p class="plan-text">{{ recognizedOpening.planRu }}</p>
@@ -1522,6 +1581,96 @@ function resultHeadline(): string {
   color: var(--ink-2);
 }
 
+.eval-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  transition: all 0.2s ease;
+}
+
+.eval-pill.eval-w {
+  background: color-mix(in srgb, var(--ok) 20%, transparent);
+  color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
+}
+
+.eval-pill.eval-b {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.eval-pill.eval-eq {
+  background: var(--surface-3);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+}
+
+/* Шкала и оценка позиции */
+.eval-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: var(--surface-2);
+  padding: 7px 9px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line);
+}
+
+.eval-bar-track {
+  display: flex;
+  height: 5px;
+  width: 100%;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--surface-3);
+}
+
+.eval-bar-fill {
+  height: 100%;
+  transition: width 0.25s ease-out;
+}
+
+.eval-bar-fill.white {
+  background: #ffffff;
+}
+
+.eval-bar-fill.black {
+  background: #2b2b2b;
+}
+
+.eval-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.eval-verdict-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.material-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 0 5px;
+  border-radius: 3px;
+}
+
+.material-badge.mat-w {
+  background: #ffffff;
+  color: #111111;
+}
+
+.material-badge.mat-b {
+  background: #222222;
+  color: #ffffff;
+  border: 1px solid #444444;
+}
+
 .opening-body {
   padding: 12px;
   display: flex;
@@ -1556,10 +1705,69 @@ function resultHeadline(): string {
   color: var(--ink-3);
 }
 
+/* Ветки теории */
+.continuations-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.continuation-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.cont-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  padding: 2px 7px;
+  border-radius: var(--r-xs);
+  font-size: 11px;
+  cursor: default;
+}
+
+.cont-move {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.cont-var {
+  font-size: 10px;
+  color: var(--ink-3);
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ходы партии */
 .opening-moves-row {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+}
+
+.moves-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.moves-history-box {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  padding: 6px 8px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+  max-height: 90px;
+  overflow-y: auto;
+  word-break: break-word;
 }
 
 .small-label {
@@ -1567,13 +1775,6 @@ function resultHeadline(): string {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-weight: 600;
-}
-
-.moves-text {
-  font-size: 11.5px;
-  color: var(--ink-2);
-  line-height: 1.4;
-  word-break: break-word;
 }
 
 .opening-plan-box {

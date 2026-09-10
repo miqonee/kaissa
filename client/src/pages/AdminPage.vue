@@ -11,14 +11,40 @@ const metrics = ref<PlatformMetrics | null>(null);
 const loading = ref(true);
 const error = ref('');
 const busyId = ref<number | null>(null);
+const isBotMetricsOpen = ref(false);
+const botViewMode = ref<'levels' | 'personalities'>('levels');
 const botTab = ref<'human' | 'bot'>('human');
 
-const currentBotMetrics = computed(() => {
+const currentLevelMetrics = computed(() => {
   if (!metrics.value) return [];
   return botTab.value === 'human'
     ? (metrics.value.botMetricsVsHuman || metrics.value.botMetrics || [])
     : (metrics.value.botMetricsVsBot || []);
 });
+
+const currentPersonalityMetrics = computed(() => {
+  if (!metrics.value) return [];
+  return botTab.value === 'human'
+    ? (metrics.value.personalityMetricsVsHuman || [])
+    : (metrics.value.personalityMetricsVsBot || []);
+});
+
+const topLevel = computed(() => {
+  if (metrics.value?.topLevel) return metrics.value.topLevel;
+  const list = currentLevelMetrics.value.filter((l) => l.totalGames >= 1);
+  if (!list.length) return null;
+  return list.slice().sort((a, b) => b.winRate - a.winRate || b.totalGames - a.totalGames)[0];
+});
+
+const topPersonality = computed(() => {
+  if (metrics.value?.topPersonality) return metrics.value.topPersonality;
+  const list = currentPersonalityMetrics.value.filter((p) => p.totalGames >= 1);
+  if (!list.length) return null;
+  return list.slice().sort((a, b) => b.winRate - a.winRate || b.totalGames - a.totalGames)[0];
+});
+
+const bestPair = computed(() => metrics.value?.bestPair || null);
+const worstPair = computed(() => metrics.value?.worstPair || null);
 
 async function loadData() {
   loading.value = true;
@@ -129,66 +155,215 @@ function fmtDuration(sec: number): string {
         </div>
       </div>
 
-      <!-- Балансировка ботов (5 уровней) -->
-      <div v-if="metrics" class="panel-body bot-metrics-wrap">
-        <div class="metrics-header-row">
-          <h3 class="section-title">Балансировка ИИ-ботов (5 уровней)</h3>
-          <div class="tab-pills">
-            <button
-              type="button"
-              class="tiny pill"
-              :class="{ active: botTab === 'human' }"
-              @click="botTab = 'human'"
-            >
-              Против людей
-            </button>
-            <button
-              type="button"
-              class="tiny pill"
-              :class="{ active: botTab === 'bot' }"
-              @click="botTab = 'bot'"
-            >
-              ИИ vs ИИ (Демо/Тюнинг)
-            </button>
+      <!-- Сворачиваемый блок калибровки и статистики ботов (по умолчанию свернут) -->
+      <div v-if="metrics" class="bot-metrics-panel">
+        <div class="panel-head bot-metrics-head clickable" @click="isBotMetricsOpen = !isBotMetricsOpen">
+          <div class="bot-head-left">
+            <h3>Калибровка и статистика ботов</h3>
+            <span class="hint">12 уровней Stockfish · 12 стилей гроссмейстеров</span>
+            <span v-if="topLevel && !isBotMetricsOpen" class="top-stat-pill mono">
+              Топ: Ур.{{ topLevel.level }} ({{ topLevel.winRate }}% побед)
+            </span>
           </div>
+          <button class="small ghost bot-toggle-btn" type="button" aria-label="Свернуть / развернуть блок">
+            <span>{{ isBotMetricsOpen ? 'Свернуть' : 'Развернуть' }}</span>
+            <AppIcon :name="isBotMetricsOpen ? 'chevron-up' : 'chevron-down'" :size="15" />
+          </button>
         </div>
 
-        <div class="table-wrap">
-          <table class="club">
-            <thead>
-              <tr>
-                <th>Уровень</th>
-                <th>Номинал Elo</th>
-                <th>Игр</th>
-                <th>В / П / Н</th>
-                <th>Win Rate</th>
-                <th>Мат / Флаг / Пат</th>
-                <th>Ср. ходов</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="b in currentBotMetrics" :key="b.level">
-                <td><strong>Ур.{{ b.level }} {{ b.name }}</strong></td>
-                <td class="mono">{{ b.elo }}</td>
-                <td class="mono dim">{{ b.totalGames }}</td>
-                <td class="mono dim">{{ b.wins }} / {{ b.losses }} / {{ b.draws }}</td>
-                <td>
-                  <span
-                    class="badge mono"
-                    :class="{
-                      ok: b.winRate >= 40 && b.winRate <= 60,
-                      danger: b.winRate > 60,
-                      dim: b.winRate < 40,
-                    }"
-                  >
-                    {{ b.winRate }}%
-                  </span>
-                </td>
-                <td class="mono dim">{{ b.checkmateCount }} / {{ b.timeoutCount }} / {{ b.stalemateCount }}</td>
-                <td class="mono dim">{{ b.avgMoves }}</td>
-              </tr>
-            </tbody>
-          </table>
+        <div v-show="isBotMetricsOpen" class="panel-body bot-metrics-wrap">
+          <!-- Карточки ключевых показателей: Топ-уровень, Топ-стиль, Лучший дуэт, Слабейший дуэт -->
+          <div class="bot-highlights-grid">
+            <div class="highlight-card">
+              <div class="hl-head">
+                <AppIcon name="crown" :size="14" />
+                <span class="hl-label">Топ-уровень побед</span>
+              </div>
+              <div v-if="topLevel" class="hl-content">
+                <span class="hl-main">Ур.{{ topLevel.level }} {{ topLevel.name }}</span>
+                <span class="hl-sub mono">{{ topLevel.winRate }}% побед ({{ topLevel.totalGames }} игр) · {{ topLevel.elo }} Elo</span>
+              </div>
+              <div v-else class="hl-empty dim tiny">Нет завершенных игр</div>
+            </div>
+
+            <div class="highlight-card">
+              <div class="hl-head">
+                <AppIcon name="bolt" :size="14" />
+                <span class="hl-label">Самый результативный стиль</span>
+              </div>
+              <div v-if="topPersonality" class="hl-content">
+                <span class="hl-main">{{ topPersonality.name }} · {{ topPersonality.badge }}</span>
+                <span class="hl-sub mono">{{ topPersonality.winRate }}% побед ({{ topPersonality.totalGames }} игр)</span>
+              </div>
+              <div v-else class="hl-empty dim tiny">Нет завершенных игр</div>
+            </div>
+
+            <div class="highlight-card">
+              <div class="hl-head">
+                <AppIcon name="plus" :size="14" />
+                <span class="hl-label">Лучшая синергия (дуэт 2x2)</span>
+              </div>
+              <div v-if="bestPair" class="hl-content">
+                <span class="hl-main">{{ bestPair.bot1Name }} + {{ bestPair.bot2Name }}</span>
+                <span class="hl-sub mono">{{ bestPair.winRate }}% побед ({{ bestPair.totalGames }} партий)</span>
+              </div>
+              <div v-else class="hl-empty dim tiny">Пока недостаточно матчей</div>
+            </div>
+
+            <div class="highlight-card">
+              <div class="hl-head">
+                <AppIcon name="flag" :size="14" />
+                <span class="hl-label">Слабейшая синергия (дуэт 2x2)</span>
+              </div>
+              <div v-if="worstPair && worstPair.pairKey !== bestPair?.pairKey" class="hl-content">
+                <span class="hl-main">{{ worstPair.bot1Name }} + {{ worstPair.bot2Name }}</span>
+                <span class="hl-sub mono">{{ worstPair.winRate }}% побед ({{ worstPair.totalGames }} партий)</span>
+              </div>
+              <div v-else class="hl-empty dim tiny">Пока недостаточно матчей</div>
+            </div>
+          </div>
+
+          <!-- Панель фильтров и переключателей -->
+          <div class="metrics-controls-row">
+            <div class="tab-pills view-mode-pills">
+              <button
+                type="button"
+                class="tiny pill"
+                :class="{ active: botViewMode === 'levels' }"
+                @click="botViewMode = 'levels'"
+              >
+                По уровням силы (12 уровней)
+              </button>
+              <button
+                type="button"
+                class="tiny pill"
+                :class="{ active: botViewMode === 'personalities' }"
+                @click="botViewMode = 'personalities'"
+              >
+                По стилям (12 персоналий)
+              </button>
+            </div>
+
+            <div class="tab-pills opponent-pills">
+              <button
+                type="button"
+                class="tiny pill"
+                :class="{ active: botTab === 'human' }"
+                @click="botTab = 'human'"
+              >
+                Против людей
+              </button>
+              <button
+                type="button"
+                class="tiny pill"
+                :class="{ active: botTab === 'bot' }"
+                @click="botTab = 'bot'"
+              >
+                ИИ vs ИИ (Демо/Тюнинг)
+              </button>
+            </div>
+          </div>
+
+          <!-- Таблица 1: По уровням силы (12 уровней) -->
+          <div v-if="botViewMode === 'levels'" class="table-wrap">
+            <table class="club">
+              <thead>
+                <tr>
+                  <th>Уровень</th>
+                  <th>Номинал Elo</th>
+                  <th>Игр</th>
+                  <th>В / П / Н</th>
+                  <th>Win Rate</th>
+                  <th>Мат / Флаг / Пат</th>
+                  <th>Ср. ходов</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="b in currentLevelMetrics"
+                  :key="b.level"
+                  :class="{ 'highlight-top': topLevel?.level === b.level && b.totalGames >= 1 }"
+                >
+                  <td>
+                    <strong>Ур.{{ b.level }} {{ b.name }}</strong>
+                    <span v-if="topLevel?.level === b.level && b.totalGames >= 1" class="top-tag mono">
+                      Топ
+                    </span>
+                  </td>
+                  <td class="mono">{{ b.elo }}</td>
+                  <td class="mono dim">{{ b.totalGames }}</td>
+                  <td class="mono dim">{{ b.wins }} / {{ b.losses }} / {{ b.draws }}</td>
+                  <td>
+                    <span
+                      class="badge mono"
+                      :class="{
+                        ok: b.winRate >= 45 && b.winRate <= 65,
+                        danger: b.winRate > 65,
+                        dim: b.winRate < 45,
+                      }"
+                    >
+                      {{ b.winRate }}%
+                    </span>
+                  </td>
+                  <td class="mono dim">{{ b.checkmateCount }} / {{ b.timeoutCount }} / {{ b.stalemateCount }}</td>
+                  <td class="mono dim">{{ b.avgMoves }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Таблица 2: По стилям (12 персоналий) -->
+          <div v-else class="table-wrap">
+            <table class="club">
+              <thead>
+                <tr>
+                  <th>Персоналия</th>
+                  <th>Стиль / тактика</th>
+                  <th>Базовый Elo</th>
+                  <th>Игр</th>
+                  <th>В / П / Н</th>
+                  <th>Win Rate</th>
+                  <th>Мат / Флаг / Пат</th>
+                  <th>Ср. ходов</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="p in currentPersonalityMetrics"
+                  :key="p.username"
+                  :class="{ 'highlight-top': topPersonality?.username === p.username && p.totalGames >= 1 }"
+                >
+                  <td>
+                    <strong>{{ p.name }}</strong>
+                    <span class="bot-badge tiny" style="margin-left: 6px;">
+                      {{ p.badge }}
+                    </span>
+                    <span v-if="topPersonality?.username === p.username && p.totalGames >= 1" class="top-tag mono">
+                      Топ
+                    </span>
+                  </td>
+                  <td class="dim tiny">{{ p.description }}</td>
+                  <td class="mono">{{ p.defaultElo }}</td>
+                  <td class="mono dim">{{ p.totalGames }}</td>
+                  <td class="mono dim">{{ p.wins }} / {{ p.losses }} / {{ p.draws }}</td>
+                  <td>
+                    <span
+                      class="badge mono"
+                      :class="{
+                        ok: p.winRate >= 45 && p.winRate <= 65,
+                        danger: p.winRate > 65,
+                        dim: p.winRate < 45,
+                      }"
+                    >
+                      {{ p.winRate }}%
+                    </span>
+                  </td>
+                  <td class="mono dim">{{ p.checkmateCount }} / {{ p.timeoutCount }} / {{ p.stalemateCount }}</td>
+                  <td class="mono dim">{{ p.avgMoves }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -307,9 +482,128 @@ function fmtDuration(sec: number): string {
   color: var(--ink);
 }
 
-.bot-metrics-wrap {
+.bot-metrics-panel {
   border-bottom: 1px solid var(--line);
+}
+
+.bot-metrics-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+
+.bot-metrics-head.clickable {
+  cursor: pointer;
+}
+
+.bot-metrics-head.clickable:hover {
+  background: var(--surface-2);
+}
+
+.bot-head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.top-stat-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.bot-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bot-highlights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.highlight-card {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hl-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+}
+
+.hl-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+}
+
+.hl-main {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+.hl-sub {
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.hl-empty {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+
+.top-tag {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
+  background: var(--accent);
+  color: #000000;
+  margin-left: 6px;
+}
+
+.highlight-top {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.metrics-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.bot-metrics-wrap {
+  border-top: 1px solid var(--line);
   padding: 16px;
+  background: var(--surface);
 }
 
 .section-title {

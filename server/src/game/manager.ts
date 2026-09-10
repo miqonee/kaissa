@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   EndReason,
   GameMode,
+  GameResult,
   GameState,
   LiveGameInfo,
   PieceType,
@@ -17,6 +18,7 @@ import { BughouseGame, type Board, type SideColor } from './bughouse.js';
 import { TeamGame } from './teamGame.js';
 import { clockOnMove, clockSnapshot, initClock, type ClockState } from './clock.js';
 import { chooseBotMove, getBotThinkingDelayMs } from '../ai/engine.js';
+import { botStatsTracker } from '../ai/botStats.js';
 
 // ============================================================
 // GamesManager: активные партии в памяти + запись ходов в БД.
@@ -68,7 +70,7 @@ interface ActiveGame {
   ply: number;
   startedAt: number;
   status: 'active' | 'finished' | 'abandoned';
-  result: '*' | '1-0' | '0-1';
+  result: GameResult;
   reason: EndReason | null;
   disconnected: Set<number>;
   chatIdSeq: number;
@@ -403,14 +405,18 @@ export class GamesManager {
     await this.finish(g, p.team === 1 ? '0-1' : '1-0', 'resign');
   }
 
-  private async finish(g: ActiveGame, result: '1-0' | '0-1' | '*', reason: EndReason): Promise<void> {
+  private async finish(g: ActiveGame, result: GameResult, reason: EndReason): Promise<void> {
     if (g.status !== 'active') return;
     this.cancelBotTimers(g.id);
     g.status = 'finished';
     g.result = result;
     g.reason = reason;
 
-    const isDraw = result === '*';
+    if (g.participants.every((x) => x.isBot)) {
+      botStatsTracker.recordBotGame(g.participants, result, reason, g.ply);
+    }
+
+    const isDraw = result === '*' || result === '1/2-1/2';
     const winnerTeam: Team | null = isDraw ? null : (result === '1-0' ? 1 : 2);
     const winners = winnerTeam ? g.participants.filter((p) => p.team === winnerTeam) : [];
     const losers = winnerTeam ? g.participants.filter((p) => p.team !== winnerTeam) : [];

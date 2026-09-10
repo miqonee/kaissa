@@ -78,7 +78,7 @@ export interface LobbySummary {
 
 export type GameStatus = 'active' | 'finished' | 'abandoned';
 
-export type GameResult = '1-0' | '0-1' | '*' ;
+export type GameResult = '1-0' | '0-1' | '1/2-1/2' | '*';
 
 export type EndReason =
   | 'checkmate'      // мат
@@ -164,6 +164,7 @@ export type ClientToServerEvents = {
 
   // Подписки
   'game:watch': (gameId: number) => void;
+  'game:leave': (gameId: number) => void;
   'live:subscribe': () => void;
   'lobby-list:subscribe': () => void;
 };
@@ -572,6 +573,37 @@ export interface BotLevelMetric {
   avgMoves: number;
 }
 
+export interface BotPersonalityMetric {
+  username: string;
+  name: string;
+  title: string;
+  badge: string;
+  description: string;
+  defaultElo: number;
+  totalGames: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+  checkmateCount: number;
+  timeoutCount: number;
+  stalemateCount: number;
+  avgMoves: number;
+}
+
+export interface BotPairMetric {
+  pairKey: string;
+  bot1Name: string;
+  bot1Badge: string;
+  bot2Name: string;
+  bot2Badge: string;
+  totalGames: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+}
+
 export interface PlatformMetrics {
   onlineUsers: number;
   totalUsers: number;
@@ -581,6 +613,12 @@ export interface PlatformMetrics {
   botMetrics: BotLevelMetric[];
   botMetricsVsHuman: BotLevelMetric[];
   botMetricsVsBot: BotLevelMetric[];
+  personalityMetricsVsHuman: BotPersonalityMetric[];
+  personalityMetricsVsBot: BotPersonalityMetric[];
+  bestPair?: BotPairMetric | null;
+  worstPair?: BotPairMetric | null;
+  topLevel?: { level: number; name: string; elo: number; winRate: number; totalGames: number } | null;
+  topPersonality?: { username: string; name: string; badge: string; winRate: number; totalGames: number } | null;
 }
 
 export * from './openings.js';

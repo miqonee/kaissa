@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { ChatMessage, LobbySummary } from 'shared';
+import type { ChatMessage, LobbySummary, TimeControl } from 'shared';
 import { eloToLevel, getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
 import { getSocket, onSocketResync } from '../api/socket';
 import { useAuthStore } from '../stores/auth';
@@ -33,6 +33,28 @@ const isPausedByMe = computed(() => {
   if (!lobby.value || !auth.user) return false;
   return lobby.value.pausedBy?.includes(auth.user.id) ?? false;
 });
+
+const TC_OPTIONS: { label: string; tc: TimeControl }[] = [
+  { label: '1+0', tc: { kind: 'clock', baseMin: 1, incSec: 0 } },
+  { label: '3+0', tc: { kind: 'clock', baseMin: 3, incSec: 0 } },
+  { label: '3+2', tc: { kind: 'clock', baseMin: 3, incSec: 2 } },
+  { label: '5+0', tc: { kind: 'clock', baseMin: 5, incSec: 0 } },
+  { label: '5+3', tc: { kind: 'clock', baseMin: 5, incSec: 3 } },
+  { label: '10+5', tc: { kind: 'clock', baseMin: 10, incSec: 5 } },
+  { label: 'Без часов', tc: { kind: 'none', baseMin: 0, incSec: 0 } },
+];
+
+function isCurrentTc(tc: TimeControl): boolean {
+  if (!lobby.value) return false;
+  const cur = lobby.value.timeControl;
+  if (cur.kind !== tc.kind) return false;
+  if (cur.kind === 'none') return true;
+  return cur.baseMin === tc.baseMin && cur.incSec === tc.incSec;
+}
+
+function setTimeControl(tc: TimeControl): void {
+  socket.emit('lobby:set-time-control', tc);
+}
 
 const toastText = ref('');
 let toastTimer: number | undefined;
@@ -275,6 +297,23 @@ function modeLabel(m: string): string {
             </div>
           </div>
 
+          <!-- Контроль времени (для хоста обычных столов) -->
+          <div v-if="isHost && !lobby.isAuto" class="tc-selector">
+            <span class="dim tiny">Контроль времени:</span>
+            <div class="tc-pills">
+              <button
+                v-for="preset in TC_OPTIONS"
+                :key="preset.label"
+                type="button"
+                class="tiny pill mono"
+                :class="{ active: isCurrentTc(preset.tc) }"
+                @click="setTimeControl(preset.tc)"
+              >
+                {{ preset.label }}
+              </button>
+            </div>
+          </div>
+
           <div class="slots">
             <div
               v-for="(p, i) in lobby.players"
@@ -407,7 +446,7 @@ function modeLabel(m: string): string {
           @click="setReady"
         >
           <AppIcon v-if="iAmReady" name="check" :size="14" />
-          {{ iAmReady ? 'Я готов' : 'Нажать «Готов»' }}
+          {{ iAmReady ? 'Я готов' : 'Готов' }}
         </button>
 
         <button
@@ -789,11 +828,20 @@ function modeLabel(m: string): string {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
-.team-mode-pills, .team-picker {
+.tc-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.team-mode-pills, .team-picker, .tc-pills {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 

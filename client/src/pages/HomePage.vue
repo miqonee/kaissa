@@ -17,6 +17,21 @@ const liveGames = ref<LiveGameInfo[]>([]);
 
 const autoLobby = computed(() => lobbies.value.find((l) => l.isAuto));
 const userLobbies = computed(() => lobbies.value.filter((l) => !l.isAuto));
+const autoLobbyHumanCount = computed(() => autoLobby.value?.players.filter((p) => !p.isBot).length ?? 0);
+
+const sortedLiveGames = computed(() => {
+  return liveGames.value.slice().sort((a, b) => {
+    // 1. Приоритет партиям с живыми людьми
+    const aHumans = a.players.filter((p) => !p.isBot).length;
+    const bHumans = b.players.filter((p) => !p.isBot).length;
+    if (aHumans !== bHumans) return bHumans - aHumans;
+
+    // 2. Вторичная сортировка: по среднему рейтингу игроков
+    const avgA = a.players.length ? a.players.reduce((s, p) => s + p.rating, 0) / a.players.length : 0;
+    const avgB = b.players.length ? b.players.reduce((s, p) => s + p.rating, 0) / b.players.length : 0;
+    return avgB - avgA;
+  });
+});
 
 const showCreateModal = ref(false);
 const createBusy = ref(false);
@@ -202,13 +217,21 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
         <div class="panel">
           <div class="panel-head">
             <h2>Сейчас в игре</h2>
-            <span class="badge on" v-if="liveGames.length">{{ liveGames.length }} партий</span>
+            <span class="badge on" v-if="sortedLiveGames.length">{{ sortedLiveGames.length }} партий</span>
             <span class="hint" v-else>нет активных</span>
           </div>
 
-          <div class="panel-body live-list" v-if="liveGames.length">
+          <div
+            v-if="sortedLiveGames.length"
+            class="panel-body live-list"
+            :class="{
+              'single-game': sortedLiveGames.length === 1,
+              'multi-games': sortedLiveGames.length >= 2 && sortedLiveGames.length <= 3,
+              'grid-games': sortedLiveGames.length >= 4,
+            }"
+          >
             <article
-              v-for="g in liveGames"
+              v-for="g in sortedLiveGames"
               :key="g.gameId"
               class="live-game"
               @click="router.push(`/game/${g.gameId}`)"
@@ -262,44 +285,37 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
           </div>
 
           <div class="panel-body lobby-rows" v-if="lobbies.length">
-            <!-- Быстрый стол 2х2 (закреплён во главе) -->
+            <!-- Быстрый стол 2х2 (компактная карточка во главе) -->
             <div
               v-if="autoLobby"
-              class="lobby-card auto-lobby-card"
+              class="lobby-card auto-lobby-card compact-card"
               @click="enterLobby(autoLobby)"
             >
               <div class="lobby-card-main">
                 <div class="lobby-title-row">
-                  <span class="lobby-name">{{ autoLobby.name }}</span>
                   <span class="badge auto-chip">
-                    <AppIcon name="bolt" :size="12" /> Быстрый старт
+                    <AppIcon name="bolt" :size="12" /> Быстрый старт 2х2
                   </span>
+                  <span class="badge mono">{{ timeControlLabel(autoLobby.timeControl) }}</span>
+                  <span class="badge">{{ modeLabel(autoLobby.mode) }}</span>
                 </div>
-                <div class="lobby-players">
-                  <span
-                    v-for="p in autoLobby.players"
-                    :key="p.userId"
-                    class="lp"
-                    :class="{ offline: !p.online }"
-                    :title="p.isBot ? getBotTooltip(p.username, p.rating) : undefined"
-                  >
-                    <span class="dot" :class="p.isBot ? 'bot-dot' : 'on'"></span>
-                    {{ p.username }}
-                    <span v-if="p.isBot && getBotPersonality(p.username)" class="bot-badge tiny" style="margin: 0 4px;" :title="getBotTooltip(p.username, p.rating)">
-                      {{ getBotPersonality(p.username)?.badge }}
-                    </span>
-                    <span class="mono dim">({{ p.rating }})</span>
-                  </span>
+                <div class="auto-lobby-desc dim">
+                  Мгновенный матч: боты замещаются входящими игроками
                 </div>
               </div>
 
               <div class="lobby-card-meta">
-                <div class="tags">
-                  <span class="badge">{{ modeLabel(autoLobby.mode) }}</span>
-                  <span class="badge mono">{{ timeControlLabel(autoLobby.timeControl) }}</span>
-                </div>
+                <span class="seats-indicator" :title="`${autoLobbyHumanCount} чел., ${4 - autoLobbyHumanCount} ботов`">
+                  <span
+                    v-for="s in 4"
+                    :key="s"
+                    class="seat-pip"
+                    :class="{ filled: s <= autoLobbyHumanCount, bot: s > autoLobbyHumanCount }"
+                  ></span>
+                  <span class="seats mono">{{ autoLobbyHumanCount }}/4 игроков</span>
+                </span>
                 <button class="brass small" @click.stop="enterLobby(autoLobby)">
-                  <AppIcon name="bolt" :size="14" /> Сесть за стол
+                  <AppIcon name="bolt" :size="13" /> Сесть за стол
                 </button>
               </div>
             </div>
@@ -308,32 +324,21 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
             <div
               v-for="l in userLobbies"
               :key="l.id"
-              class="lobby-card"
+              class="lobby-card compact-card"
               @click="enterLobby(l)"
             >
               <div class="lobby-card-main">
                 <div class="lobby-title-row">
                   <span class="lobby-name">{{ l.name }}</span>
+                  <span class="badge mono">{{ timeControlLabel(l.timeControl) }}</span>
+                  <span class="badge">{{ modeLabel(l.mode) }}</span>
                 </div>
-                <div class="lobby-players">
-                  <span
-                    v-for="p in l.players"
-                    :key="p.userId"
-                    class="lp"
-                    :class="{ offline: !p.online }"
-                  >
-                    <span class="dot" :class="{ on: p.online }"></span>
-                    {{ p.username }}
-                    <span class="mono dim">({{ p.rating }})</span>
-                  </span>
+                <div class="lobby-players-summary dim">
+                  {{ l.players.map((p) => p.username).join(', ') }}
                 </div>
               </div>
 
               <div class="lobby-card-meta">
-                <div class="tags">
-                  <span class="badge">{{ modeLabel(l.mode) }}</span>
-                  <span class="badge mono">{{ timeControlLabel(l.timeControl) }}</span>
-                </div>
                 <span class="seats-indicator" :title="`${l.players.length} из 4 мест занято`">
                   <span
                     v-for="s in 4"
@@ -343,7 +348,7 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
                   ></span>
                   <span class="seats mono">{{ l.players.length }}/4</span>
                 </span>
-                <button class="primary small" @click.stop="enterLobby(l)">Сесть за стол</button>
+                <button class="primary small" @click.stop="enterLobby(l)">Войти</button>
               </div>
             </div>
           </div>
@@ -450,10 +455,10 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
   display: grid;
   grid-template-columns: 1.05fr 1fr;
   gap: 24px;
-  align-items: stretch;
+  align-items: start;
 }
 
-/* Обе колонки визуально завершены: панели растягиваются на высоту сетки */
+/* Колонки сетки */
 .live-col,
 .lobbies-col {
   display: flex;
@@ -482,16 +487,39 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
 
 /* Live-партии */
 .live-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.live-list.single-game .live-boards {
+  max-width: 380px;
+  margin: 0 auto;
+}
+
+.live-list.multi-games {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.live-list.grid-games {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 650px) {
+  .live-list.grid-games {
+    grid-template-columns: 1fr;
+  }
 }
 
 .live-game {
   cursor: pointer;
   border: 1px solid var(--line);
   border-radius: var(--r-m);
-  padding: 14px;
+  padding: 12px 14px;
   background: var(--surface-inset);
   transition: all 0.15s;
 }
@@ -512,11 +540,11 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
 }
 
 .live-meta {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .players-line {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
   display: flex;
   align-items: center;
@@ -559,16 +587,18 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
 .lobby-rows {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px;
+  gap: 8px;
+  padding: 12px;
+  max-height: 520px;
+  overflow-y: auto;
 }
 
 .lobby-card {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  padding: 14px 16px;
+  gap: 12px;
+  padding: 9px 13px;
   border: 1px solid var(--line);
   border-radius: var(--r-m);
   background: var(--surface-inset);
@@ -601,30 +631,25 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
   gap: 4px;
 }
 
+.auto-lobby-desc {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin-top: 1px;
+}
+
+.lobby-players-summary {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
 .bot-dot {
   background: var(--ink-3);
   box-shadow: none;
-}
-
-.lobby-card-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.lobby-title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 6px;
-}
-
-.lobby-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .lobby-players {
@@ -671,6 +696,11 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
 .seat-pip.filled {
   background: var(--ok);
   box-shadow: 0 0 4px color-mix(in srgb, var(--ok) 60%, transparent);
+}
+
+.seat-pip.bot {
+  background: var(--ink-3);
+  box-shadow: none;
 }
 
 .lobby-card-meta {

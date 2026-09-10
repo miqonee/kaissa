@@ -616,6 +616,7 @@ export class GamesManager {
         username: p.username,
         rating: p.ratingBefore,
         team: p.team,
+        isBot: Boolean(p.isBot),
       })),
       fens,
       moveNumber: g.ply,

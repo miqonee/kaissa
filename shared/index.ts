@@ -156,6 +156,7 @@ export type ClientToServerEvents = {
   'lobby:set-team': (team: 1 | 2 | null) => void;
   'lobby:pause-toggle': () => void;
   'lobby:set-team-mode': (mode: TeamMode) => void;
+  'lobby:set-time-control': (tc: TimeControl) => void;
 
   // Игра
   'game:move': (data: { gameId: number; boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: PieceType }, cb: (res: Ack<null>) => void) => void;
@@ -251,7 +252,7 @@ export interface GameState {
 export interface LiveGameInfo {
   gameId: number;
   mode: GameMode;
-  players: { userId: number; username: string; rating: number; team: Team }[];
+  players: { userId: number; username: string; rating: number; team: Team; isBot?: boolean }[];
   fens: string[];
   moveNumber: number;
   startedAt: number;

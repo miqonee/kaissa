@@ -485,6 +485,16 @@ export class LobbiesManager {
     this.broadcastState(lobby);
   }
 
+  setTimeControl(lobbyId: string, uid: number, tc: TimeControl): void {
+    const lobby = this.lobbies.get(lobbyId);
+    if (!lobby || lobby.started || lobby.isAuto) return;
+    const m = lobby.members.get(uid);
+    if (!m?.host) return;
+    lobby.timeControl = tc;
+    this.broadcastState(lobby);
+    this.broadcastList();
+  }
+
   leave(lobbyId: string, uid: number): void {
     const lobby = this.lobbies.get(lobbyId);
     if (!lobby) return;
@@ -704,6 +714,7 @@ export class LobbiesManager {
           botLevel: me.botLevel,
         });
       }
+      this.broadcastList();
       return { lobbyId: existing.id, code: existing.code };
     }
 
@@ -716,7 +727,7 @@ export class LobbiesManager {
         name: `Реванш #${opts.gameId}`,
         mode: opts.mode,
         timeControl: opts.timeControl,
-        private: true,
+        private: false,
         teamMode: opts.teamMode || 'auto',
       },
       {

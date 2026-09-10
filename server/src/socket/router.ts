@@ -124,6 +124,10 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
       if (ctx?.lobbyId) lobbies.setTeamMode(ctx.lobbyId, ctx.uid, mode);
     });
 
+    socket.on('lobby:set-time-control', (tc) => {
+      if (ctx?.lobbyId) lobbies.setTimeControl(ctx.lobbyId, ctx.uid, tc);
+    });
+
     socket.on('lobby:start', async (cb) => {
       if (!ctx?.lobbyId) {
         cb({ ok: false, error: 'Вы не в лобби' });

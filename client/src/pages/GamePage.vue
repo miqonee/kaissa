@@ -731,7 +731,7 @@ function resultHeadline(): string {
                   <span class="queue-name">{{ p.username }}</span>
                   <span v-if="roleOf(p) === 'me'" class="member-role me">Вы</span>
                   <span v-else-if="roleOf(p) === 'partner'" class="member-role partner">Напарник</span>
-                  <span v-if="isPlayerTurn(p.userId)" class="turn-now-chip">СЕЙЧАС ХОД</span>
+                  <span v-if="isPlayerTurn(p.userId)" class="turn-now-chip">ХОД</span>
                 </div>
               </div>
             </div>
@@ -743,7 +743,7 @@ function resultHeadline(): string {
             </div>
 
             <p v-if="currentMover && state.mode === 'team'" class="small-hint dim">
-              Сейчас ход: <strong>{{ currentMover.username }}</strong>
+              Ход: <strong>{{ currentMover.username }}</strong>
             </p>
 
             <p v-if="disconnected.length" class="warn-text">

@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Chess, type Square } from 'chess.js';
 import type { ChatMessage, GameParticipantInfo, GameState, PieceType } from 'shared';
-import { timeControlLabel } from 'shared';
+import { getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
 import { getSocket, onSocketResync } from '../api/socket';
 import { useAuthStore } from '../stores/auth';
 import { api } from '../api/rest';
@@ -529,8 +529,10 @@ function resultHeadline(): string {
                 :class="[roleOf(teamModeSides.top.players[0]), { 'active-turn': isPlayerTurn(teamModeSides.top.players[0].userId) }]"
               >
                 <span class="slot-num mono">1</span>
-                <span class="member-name">{{ teamModeSides.top.players[0].username }}</span>
-                <span v-if="teamModeSides.top.players[0].isBot" class="bot-badge tiny">Бот</span>
+                <span class="member-name" :title="teamModeSides.top.players[0].isBot ? getBotTooltip(teamModeSides.top.players[0].username, teamModeSides.top.players[0].ratingBefore) : undefined">{{ teamModeSides.top.players[0].username }}</span>
+                <span v-if="teamModeSides.top.players[0].isBot" class="bot-badge tiny" :title="getBotTooltip(teamModeSides.top.players[0].username, teamModeSides.top.players[0].ratingBefore)">
+                  {{ getBotPersonality(teamModeSides.top.players[0].username)?.badge ? 'Бот · ' + getBotPersonality(teamModeSides.top.players[0].username)?.badge : 'Бот' }}
+                </span>
                 <span class="member-rating mono">({{ teamModeSides.top.players[0].ratingBefore }})</span>
                 <span v-if="roleOf(teamModeSides.top.players[0]) === 'me'" class="member-role me">Вы</span>
                 <span v-else-if="roleOf(teamModeSides.top.players[0]) === 'partner'" class="member-role partner">Напарник</span>
@@ -553,8 +555,10 @@ function resultHeadline(): string {
                 :class="[roleOf(teamModeSides.top.players[1]), { 'active-turn': isPlayerTurn(teamModeSides.top.players[1].userId) }]"
               >
                 <span class="slot-num mono">2</span>
-                <span class="member-name">{{ teamModeSides.top.players[1].username }}</span>
-                <span v-if="teamModeSides.top.players[1].isBot" class="bot-badge tiny">Бот</span>
+                <span class="member-name" :title="teamModeSides.top.players[1].isBot ? getBotTooltip(teamModeSides.top.players[1].username, teamModeSides.top.players[1].ratingBefore) : undefined">{{ teamModeSides.top.players[1].username }}</span>
+                <span v-if="teamModeSides.top.players[1].isBot" class="bot-badge tiny" :title="getBotTooltip(teamModeSides.top.players[1].username, teamModeSides.top.players[1].ratingBefore)">
+                  {{ getBotPersonality(teamModeSides.top.players[1].username)?.badge ? 'Бот · ' + getBotPersonality(teamModeSides.top.players[1].username)?.badge : 'Бот' }}
+                </span>
                 <span class="member-rating mono">({{ teamModeSides.top.players[1].ratingBefore }})</span>
                 <span v-if="roleOf(teamModeSides.top.players[1]) === 'me'" class="member-role me">Вы</span>
                 <span v-else-if="roleOf(teamModeSides.top.players[1]) === 'partner'" class="member-role partner">Напарник</span>
@@ -591,8 +595,10 @@ function resultHeadline(): string {
                 :class="[roleOf(teamModeSides.bottom.players[0]), { 'active-turn': isPlayerTurn(teamModeSides.bottom.players[0].userId) }]"
               >
                 <span class="slot-num mono">1</span>
-                <span class="member-name">{{ teamModeSides.bottom.players[0].username }}</span>
-                <span v-if="teamModeSides.bottom.players[0].isBot" class="bot-badge tiny">Бот</span>
+                <span class="member-name" :title="teamModeSides.bottom.players[0].isBot ? getBotTooltip(teamModeSides.bottom.players[0].username, teamModeSides.bottom.players[0].ratingBefore) : undefined">{{ teamModeSides.bottom.players[0].username }}</span>
+                <span v-if="teamModeSides.bottom.players[0].isBot" class="bot-badge tiny" :title="getBotTooltip(teamModeSides.bottom.players[0].username, teamModeSides.bottom.players[0].ratingBefore)">
+                  {{ getBotPersonality(teamModeSides.bottom.players[0].username)?.badge ? 'Бот · ' + getBotPersonality(teamModeSides.bottom.players[0].username)?.badge : 'Бот' }}
+                </span>
                 <span class="member-rating mono">({{ teamModeSides.bottom.players[0].ratingBefore }})</span>
                 <span v-if="roleOf(teamModeSides.bottom.players[0]) === 'me'" class="member-role me">Вы</span>
                 <span v-else-if="roleOf(teamModeSides.bottom.players[0]) === 'partner'" class="member-role partner">Напарник</span>
@@ -615,8 +621,10 @@ function resultHeadline(): string {
                 :class="[roleOf(teamModeSides.bottom.players[1]), { 'active-turn': isPlayerTurn(teamModeSides.bottom.players[1].userId) }]"
               >
                 <span class="slot-num mono">2</span>
-                <span class="member-name">{{ teamModeSides.bottom.players[1].username }}</span>
-                <span v-if="teamModeSides.bottom.players[1].isBot" class="bot-badge tiny">Бот</span>
+                <span class="member-name" :title="teamModeSides.bottom.players[1].isBot ? getBotTooltip(teamModeSides.bottom.players[1].username, teamModeSides.bottom.players[1].ratingBefore) : undefined">{{ teamModeSides.bottom.players[1].username }}</span>
+                <span v-if="teamModeSides.bottom.players[1].isBot" class="bot-badge tiny" :title="getBotTooltip(teamModeSides.bottom.players[1].username, teamModeSides.bottom.players[1].ratingBefore)">
+                  {{ getBotPersonality(teamModeSides.bottom.players[1].username)?.badge ? 'Бот · ' + getBotPersonality(teamModeSides.bottom.players[1].username)?.badge : 'Бот' }}
+                </span>
                 <span class="member-rating mono">({{ teamModeSides.bottom.players[1].ratingBefore }})</span>
                 <span v-if="roleOf(teamModeSides.bottom.players[1]) === 'me'" class="member-role me">Вы</span>
                 <span v-else-if="roleOf(teamModeSides.bottom.players[1]) === 'partner'" class="member-role partner">Напарник</span>
@@ -825,8 +833,10 @@ function resultHeadline(): string {
             <tbody>
               <tr v-for="p in state.participants" :key="p.userId">
                 <td>
-                  <strong class="player-name">{{ p.username }}</strong>
-                  <span v-if="p.isBot" class="bot-badge tiny" style="margin-left: 6px;">Бот</span>
+                  <strong class="player-name" :title="p.isBot ? getBotTooltip(p.username, p.ratingBefore) : undefined">{{ p.username }}</strong>
+                  <span v-if="p.isBot" class="bot-badge tiny" style="margin-left: 6px;" :title="getBotTooltip(p.username, p.ratingBefore)">
+                    {{ getBotPersonality(p.username)?.badge ? 'Бот · ' + getBotPersonality(p.username)?.badge : 'Бот' }}
+                  </span>
                 </td>
                 <td class="dim">Команда {{ p.team }} ({{ p.color === 'w' ? 'белые' : 'черные' }})</td>
                 <td class="mono dim num">{{ p.ratingBefore }}</td>

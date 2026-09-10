@@ -1,7 +1,18 @@
 // server/src/ai/engine.ts
-// Главный интерфейс шахматного ИИ для 5 уровней сложности
-import { Chess, type PieceSymbol } from 'chess.js';
-import { BOT_PRESETS, type BotConfig, type PieceType } from 'shared';
+// Шахматный ИИ на базе Stockfish WASM, 12 стилей персоналий и рандомизатора дебютов
+import { Chess } from 'chess.js';
+import {
+  BOT_LEVELS,
+  BOT_PRESETS,
+  eloToLevel,
+  getBotPersonality,
+  levelToElo,
+  type BotConfig,
+  type PieceType,
+} from 'shared';
+import { stockfish } from './stockfish.js';
+import { selectMoveByPersonality } from './personalities.js';
+import { getOpeningBookMove } from './openings.js';
 import { searchBestMoves } from './minimax.js';
 
 export interface BotDecision {
@@ -9,13 +20,20 @@ export interface BotDecision {
   to: string;
   promotion?: PieceType;
   san: string;
+  score?: number;
+}
+
+export interface BotSearchSpec {
+  username?: string;
+  elo?: number;
+  level?: number;
 }
 
 export function getBotConfig(levelOrUsername: number | string): BotConfig {
   if (typeof levelOrUsername === 'number') {
-    return BOT_PRESETS.find((b) => b.level === levelOrUsername) || BOT_PRESETS[1];
+    return BOT_PRESETS.find((b) => b.level === levelOrUsername) || BOT_PRESETS[0];
   }
-  return BOT_PRESETS.find((b) => b.username === levelOrUsername) || BOT_PRESETS[1];
+  return BOT_PRESETS.find((b) => b.username === levelOrUsername) || BOT_PRESETS[0];
 }
 
 /**
@@ -26,56 +44,123 @@ export function getBotThinkingDelayMs(): number {
 }
 
 /**
- * Выбор хода ботом по уровню сложности с учётом вероятности зевка.
+ * Выбор хода ботом с учетом Stockfish WASM, стиля персоналии, динамического Elo и дебютной книги.
  */
-export function chooseBotMove(
+export async function chooseBotMove(
   fen: string,
-  level = 2,
-  gameErrorJitter?: number,
-): BotDecision | null {
-  const cfg = getBotConfig(level);
+  botSpec?: number | string | BotSearchSpec,
+  _gameErrorJitter?: number,
+): Promise<BotDecision | null> {
   const chess = new Chess(fen);
   if (chess.isGameOver()) return null;
 
-  const jitter = gameErrorJitter ?? (Math.random() * 2 - 1) * cfg.errorJitter;
-  const errorRate = Math.max(0.01, Math.min(0.5, cfg.errorRate + jitter));
+  let username = 'bot_tal';
+  let elo = 1200;
+  let level = 4;
 
-  // Поиск ходов
-  const scored = searchBestMoves(chess, cfg.depth, 80);
-  if (!scored.length) return null;
-
-  let chosenIndex = 0;
-
-  // Механика ошибок: контролируемые неточности вместо слепого хаоса
-  const isMate = Math.abs(scored[0].score) >= 90000;
-  if (!isMate && Math.random() < errorRate && scored.length > 1) {
-    const isWhite = chess.turn() === 'w';
-    const bestScore = scored[0].score;
-
-    // Допустимый коридор неточности (cp) в зависимости от уровня
-    const maxDeltaByLevel = [0, 250, 180, 120, 75, 40];
-    const maxDelta = maxDeltaByLevel[cfg.level] ?? 150;
-
-    const acceptableMoves: number[] = [];
-    for (let i = 1; i < scored.length; i++) {
-      const delta = isWhite ? (bestScore - scored[i].score) : (scored[i].score - bestScore);
-      if (delta > 0 && delta <= maxDelta) {
-        acceptableMoves.push(i);
-      }
+  if (typeof botSpec === 'number') {
+    level = Math.max(1, Math.min(12, botSpec));
+    elo = levelToElo(level);
+    const preset = BOT_PRESETS.find((b) => b.level === level);
+    if (preset) username = preset.username;
+  } else if (typeof botSpec === 'string') {
+    username = botSpec;
+    const personality = getBotPersonality(username);
+    if (personality) {
+      elo = personality.defaultElo;
+      level = eloToLevel(elo);
     }
-
-    if (acceptableMoves.length > 0) {
-      chosenIndex = acceptableMoves[Math.floor(Math.random() * acceptableMoves.length)];
+  } else if (botSpec && typeof botSpec === 'object') {
+    if (botSpec.username) username = botSpec.username;
+    if (botSpec.elo !== undefined) {
+      elo = botSpec.elo;
+      level = eloToLevel(elo);
+    } else if (botSpec.level !== undefined) {
+      level = botSpec.level;
+      elo = levelToElo(level);
+    } else {
+      const personality = getBotPersonality(username);
+      if (personality) {
+        elo = personality.defaultElo;
+        level = eloToLevel(elo);
+      }
     }
   }
 
-  const best = scored[chosenIndex] || scored[0];
-  const m = best.move;
+  // 1. Проверка дебютной книги на первых ходах
+  const bookMove = getOpeningBookMove(fen, username);
+  if (bookMove) {
+    return bookMove;
+  }
 
-  return {
-    from: m.from,
-    to: m.to,
-    promotion: (m.promotion as PieceType) || (m.flags.includes('p') ? 'q' : undefined),
-    san: m.san,
-  };
+  // 2. Расчет ходов через Stockfish WASM
+  const levelCfg = BOT_LEVELS[level - 1] || BOT_LEVELS[3]; // default level 4
+  const depth = levelCfg.depth;
+  const skillLevel = levelCfg.skillLevel;
+  const multiPv = 3;
+
+  try {
+    const searchRes = await stockfish.search(fen, {
+      elo,
+      skillLevel,
+      depth,
+      multiPv,
+    });
+
+    if (searchRes.candidates.length > 0) {
+      const decision = selectMoveByPersonality(fen, searchRes.candidates, username, elo);
+      if (decision) {
+        return {
+          from: decision.from,
+          to: decision.to,
+          promotion: decision.promotion,
+          san: decision.san,
+          score: decision.score,
+        };
+      }
+    }
+
+    // Fallback к bestmove Stockfish
+    if (searchRes.bestmove && searchRes.bestmove !== '(none)') {
+      const from = searchRes.bestmove.slice(0, 2);
+      const to = searchRes.bestmove.slice(2, 4);
+      const promotion = searchRes.bestmove.length > 4 ? (searchRes.bestmove[4].toLowerCase() as PieceType) : undefined;
+      const res = chess.move({ from, to, promotion });
+      if (res) {
+        return { from, to, promotion, san: res.san };
+      }
+    }
+  } catch (err) {
+    console.warn('[AI] Stockfish WASM error, falling back to local search:', err);
+  }
+
+  // 3. Аварийный fallback (Minimax) на случай непредвиденных сбоев
+  try {
+    const scored = searchBestMoves(chess, 2, 80);
+    if (scored.length > 0) {
+      const m = scored[0].move;
+      return {
+        from: m.from,
+        to: m.to,
+        promotion: (m.promotion as PieceType) || (m.flags.includes('p') ? 'q' : undefined),
+        san: m.san,
+      };
+    }
+  } catch {
+    // ignore
+  }
+
+  // 4. Крайний fallback: любой легальный ход
+  const legalMoves = chess.moves({ verbose: true });
+  if (legalMoves.length > 0) {
+    const m = legalMoves[Math.floor(Math.random() * legalMoves.length)];
+    return {
+      from: m.from,
+      to: m.to,
+      promotion: m.promotion as PieceType,
+      san: m.san,
+    };
+  }
+
+  return null;
 }

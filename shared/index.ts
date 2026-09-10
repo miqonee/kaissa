@@ -350,8 +350,191 @@ export const MODE_INFO: ModeInfo[] = [
 
 // ---------- Боты и ИИ ----------
 
+export interface BotPersonality {
+  id: string;
+  username: string;
+  name: string;
+  title: string;
+  badge: string;
+  description: string;
+  defaultElo: number;
+  openingsPreference: string[];
+}
+
+export const BOT_PERSONALITIES: Record<string, BotPersonality> = {
+  bot_tal: {
+    id: 'tal',
+    username: 'bot_tal',
+    name: 'Михаил Таль',
+    title: 'Атакующий романтик',
+    badge: 'Романтик',
+    description: 'жертвы за инициативу, шахи, вскрытие короля',
+    defaultElo: 1550,
+    openingsPreference: ['e4', 'c5', 'f4', 'd4'],
+  },
+  bot_karpov: {
+    id: 'karpov',
+    username: 'bot_karpov',
+    name: 'Анатолий Карпов',
+    title: 'Позиционный стратег',
+    badge: 'Стратег',
+    description: 'позиционное удушение, профилактика, захват линий',
+    defaultElo: 1450,
+    openingsPreference: ['d4', 'c6', 'e6', 'c4'],
+  },
+  bot_kasparov: {
+    id: 'kasparov',
+    username: 'bot_kasparov',
+    name: 'Гарри Каспаров',
+    title: 'Динамический напор',
+    badge: 'Динамика',
+    description: 'темповая игра, захват центра, агрессивное давление',
+    defaultElo: 1600,
+    openingsPreference: ['e4', 'd4', 'c5', 'Nf6'],
+  },
+  bot_petrosian: {
+    id: 'petrosian',
+    username: 'bot_petrosian',
+    name: 'Тигран Петросян',
+    title: 'Железная крепость',
+    badge: 'Крепость',
+    description: 'глубокая профилактика, плотная защита, выжидание ошибки',
+    defaultElo: 1300,
+    openingsPreference: ['d4', 'c6', 'e6', 'Nf3'],
+  },
+  bot_capablanca: {
+    id: 'capablanca',
+    username: 'bot_capablanca',
+    name: 'Хосе Капабланка',
+    title: 'Чистый классик',
+    badge: 'Классик',
+    description: 'кристально чистые размены, образцовый переход в эндшпиль',
+    defaultElo: 1200,
+    openingsPreference: ['d4', 'e4', 'e5', 'd5'],
+  },
+  bot_morphy: {
+    id: 'morphy',
+    username: 'bot_morphy',
+    name: 'Пол Морфи',
+    title: 'Гамбитный гений',
+    badge: 'Гамбит',
+    description: 'быстрейшее развитие фигур, жертвы пешек, открытые диагонали',
+    defaultElo: 750,
+    openingsPreference: ['e4', 'e5', 'Bc4', 'f4'],
+  },
+  bot_fischer: {
+    id: 'fischer',
+    username: 'bot_fischer',
+    name: 'Бобби Фишер',
+    title: 'Бескомпромиссная точность',
+    badge: 'Точность',
+    description: 'классические ветки, острейшая тактика и безупречная техника',
+    defaultElo: 1650,
+    openingsPreference: ['e4', 'c5', 'Nf6', 'e5'],
+  },
+  bot_spassky: {
+    id: 'spassky',
+    username: 'bot_spassky',
+    name: 'Борис Спасский',
+    title: 'Универсал',
+    badge: 'Универсал',
+    description: 'гибкий баланс атаки и позиционной игры',
+    defaultElo: 1000,
+    openingsPreference: ['e4', 'd4', 'c5', 'e5'],
+  },
+  bot_aljechin: {
+    id: 'aljechin',
+    username: 'bot_aljechin',
+    name: 'Александр Алехин',
+    title: 'Комбинационный вихрь',
+    badge: 'Вихрь',
+    description: 'глубокие многоходовые комбинации, атака на двух флангах',
+    defaultElo: 1500,
+    openingsPreference: ['d4', 'e4', 'Nf6', 'c4'],
+  },
+  bot_carlsen: {
+    id: 'carlsen',
+    username: 'bot_carlsen',
+    name: 'Магнус Карлсен',
+    title: 'Эндшпильный эвапоратор',
+    badge: 'Эндшпиль',
+    description: 'игра на микро-плюсы, позиционное выжимание в равных позициях',
+    defaultElo: 1750,
+    openingsPreference: ['d4', 'Nf3', 'c5', 'e4'],
+  },
+  bot_botvinnik: {
+    id: 'botvinnik',
+    username: 'bot_botvinnik',
+    name: 'Михаил Ботвинник',
+    title: 'Железная логика',
+    badge: 'Логика',
+    description: 'фундаментальный пешечный центр, методичный расчёт',
+    defaultElo: 1400,
+    openingsPreference: ['d4', 'c4', 'd5', 'e6'],
+  },
+  bot_nakamura: {
+    id: 'nakamura',
+    username: 'bot_nakamura',
+    name: 'Хикару Накамура',
+    title: 'Блиц-провокатор',
+    badge: 'Провокатор',
+    description: 'острые провокационные выпады, нестандартные ловушки',
+    defaultElo: 1580,
+    openingsPreference: ['e4', 'c5', 'b3', 'Nf3'],
+  },
+};
+
+export interface BotLevelConfig {
+  level: number;
+  name: string;
+  minElo: number;
+  maxElo: number;
+  nominalElo: number;
+  skillLevel: number; // Stockfish Skill Level 0..20
+  depth: number;
+}
+
+export const BOT_LEVELS: BotLevelConfig[] = [
+  { level: 1, name: 'Начинающий', minElo: 0, maxElo: 699, nominalElo: 600, skillLevel: 0, depth: 3 },
+  { level: 2, name: 'Младший любитель', minElo: 700, maxElo: 899, nominalElo: 800, skillLevel: 2, depth: 4 },
+  { level: 3, name: 'Любитель', minElo: 900, maxElo: 1074, nominalElo: 1000, skillLevel: 4, depth: 5 },
+  { level: 4, name: 'Клубный любитель', minElo: 1075, maxElo: 1249, nominalElo: 1150, skillLevel: 6, depth: 6 },
+  { level: 5, name: '3-й разряд', minElo: 1250, maxElo: 1424, nominalElo: 1350, skillLevel: 8, depth: 7 },
+  { level: 6, name: '2-й разряд', minElo: 1425, maxElo: 1574, nominalElo: 1500, skillLevel: 10, depth: 8 },
+  { level: 7, name: '1-й разряд', minElo: 1575, maxElo: 1724, nominalElo: 1650, skillLevel: 12, depth: 9 },
+  { level: 8, name: 'Сильный 1-й разряд', minElo: 1725, maxElo: 1874, nominalElo: 1800, skillLevel: 14, depth: 10 },
+  { level: 9, name: 'Кандидат в мастера', minElo: 1875, maxElo: 2024, nominalElo: 1950, skillLevel: 16, depth: 11 },
+  { level: 10, name: 'Мастер FIDE', minElo: 2025, maxElo: 2199, nominalElo: 2100, skillLevel: 18, depth: 12 },
+  { level: 11, name: 'Международный мастер', minElo: 2200, maxElo: 2399, nominalElo: 2300, skillLevel: 19, depth: 13 },
+  { level: 12, name: 'Гроссмейстер', minElo: 2400, maxElo: 9999, nominalElo: 2500, skillLevel: 20, depth: 14 },
+];
+
+export function eloToLevel(elo: number): number {
+  const found = BOT_LEVELS.find((l) => elo >= l.minElo && elo <= l.maxElo);
+  return found ? found.level : (elo < 700 ? 1 : 12);
+}
+
+export function levelToElo(level: number): number {
+  const found = BOT_LEVELS.find((l) => l.level === level);
+  return found ? found.nominalElo : 1150;
+}
+
+export function getBotPersonality(usernameOrId?: string | null): BotPersonality | undefined {
+  if (!usernameOrId) return undefined;
+  const key = usernameOrId.trim().toLowerCase();
+  return BOT_PERSONALITIES[key] || Object.values(BOT_PERSONALITIES).find((p) => p.id === key || p.username.toLowerCase() === key);
+}
+
+export function getBotTooltip(usernameOrId?: string | null, elo?: number | null): string {
+  const p = getBotPersonality(usernameOrId);
+  const currentElo = elo ?? (p ? p.defaultElo : 1150);
+  const level = eloToLevel(currentElo);
+  if (!p) return `Шахматный бот (Ур.${level} · ${currentElo} Elo)`;
+  return `${p.username}: ${p.name} · ${p.title} — ${p.description} (Ур.${level} · ${currentElo} Elo)`;
+}
+
 export interface BotConfig {
-  level: number; // 1 to 5
+  level: number; // 1 to 12
   name: string;
   username: string;
   elo: number;
@@ -360,13 +543,15 @@ export interface BotConfig {
   errorJitter: number; // разброс ошибки (+- на партию)
 }
 
-export const BOT_PRESETS: BotConfig[] = [
-  { level: 1, name: 'Новичок', username: 'bot_novice', elo: 500, depth: 2, errorRate: 0.24, errorJitter: 0.05 },
-  { level: 2, name: 'Любитель', username: 'bot_amateur', elo: 800, depth: 3, errorRate: 0.16, errorJitter: 0.06 },
-  { level: 3, name: 'Клубный', username: 'bot_club', elo: 1050, depth: 3, errorRate: 0.10, errorJitter: 0.04 },
-  { level: 4, name: 'Опытный', username: 'bot_expert', elo: 1300, depth: 4, errorRate: 0.06, errorJitter: 0.04 },
-  { level: 5, name: 'Мастер', username: 'bot_master', elo: 1600, depth: 5, errorRate: 0.03, errorJitter: 0.02 },
-];
+export const BOT_PRESETS: BotConfig[] = Object.values(BOT_PERSONALITIES).map((p) => ({
+  level: eloToLevel(p.defaultElo),
+  name: p.name,
+  username: p.username,
+  elo: p.defaultElo,
+  depth: BOT_LEVELS[eloToLevel(p.defaultElo) - 1]?.depth || 6,
+  errorRate: 0.05,
+  errorJitter: 0.02,
+}));
 
 // ---------- Метрики платформы и ботов (Админка) ----------
 

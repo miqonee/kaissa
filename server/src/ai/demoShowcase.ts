@@ -1,5 +1,6 @@
 // server/src/ai/demoShowcase.ts
 // Фоновая демо-витрина партий ботов на главной странице (in-memory TV с ID 1 и 2)
+import { eloToLevel } from 'shared';
 import { prisma } from '../prisma.js';
 import type { GamesManager } from '../game/manager.js';
 
@@ -85,17 +86,51 @@ export class DemoShowcase {
       });
       if (bots.length < 4) return;
 
-      // Выбираем 4 ботов из всех доступных уровней (перемешиваем все уровни)
+      // Выбираем 4 случайных ботов из всех доступных персоналий
       const shuffled = bots.slice().sort(() => Math.random() - 0.5);
       const chosen = shuffled.slice(0, 4);
 
-      const members = chosen.map((b) => ({
-        uid: b.id,
-        username: b.username,
-        rating: b.rating,
-        isBot: true,
-        botLevel: b.botLevel,
-      }));
+      // Выбор формата партии: High-Elo (40%), Контрастный дуэт (35%), Клубный уровень (25%)
+      const roll = Math.random();
+      let ratings: number[];
+
+      if (roll < 0.40) {
+        // High-Elo стол гроссмейстеров (2100 - 2550 Elo, Ур. 10 - 12)
+        const base = Math.floor(2150 + Math.random() * 350);
+        ratings = [
+          base + Math.floor(Math.random() * 80 - 40),
+          base + Math.floor(Math.random() * 80 - 40),
+          base + Math.floor(Math.random() * 80 - 40),
+          base + Math.floor(Math.random() * 80 - 40),
+        ];
+      } else if (roll < 0.75) {
+        // Контрастный дуэт: мастер (1950 - 2350) + любитель (750 - 1100)
+        const highA = Math.floor(2000 + Math.random() * 300);
+        const lowA = Math.floor(800 + Math.random() * 250);
+        const highB = highA + Math.floor(Math.random() * 60 - 30);
+        const lowB = lowA + (highA - highB);
+        ratings = [highA, lowA, highB, lowB];
+      } else {
+        // Клубный уровень (1150 - 1500 Elo, Ур. 4 - 6)
+        const base = Math.floor(1200 + Math.random() * 250);
+        ratings = [
+          base + Math.floor(Math.random() * 100 - 50),
+          base + Math.floor(Math.random() * 100 - 50),
+          base + Math.floor(Math.random() * 100 - 50),
+          base + Math.floor(Math.random() * 100 - 50),
+        ];
+      }
+
+      const members = chosen.map((b, idx) => {
+        const rating = Math.max(500, ratings[idx]);
+        return {
+          uid: b.id,
+          username: b.username,
+          rating,
+          isBot: true,
+          botLevel: eloToLevel(rating),
+        };
+      });
 
       // Находим разбиение 4 ботов на 2 команды с минимальной разницей суммарного Elo
       const combos = [
@@ -137,7 +172,8 @@ export class DemoShowcase {
         this.games!.broadcastNextDemo(prevGameId, gameId);
       }
 
-      console.log(`[demo] Запущена демонстрационная партия #${gameId} (in-memory TV)`);
+      const avgElo = Math.round((team1[0].rating + team1[1].rating + team2[0].rating + team2[1].rating) / 4);
+      console.log(`[demo] Запущена демонстрационная партия #${gameId} (in-memory TV, средний Elo: ${avgElo})`);
     } catch (e) {
       console.error('[demo] Ошибка старта демонстрационной партии:', e);
     }

@@ -181,4 +181,46 @@ describe('Auto Lobby and Team Modes', () => {
     mgr.setTeamChoice(lobby.id, 3, 1);
     expect(lobby.members.get(3)?.teamChoice).toBe(1);
   });
+
+  it('adaptAutoLobbyRatings dynamically scales bot Elo to human player', () => {
+    const mgr = new LobbiesManager();
+    const lobby = new Lobby(
+      {
+        id: 'AUTO_ADAPT',
+        code: 'ADAPT1',
+        name: 'Быстрый стол 2х2',
+        mode: 'team',
+        timeControl: { kind: 'clock', baseMin: 3, incSec: 0 },
+        private: false,
+        teamMode: 'auto',
+      },
+      { uid: 1, username: 'b1', rating: 1200, ready: true, host: true, joinedAt: Date.now(), isBot: true, botLevel: 4 },
+    );
+    lobby.isAuto = true;
+    lobby.members.set(2, { uid: 2, username: 'b2', rating: 1200, ready: true, host: false, joinedAt: Date.now(), isBot: true, botLevel: 4 });
+    lobby.members.set(3, { uid: 3, username: 'b3', rating: 1200, ready: true, host: false, joinedAt: Date.now(), isBot: true, botLevel: 4 });
+    lobby.members.set(4, { uid: 4, username: 'b4', rating: 1200, ready: true, host: false, joinedAt: Date.now(), isBot: true, botLevel: 4 });
+
+    // Human with 800 Elo enters -> displaces b1
+    mgr.join(lobby, { uid: 99, username: 'human800', rating: 800, isBot: false });
+
+    const remainingBots = [...lobby.members.values()].filter(m => m.isBot);
+    expect(remainingBots.length).toBe(3);
+
+    // Each bot should have adapted to ~800 Elo (within +-150)
+    for (const b of remainingBots) {
+      expect(b.rating).toBeGreaterThanOrEqual(600);
+      expect(b.rating).toBeLessThanOrEqual(1050);
+      expect(b.botLevel).toBeDefined();
+    }
+
+    // Second human with 1400 Elo enters -> displaces another bot
+    mgr.join(lobby, { uid: 100, username: 'human1400', rating: 1400, isBot: false });
+    const botsAfterTwo = [...lobby.members.values()].filter(m => m.isBot);
+    expect(botsAfterTwo.length).toBe(2);
+
+    // Bot ratings should be adapted to balance 1400 vs 800
+    const [botHigh, botLow] = botsAfterTwo.slice().sort((a, b) => b.rating - a.rating);
+    expect(botHigh.rating).toBeGreaterThan(botLow.rating);
+  });
 });

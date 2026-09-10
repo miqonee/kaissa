@@ -121,7 +121,11 @@ export class GamesManager {
         if (curState.turnUserIds[b] !== participant.uid) return;
 
         const fen = curState.fens[b];
-        const move = chooseBotMove(fen, participant.botLevel || 2, participant.botJitter);
+        const move = await chooseBotMove(fen, {
+          username: participant.username,
+          elo: participant.ratingBefore,
+          level: participant.botLevel ?? undefined,
+        }, participant.botJitter);
         if (!move) return;
 
         await this.applyMove(gameId, participant.uid, {

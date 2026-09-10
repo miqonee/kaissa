@@ -10,6 +10,7 @@ import type {
   TeamMode,
   TimeControl,
 } from 'shared';
+import { eloToLevel } from 'shared';
 import { presence } from '../socket/presence.js';
 import { prisma } from '../prisma.js';
 import type { GamesManager } from '../game/manager.js';
@@ -131,14 +132,17 @@ export class LobbiesManager {
 
     const botUsers = await prisma.user.findMany({
       where: { isBot: true },
-      take: 4,
-      orderBy: { botLevel: 'asc' },
     });
     if (botUsers.length < 4) return;
 
+    // Перемешиваем и выбираем 4 разных ботов
+    const shuffled = botUsers.slice().sort(() => Math.random() - 0.5);
+    const chosen = shuffled.slice(0, 4);
+
     const id = `AUTO_${this.idSeq++}`;
     const code = genCode();
-    const host = botUsers[0];
+    const host = chosen[0];
+    const baseElo = 1150;
 
     const lobby = new Lobby(
       {
@@ -153,27 +157,28 @@ export class LobbiesManager {
       {
         uid: host.id,
         username: host.username,
-        rating: host.rating,
+        rating: baseElo,
         ready: true,
         host: true,
         joinedAt: Date.now(),
         isBot: true,
-        botLevel: host.botLevel,
+        botLevel: eloToLevel(baseElo),
       },
     );
     lobby.isAuto = true;
 
     for (let i = 1; i < 4; i++) {
-      const b = botUsers[i];
+      const b = chosen[i];
+      const botElo = baseElo + Math.floor(Math.random() * 80 - 40);
       lobby.members.set(b.id, {
         uid: b.id,
         username: b.username,
-        rating: b.rating,
+        rating: botElo,
         ready: true,
         host: false,
         joinedAt: Date.now(),
         isBot: true,
-        botLevel: b.botLevel,
+        botLevel: eloToLevel(botElo),
       });
     }
 
@@ -181,14 +186,85 @@ export class LobbiesManager {
     this.broadcastList();
   }
 
+  adaptAutoLobbyRatings(lobby: Lobby): void {
+    if (!lobby.isAuto || lobby.started) return;
+
+    const humans = [...lobby.members.values()].filter((m) => !m.isBot);
+    const bots = [...lobby.members.values()].filter((m) => m.isBot);
+    if (!bots.length) return;
+
+    if (humans.length === 0) {
+      // Нет людей — комфортный клубный рейтинг ~1150-1200
+      for (const b of bots) {
+        const jitter = Math.floor(Math.random() * 80 - 40);
+        b.rating = 1150 + jitter;
+        b.botLevel = eloToLevel(b.rating);
+      }
+      return;
+    }
+
+    if (humans.length === 1) {
+      const hElo = humans[0].rating;
+      // 3 бота: напарник и 2 соперника с естественным разбросом +-50..150 Elo
+      const delta1 = Math.floor(Math.random() * 200 - 120); // partner
+      const delta2 = Math.floor(Math.random() * 210 - 80);  // opp1
+      const rPartner = Math.max(500, hElo + delta1);
+      const rOpp1 = Math.max(500, hElo + delta2);
+      // opp2 balances teams: (hElo + rPartner) - rOpp1
+      const rOpp2 = Math.max(500, hElo + rPartner - rOpp1);
+
+      if (bots.length >= 3) {
+        bots[0].rating = rPartner;
+        bots[0].botLevel = eloToLevel(rPartner);
+
+        bots[1].rating = rOpp1;
+        bots[1].botLevel = eloToLevel(rOpp1);
+
+        bots[2].rating = rOpp2;
+        bots[2].botLevel = eloToLevel(rOpp2);
+      } else {
+        for (const b of bots) {
+          const spread = Math.floor(Math.random() * 200 - 100);
+          b.rating = Math.max(500, hElo + spread);
+          b.botLevel = eloToLevel(b.rating);
+        }
+      }
+      return;
+    }
+
+    if (humans.length === 2) {
+      const [hA, hB] = humans.slice().sort((a, b) => b.rating - a.rating);
+      // hA (выше) играет в команде с более слабым ботом, hB (ниже) с более сильным
+      const jitterA = Math.floor(Math.random() * 60 - 30);
+      const jitterB = Math.floor(Math.random() * 60 - 30);
+      const rBotA = Math.max(500, hA.rating + jitterA);
+      const rBotB = Math.max(500, hB.rating + jitterB);
+
+      if (bots.length >= 2) {
+        bots[0].rating = rBotA;
+        bots[0].botLevel = eloToLevel(rBotA);
+
+        bots[1].rating = rBotB;
+        bots[1].botLevel = eloToLevel(rBotB);
+      }
+      return;
+    }
+
+    if (humans.length === 3) {
+      const sorted = humans.slice().sort((a, b) => b.rating - a.rating);
+      const targetBotElo = Math.max(500, sorted[1].rating + sorted[2].rating - sorted[0].rating);
+      bots[0].rating = targetBotElo;
+      bots[0].botLevel = eloToLevel(targetBotElo);
+    }
+  }
+
   async refillAutoBots(lobby: Lobby): Promise<void> {
     if (!lobby.isAuto || lobby.started) return;
     const botUsers = await prisma.user.findMany({
       where: { isBot: true },
-      take: 5,
-      orderBy: { botLevel: 'asc' },
     });
-    for (const b of botUsers) {
+    const shuffled = botUsers.slice().sort(() => Math.random() - 0.5);
+    for (const b of shuffled) {
       if (lobby.members.size >= MAX_SLOTS) break;
       if (!lobby.members.has(b.id)) {
         lobby.members.set(b.id, {
@@ -199,10 +275,11 @@ export class LobbiesManager {
           host: lobby.members.size === 0,
           joinedAt: Date.now(),
           isBot: true,
-          botLevel: b.botLevel,
+          botLevel: eloToLevel(b.rating),
         });
       }
     }
+    this.adaptAutoLobbyRatings(lobby);
     this.broadcastState(lobby);
     this.broadcastList();
   }
@@ -299,8 +376,11 @@ export class LobbiesManager {
       botLevel: member.botLevel,
     });
 
-    if (lobby.isAuto && !member.isBot) {
-      this.resetAutoCountdown(lobby);
+    if (lobby.isAuto) {
+      this.adaptAutoLobbyRatings(lobby);
+      if (!member.isBot) {
+        this.resetAutoCountdown(lobby);
+      }
     }
 
     this.broadcastState(lobby);
@@ -571,14 +651,14 @@ export class LobbiesManager {
         username: m.username,
         rating: m.rating,
         isBot: m.isBot,
-        botLevel: m.botLevel,
+        botLevel: m.isBot ? eloToLevel(m.rating) : m.botLevel,
       })),
       team2: team2.map((m) => ({
         uid: m.uid,
         username: m.username,
         rating: m.rating,
         isBot: m.isBot,
-        botLevel: m.botLevel,
+        botLevel: m.isBot ? eloToLevel(m.rating) : m.botLevel,
       })),
     });
 

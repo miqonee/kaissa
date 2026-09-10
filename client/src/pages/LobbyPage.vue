@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { ChatMessage, LobbySummary } from 'shared';
-import { timeControlLabel } from 'shared';
+import { eloToLevel, getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
 import { getSocket, onSocketResync } from '../api/socket';
 import { useAuthStore } from '../stores/auth';
 import AppIcon from '../components/AppIcon.vue';
@@ -288,9 +288,9 @@ function modeLabel(m: string): string {
               </div>
               <div class="slot-info">
                 <div class="slot-name-row">
-                  <span class="slot-name">{{ p.username }}</span>
-                  <span v-if="p.isBot" class="bot-badge" :title="`Бот ${p.botLevel} уровня`">
-                    Бот Ур.{{ p.botLevel || 1 }}
+                  <span class="slot-name" :title="p.isBot ? getBotTooltip(p.username, p.rating) : undefined">{{ p.username }}</span>
+                  <span v-if="p.isBot" class="bot-badge" :title="getBotTooltip(p.username, p.rating)">
+                    Бот Ур.{{ p.botLevel || eloToLevel(p.rating) }} · {{ getBotPersonality(p.username)?.badge || 'ИИ' }}
                   </span>
                   <span v-if="p.host" class="host-crown" title="Создатель стола">
                     <AppIcon name="crown" :size="12" /> Хост

@@ -2,7 +2,7 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import type { LobbySummary, LiveGameInfo, GameMode, TimeControl, TeamMode } from 'shared';
-import { timeControlLabel } from 'shared';
+import { getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
 import { getSocket, onSocketResync } from '../api/socket';
 import { api } from '../api/rest';
 import { useAuthStore } from '../stores/auth';
@@ -281,9 +281,13 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
                     :key="p.userId"
                     class="lp"
                     :class="{ offline: !p.online }"
+                    :title="p.isBot ? getBotTooltip(p.username, p.rating) : undefined"
                   >
                     <span class="dot" :class="p.isBot ? 'bot-dot' : 'on'"></span>
                     {{ p.username }}
+                    <span v-if="p.isBot && getBotPersonality(p.username)" class="bot-badge tiny" style="margin: 0 4px;" :title="getBotTooltip(p.username, p.rating)">
+                      {{ getBotPersonality(p.username)?.badge }}
+                    </span>
                     <span class="mono dim">({{ p.rating }})</span>
                   </span>
                 </div>

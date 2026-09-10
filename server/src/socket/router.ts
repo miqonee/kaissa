@@ -128,6 +128,12 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
       if (ctx?.lobbyId) lobbies.setTimeControl(ctx.lobbyId, ctx.uid, tc);
     });
 
+    socket.on('lobby:add-bot', async (cb) => {
+      if (!ctx?.lobbyId) return cb?.({ ok: false, error: 'Вы не в лобби' });
+      const r = await lobbies.addBot(ctx.lobbyId, ctx.uid);
+      cb?.(r.ok ? { ok: true, data: null } : { ok: false, error: r.error });
+    });
+
     socket.on('lobby:start', async (cb) => {
       if (!ctx?.lobbyId) {
         cb({ ok: false, error: 'Вы не в лобби' });

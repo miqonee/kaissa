@@ -10,6 +10,12 @@ export interface MaterialCount {
   q: number;
 }
 
+export interface PositionPlan {
+  stage: 'opening' | 'middlegame' | 'endgame';
+  structureNameRu: string;
+  strategicPlanRu: string;
+}
+
 export interface PositionAnalysis {
   scoreCp: number;          // Оценка в сантипешках со стороны белых (+ = белые, - = чёрные)
   evalText: string;         // Строка оценки (+0.4, -1.2, 0.0, #M1, #-M2)
@@ -22,6 +28,7 @@ export interface PositionAnalysis {
   isCheckmate: boolean;
   isDraw: boolean;
   isEndgame: boolean;
+  positionPlan: PositionPlan;
 }
 
 const PIECE_VALUES: Record<PieceSymbol, number> = {
@@ -108,7 +115,128 @@ const PST: Record<PieceSymbol, number[]> = {
   k: KING_PST,
 };
 
+function analyzePositionStructure(chess: Chess, isEndgame: boolean): PositionPlan {
+  const board = chess.board();
+  let whiteQueens = 0;
+  let blackQueens = 0;
+  let whiteRooks = 0;
+  let blackRooks = 0;
+  let whiteMinors = 0;
+  let blackMinors = 0;
+
+  let d4Pawn = false;
+  let e4Pawn = false;
+  let d5Pawn = false;
+  let e5Pawn = false;
+  let c4Pawn = false;
+  let c5Pawn = false;
+
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const p = board[r][c];
+      if (!p) continue;
+      if (p.type === 'q') {
+        if (p.color === 'w') whiteQueens++;
+        else blackQueens++;
+      } else if (p.type === 'r') {
+        if (p.color === 'w') whiteRooks++;
+        else blackRooks++;
+      } else if (p.type === 'b' || p.type === 'n') {
+        if (p.color === 'w') whiteMinors++;
+        else blackMinors++;
+      } else if (p.type === 'p') {
+        if (p.color === 'w') {
+          if (r === 4 && c === 3) d4Pawn = true;
+          if (r === 4 && c === 4) e4Pawn = true;
+          if (r === 4 && c === 2) c4Pawn = true;
+        } else {
+          if (r === 3 && c === 3) d5Pawn = true;
+          if (r === 3 && c === 4) e5Pawn = true;
+          if (r === 3 && c === 2) c5Pawn = true;
+        }
+      }
+    }
+  }
+
+  const totalQueens = whiteQueens + blackQueens;
+  const totalRooks = whiteRooks + blackRooks;
+  const totalMinors = whiteMinors + blackMinors;
+
+  if (isEndgame) {
+    if (totalQueens === 0 && totalRooks === 0 && totalMinors === 0) {
+      return {
+        stage: 'endgame',
+        structureNameRu: 'Пешечный эндшпиль',
+        strategicPlanRu: 'Оппозиция королей, создание отдаленной проходной пешки и прорыв короля к ключевым полям превращения.',
+      };
+    }
+    if (totalQueens === 0 && totalMinors === 0 && totalRooks > 0) {
+      return {
+        stage: 'endgame',
+        structureNameRu: 'Ладейный эндшпиль',
+        strategicPlanRu: 'Правило Тарраша: ладья позади проходной. Активизируйте короля, отрезайте короля соперника по вертикали и ведите проходную.',
+      };
+    }
+    if (totalQueens === 0 && totalRooks === 0 && totalMinors > 0) {
+      return {
+        stage: 'endgame',
+        structureNameRu: 'Легкофигурный эндшпиль',
+        strategicPlanRu: 'Кони сильны при фиксированных пешечных слабостях в центре, слоны превосходят коней на открытых диагоналях и двух флангах.',
+      };
+    }
+    if (totalQueens === 0 && totalRooks > 0 && totalMinors > 0) {
+      return {
+        stage: 'endgame',
+        structureNameRu: 'Ладейно-фигурный эндшпиль',
+        strategicPlanRu: 'Захват открытых вертикалей седьмой горизонтали и сковывание фигур соперника защитой слабых пешек.',
+      };
+    }
+    return {
+      stage: 'endgame',
+      structureNameRu: 'Ферзевый эндшпиль',
+      strategicPlanRu: 'Безопасность короля от вечного шаха и продвижение проходных пешек при активной поддержке ферзя.',
+    };
+  }
+
+  // Миттельшпиль
+  if (d4Pawn && d5Pawn && (e4Pawn || e5Pawn || c4Pawn || c5Pawn)) {
+    return {
+      stage: 'middlegame',
+      structureNameRu: 'Закрытый центр',
+      strategicPlanRu: 'Маневренная борьба на флангах. Подготовка пешечных подрывов c4/c5 или f4/f5 для вскрытия линий атаки.',
+    };
+  }
+
+  if (!d4Pawn && !d5Pawn && !e4Pawn && !e5Pawn) {
+    return {
+      stage: 'middlegame',
+      structureNameRu: 'Открытый центр',
+      strategicPlanRu: 'Острая фигурная борьба по открытым центральным линиям. Решают опережение в развитии, тактические удары и форпосты.',
+    };
+  }
+
+  if ((d4Pawn && !c4Pawn && !e4Pawn) || (d5Pawn && !c5Pawn && !e5Pawn)) {
+    return {
+      stage: 'middlegame',
+      structureNameRu: 'Изолированная ферзевая пешка',
+      strategicPlanRu: 'Владелец изолятора стремится к быстрой фигурной атаке и вскрытию центра; соперник блокирует пешку и стремится к размену фигур.',
+    };
+  }
+
+  return {
+    stage: 'middlegame',
+    structureNameRu: 'Фигурная игра в миттельшпиле',
+    strategicPlanRu: 'Гармоничное взаимодействие фигур, захват ключевых полей и создание слабостей в пешечной структуре соперника.',
+  };
+}
+
 export function analyzePosition(fen: string): PositionAnalysis {
+  const defaultPlan: PositionPlan = {
+    stage: 'opening',
+    structureNameRu: 'Начальная расстановка',
+    strategicPlanRu: 'Борьба за центр, развитие легких фигур и обеспечение безопасности короля.',
+  };
+
   if (!fen) {
     return {
       scoreCp: 0,
@@ -122,6 +250,7 @@ export function analyzePosition(fen: string): PositionAnalysis {
       isCheckmate: false,
       isDraw: false,
       isEndgame: false,
+      positionPlan: defaultPlan,
     };
   }
 
@@ -141,6 +270,7 @@ export function analyzePosition(fen: string): PositionAnalysis {
       isCheckmate: false,
       isDraw: false,
       isEndgame: false,
+      positionPlan: defaultPlan,
     };
   }
 
@@ -162,6 +292,11 @@ export function analyzePosition(fen: string): PositionAnalysis {
       isCheckmate: true,
       isDraw: false,
       isEndgame: false,
+      positionPlan: {
+        stage: 'endgame',
+        structureNameRu: 'Мат на доске',
+        strategicPlanRu: 'Партия завершена матом.',
+      },
     };
   }
 
@@ -178,6 +313,11 @@ export function analyzePosition(fen: string): PositionAnalysis {
       isCheckmate: false,
       isDraw: true,
       isEndgame: false,
+      positionPlan: {
+        stage: 'endgame',
+        structureNameRu: 'Ничейная позиция',
+        strategicPlanRu: 'Партия завершена вничью.',
+      },
     };
   }
 
@@ -239,6 +379,7 @@ export function analyzePosition(fen: string): PositionAnalysis {
   }
 
   const materialDiff = Math.round((whiteMat - blackMat) / 100);
+  const positionPlan = analyzePositionStructure(chess, isEndgame);
 
   return {
     scoreCp: clampedCp,
@@ -252,5 +393,6 @@ export function analyzePosition(fen: string): PositionAnalysis {
     isCheckmate: false,
     isDraw: false,
     isEndgame,
+    positionPlan,
   };
 }

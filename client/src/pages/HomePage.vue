@@ -285,23 +285,19 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
           </div>
 
           <div class="panel-body lobby-rows" v-if="lobbies.length">
-            <!-- Быстрый стол 2х2 (компактная карточка во главе) -->
+            <!-- Быстрый стол 2х2 (ультракомпактная карточка во главе) -->
             <div
               v-if="autoLobby"
-              class="lobby-card auto-lobby-card compact-card"
+              class="lobby-card auto-lobby-card compact-card single-line-card"
               @click="enterLobby(autoLobby)"
             >
-              <div class="lobby-card-main">
-                <div class="lobby-title-row">
-                  <span class="badge auto-chip">
-                    <AppIcon name="bolt" :size="12" /> Быстрый старт 2х2
-                  </span>
-                  <span class="badge mono">{{ timeControlLabel(autoLobby.timeControl) }}</span>
-                  <span class="badge">{{ modeLabel(autoLobby.mode) }}</span>
-                </div>
-                <div class="auto-lobby-desc dim">
-                  Мгновенный матч: боты замещаются входящими игроками
-                </div>
+              <div class="lobby-card-main single-line-main">
+                <span class="badge auto-chip">
+                  <AppIcon name="bolt" :size="12" />
+                  Быстрый старт {{ autoLobby.timeControl.kind === 'clock' ? `${autoLobby.timeControl.baseMin}+${autoLobby.timeControl.incSec}` : '' }}
+                </span>
+                <span class="badge">{{ modeLabel(autoLobby.mode) }}</span>
+                <span class="auto-hint-text dim tiny">Боты замещаются игроками</span>
               </div>
 
               <div class="lobby-card-meta">
@@ -629,6 +625,22 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.single-line-card {
+  padding: 8px 12px;
+}
+
+.single-line-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.auto-hint-text {
+  font-size: 11px;
+  color: var(--ink-3);
 }
 
 .auto-lobby-desc {

@@ -157,6 +157,7 @@ export type ClientToServerEvents = {
   'lobby:pause-toggle': () => void;
   'lobby:set-team-mode': (mode: TeamMode) => void;
   'lobby:set-time-control': (tc: TimeControl) => void;
+  'lobby:add-bot': (cb?: (res: Ack<null>) => void) => void;
 
   // Игра
   'game:move': (data: { gameId: number; boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: PieceType }, cb: (res: Ack<null>) => void) => void;
@@ -581,6 +582,7 @@ export interface BotPersonalityMetric {
   badge: string;
   description: string;
   defaultElo: number;
+  bestEloText: string;
   totalGames: number;
   wins: number;
   losses: number;

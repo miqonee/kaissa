@@ -495,6 +495,46 @@ export class LobbiesManager {
     this.broadcastList();
   }
 
+  async addBot(lobbyId: string, uid: number): Promise<{ ok: boolean; error?: string }> {
+    const lobby = this.lobbies.get(lobbyId);
+    if (!lobby || lobby.started || lobby.isAuto) return { ok: false, error: 'Нельзя добавить бота' };
+    const caller = lobby.members.get(uid);
+    if (!caller?.host) return { ok: false, error: 'Только создатель стола может добавлять ботов' };
+    if (lobby.members.size >= MAX_SLOTS) return { ok: false, error: 'Стол уже заполнен' };
+
+    const humans = [...lobby.members.values()].filter((m) => !m.isBot);
+    const baseRating = humans.length
+      ? Math.round(humans.reduce((s, h) => s + h.rating, 0) / humans.length)
+      : 1200;
+
+    // Разброс +-150 Elo
+    const jitter = Math.floor(Math.random() * 301) - 150;
+    const botElo = Math.max(500, Math.min(2500, baseRating + jitter));
+    const botLevel = eloToLevel(botElo);
+
+    // Доступные боты, которых еще нет за столом
+    const existingUids = new Set([...lobby.members.values()].map((m) => m.uid));
+    const allBots = await prisma.user.findMany({ where: { isBot: true } });
+    const available = allBots.filter((b) => !existingUids.has(b.id));
+    if (!available.length) return { ok: false, error: 'Нет доступных ботов' };
+
+    const chosen = available[Math.floor(Math.random() * available.length)];
+    lobby.members.set(chosen.id, {
+      uid: chosen.id,
+      username: chosen.username,
+      rating: botElo,
+      ready: true,
+      host: false,
+      joinedAt: Date.now(),
+      isBot: true,
+      botLevel,
+    });
+
+    this.broadcastState(lobby);
+    this.broadcastList();
+    return { ok: true };
+  }
+
   leave(lobbyId: string, uid: number): void {
     const lobby = this.lobbies.get(lobbyId);
     if (!lobby) return;

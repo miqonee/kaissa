@@ -804,9 +804,13 @@ function resultHeadline(): string {
               <span
                 v-if="state.mode === 'team'"
                 class="stage-badge"
-                :class="recognizedOpening.stage"
+                :class="currentAnalysis.isEndgame ? 'middlegame' : recognizedOpening.stage"
               >
-                {{ recognizedOpening.stageLabelRu }}
+                {{
+                  currentAnalysis.isEndgame
+                    ? currentAnalysis.positionPlan.structureNameRu
+                    : (recognizedOpening.stage === 'theory' ? recognizedOpening.stageLabelRu : currentAnalysis.positionPlan.structureNameRu)
+                }}
               </span>
               <span
                 v-if="state.mode === 'team'"
@@ -879,10 +883,14 @@ function resultHeadline(): string {
                 </div>
               </div>
 
-              <!-- Стратегический план стороны -->
+              <!-- Стратегический план стороны или позиции -->
               <div class="opening-plan-box">
-                <span class="dim small-label">Стратегический план:</span>
-                <p class="plan-text">{{ recognizedOpening.planRu }}</p>
+                <span class="dim small-label">
+                  {{ (recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame) ? 'План по дебюту:' : `План (${currentAnalysis.positionPlan.structureNameRu}):` }}
+                </span>
+                <p class="plan-text">
+                  {{ (recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame) ? recognizedOpening.planRu : currentAnalysis.positionPlan.strategicPlanRu }}
+                </p>
               </div>
             </template>
 

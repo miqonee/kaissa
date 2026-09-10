@@ -40,12 +40,13 @@ class BotStatsTracker {
   private statsByLevel = new Map<number, BotCounterStats>();
   private statsByUsername = new Map<string, BotCounterStats>();
   private statsByPair = new Map<string, BotPairRecord>();
+  private statsByUsernameRating = new Map<string, Map<number, { games: number; wins: number }>>();
 
   /**
    * Зафиксировать результат чисто ботовской партии
    */
   recordBotGame(
-    participants: { username: string; botLevel?: number | null; team: 1 | 2 }[],
+    participants: { username: string; ratingBefore?: number; botLevel?: number | null; team: 1 | 2 }[],
     result: string,
     reason: string | null,
     plyCount: number,
@@ -66,6 +67,22 @@ class BotStatsTracker {
       if (!userStat) {
         userStat = emptyCounter();
         this.statsByUsername.set(p.username, userStat);
+      }
+
+      let ratingMap = this.statsByUsernameRating.get(p.username);
+      if (!ratingMap) {
+        ratingMap = new Map();
+        this.statsByUsernameRating.set(p.username, ratingMap);
+      }
+      const elo = p.ratingBefore || 1200;
+      let rEntry = ratingMap.get(elo);
+      if (!rEntry) {
+        rEntry = { games: 0, wins: 0 };
+        ratingMap.set(elo, rEntry);
+      }
+      rEntry.games += 1;
+      if (!isDraw && p.team === winnerTeam) {
+        rEntry.wins += 1;
       }
 
       for (const stat of [levelStat, userStat]) {
@@ -125,18 +142,42 @@ class BotStatsTracker {
     return this.statsByUsername.get(username) || emptyCounter();
   }
 
+  getBestEloText(username: string, defaultElo: number): string {
+    const ratingMap = this.statsByUsernameRating.get(username);
+    if (!ratingMap || ratingMap.size === 0) {
+      return `${defaultElo} (Номинал)`;
+    }
+    const entries = [...ratingMap.entries()].map(([elo, stat]) => ({
+      elo,
+      games: stat.games,
+      wins: stat.wins,
+      winRate: Math.round((stat.wins / stat.games) * 100),
+    }));
+
+    const withWins = entries.filter((e) => e.wins > 0);
+    if (withWins.length > 0) {
+      withWins.sort((a, b) => b.winRate - a.winRate || b.games - a.games);
+      return `${withWins[0].elo} (${withWins[0].winRate}% побед)`;
+    }
+
+    const totalG = entries.reduce((s, e) => s + e.games, 0);
+    const avgE = Math.round(entries.reduce((s, e) => s + e.elo * e.games, 0) / totalG);
+    return `${avgE} (0% побед)`;
+  }
+
   getAllPairMetrics(): BotPairMetric[] {
     const list: BotPairMetric[] = [];
     for (const p of this.statsByPair.values()) {
       const p1 = getBotPersonality(p.bot1Username);
       const p2 = getBotPersonality(p.bot2Username);
+      if (!p1 || !p2) continue; // Игнорируем устаревших тестовых ботов
       const winRate = p.totalGames > 0 ? Math.round((p.wins / p.totalGames) * 100) : 0;
       list.push({
         pairKey: p.pairKey,
-        bot1Name: p1?.name || p.bot1Username,
-        bot1Badge: p1?.badge || 'Бот',
-        bot2Name: p2?.name || p.bot2Username,
-        bot2Badge: p2?.badge || 'Бот',
+        bot1Name: p1.name,
+        bot1Badge: p1.badge,
+        bot2Name: p2.name,
+        bot2Badge: p2.badge,
         totalGames: p.totalGames,
         wins: p.wins,
         losses: p.losses,
@@ -151,12 +192,14 @@ class BotStatsTracker {
     const pairs = this.getAllPairMetrics().filter((p) => p.totalGames >= 1);
     if (!pairs.length) return { best: null, worst: null };
 
-    // Сортировка по winRate убыванию, затем по totalGames
-    const sorted = pairs.slice().sort((a, b) => b.winRate - a.winRate || b.totalGames - a.totalGames);
-    const best = sorted[0] || null;
+    // Лучшая пара — строго при наличии хотя бы одной победы!
+    const pairsWithWins = pairs.filter((p) => p.wins > 0);
+    const sortedBest = pairsWithWins.sort((a, b) => b.winRate - a.winRate || b.totalGames - a.totalGames);
+    const best = sortedBest[0] || null;
 
-    // Худшая пара: с наименьшим винрейтом
-    const worst = sorted.length > 1 ? sorted[sorted.length - 1] : null;
+    // Худшая пара
+    const sortedWorst = pairs.slice().sort((a, b) => a.winRate - b.winRate || b.totalGames - a.totalGames);
+    const worst = sortedWorst.length > 0 && (!best || sortedWorst[0].pairKey !== best.pairKey) ? sortedWorst[0] : null;
     return { best, worst };
   }
 }

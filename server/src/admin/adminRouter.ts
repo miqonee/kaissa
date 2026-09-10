@@ -155,10 +155,35 @@ adminRouter.get('/metrics', async (_req, res) => {
       totalMovesInGames: botAcc.totalMovesInGames + tracked.totalMoves,
     };
 
-    const finalizePersona = (acc: typeof combinedBotAcc): BotPersonalityMetric => {
+    const bestEloForHumans = (): string => {
+      const vsHumanParts = matchingParts.filter((p) => p.game.participants.some((x) => !x.user.isBot));
+      if (!vsHumanParts.length) return `${persona.defaultElo} (Номинал)`;
+      const map = new Map<number, { games: number; wins: number }>();
+      for (const p of vsHumanParts) {
+        const elo = p.ratingBefore || persona.defaultElo;
+        let entry = map.get(elo);
+        if (!entry) { entry = { games: 0, wins: 0 }; map.set(elo, entry); }
+        entry.games++;
+        const isWin = (p.game.result === '1-0' && p.team === 1) || (p.game.result === '0-1' && p.team === 2);
+        if (isWin) entry.wins++;
+      }
+      const list = [...map.entries()].map(([elo, stat]) => ({ elo, ...stat, winRate: Math.round((stat.wins / stat.games) * 100) }));
+      const withWins = list.filter((x) => x.wins > 0);
+      if (withWins.length > 0) {
+        withWins.sort((a, b) => b.winRate - a.winRate || b.games - a.games);
+        return `${withWins[0].elo} (${withWins[0].winRate}% побед)`;
+      }
+      return `${list[0].elo} (0% побед)`;
+    };
+
+    const finalizePersona = (acc: typeof combinedBotAcc, isHuman: boolean): BotPersonalityMetric => {
       const draws = acc.totalGames - acc.wins - acc.losses;
       const winRate = acc.totalGames ? Math.round((acc.wins / acc.totalGames) * 100) : 0;
       const avgMoves = acc.totalGames ? Math.round(acc.totalMovesInGames / acc.totalGames) : 0;
+      const bestEloText = isHuman
+        ? bestEloForHumans()
+        : botStatsTracker.getBestEloText(persona.username, persona.defaultElo);
+
       return {
         username: persona.username,
         name: persona.name,
@@ -166,6 +191,7 @@ adminRouter.get('/metrics', async (_req, res) => {
         badge: persona.badge,
         description: persona.description,
         defaultElo: persona.defaultElo,
+        bestEloText,
         totalGames: acc.totalGames,
         wins: acc.wins,
         losses: acc.losses,
@@ -178,15 +204,15 @@ adminRouter.get('/metrics', async (_req, res) => {
       };
     };
 
-    personalityMetricsVsHuman.push(finalizePersona(humanAcc));
-    personalityMetricsVsBot.push(finalizePersona(combinedBotAcc));
+    personalityMetricsVsHuman.push(finalizePersona(humanAcc, true));
+    personalityMetricsVsBot.push(finalizePersona(combinedBotAcc, false));
   }
 
-  // 3. Дуэты и топ-уровни / персоналии
+  // 3. Дуэты и топ-уровни / персоналии (СТРОГО с wins > 0 и winRate > 0!)
   const { best: bestPair, worst: worstPair } = botStatsTracker.getBestAndWorstPairs();
 
   const activeLevelList = botMetricsVsBot.concat(botMetricsVsHuman);
-  const playedLevels = activeLevelList.filter((l) => l.totalGames >= 1);
+  const playedLevels = activeLevelList.filter((l) => l.totalGames >= 1 && l.wins > 0);
   playedLevels.sort((a, b) => b.winRate - a.winRate || b.totalGames - a.totalGames);
   const topLevel = playedLevels[0]
     ? {
@@ -199,7 +225,7 @@ adminRouter.get('/metrics', async (_req, res) => {
     : null;
 
   const activePersonaList = personalityMetricsVsBot.concat(personalityMetricsVsHuman);
-  const playedPersonas = activePersonaList.filter((p) => p.totalGames >= 1);
+  const playedPersonas = activePersonaList.filter((p) => p.totalGames >= 1 && p.wins > 0);
   playedPersonas.sort((a, b) => b.winRate - a.winRate || b.totalGames - a.totalGames);
   const topPersonality = playedPersonas[0]
     ? {

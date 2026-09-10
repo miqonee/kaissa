@@ -666,6 +666,122 @@ export const OPENINGS_DATABASE: OpeningEntry[] = [
   },
 ];
 
+interface CoreSignature {
+  eco: string;
+  nameRu: string;
+  nameEn: string;
+  variationRu?: string;
+  planRu: string;
+  movesRequired: string[];
+}
+
+const CORE_SIGNATURES: CoreSignature[] = [
+  {
+    eco: 'C50',
+    nameRu: 'Итальянская партия',
+    nameEn: 'Italian Game',
+    variationRu: 'Перестановка ходов',
+    movesRequired: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5'],
+    planRu: 'Белые готовят захват центра ходами c3 и d4, оказывая фигурное давление на f7. Чёрные укрепляют центр d6 и готовят контригру.',
+  },
+  {
+    eco: 'C55',
+    nameRu: 'Итальянская партия',
+    nameEn: 'Italian Game',
+    variationRu: 'Защита двух коней (Перестановка)',
+    movesRequired: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Nf6'],
+    planRu: 'Острая тактическая борьба за инициативу и пункт f7.',
+  },
+  {
+    eco: 'C65',
+    nameRu: 'Испанская партия',
+    nameEn: 'Ruy Lopez',
+    variationRu: 'Перестановка ходов',
+    movesRequired: ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5'],
+    planRu: 'Давление на пешку e5 через связку коня c6 с планом захвата центра c3-d4.',
+  },
+  {
+    eco: 'B90',
+    nameRu: 'Сицилианская защита',
+    nameEn: 'Sicilian Defence',
+    variationRu: 'Перестановка ходов',
+    movesRequired: ['e4', 'c5', 'Nf3', 'd6', 'd4'],
+    planRu: 'Асимметричная борьба за центр с полуоткрытой вертикалью «c».',
+  },
+  {
+    eco: 'B22',
+    nameRu: 'Сицилианская защита',
+    nameEn: 'Sicilian Defence',
+    variationRu: 'Вариант Алапина (Перестановка)',
+    movesRequired: ['e4', 'c5', 'c3'],
+    planRu: 'Белые готовят образование пешечного центра c3-d4.',
+  },
+  {
+    eco: 'D30',
+    nameRu: 'Отказанный ферзевый гамбит',
+    nameEn: "Queen's Gambit Declined",
+    variationRu: 'Перестановка ходов',
+    movesRequired: ['d4', 'd5', 'c4', 'e6'],
+    planRu: 'Прочный пешечный центр. Чёрные удерживают пункт d5 и развивают королевский фланг.',
+  },
+  {
+    eco: 'D10',
+    nameRu: 'Славянская защита',
+    nameEn: 'Slav Defence',
+    variationRu: 'Перестановка ходов',
+    movesRequired: ['d4', 'd5', 'c4', 'c6'],
+    planRu: 'Чёрные укрепляют центр пешкой c6, сохраняя диагональ для слона c8.',
+  },
+  {
+    eco: 'C10',
+    nameRu: 'Французская защита',
+    nameEn: 'French Defence',
+    variationRu: 'Перестановка ходов',
+    movesRequired: ['e4', 'e6', 'd4', 'd5'],
+    planRu: 'Прочная цепь e6-d5. Чёрные контратакуют белую пешечную цепь ходом c5.',
+  },
+  {
+    eco: 'B10',
+    nameRu: 'Защита Каро-Канн',
+    nameEn: 'Caro-Kann Defence',
+    variationRu: 'Перестановка ходов',
+    movesRequired: ['e4', 'c6', 'd4', 'd5'],
+    planRu: 'Надёжная позиция с выводом слона на f5 перед ходом e6.',
+  },
+  {
+    eco: 'D02',
+    nameRu: 'Лондонская система',
+    nameEn: 'London System',
+    variationRu: 'Перестановка ходов',
+    movesRequired: ['d4', 'd5', 'Nf3', 'Bf4'],
+    planRu: 'Прочный пешечный редут c3-d4-e3 с активным слоном на f4.',
+  },
+  {
+    eco: 'E60',
+    nameRu: 'Староиндийская защита',
+    nameEn: "King's Indian Defence",
+    variationRu: 'Перестановка ходов',
+    movesRequired: ['d4', 'Nf6', 'c4', 'g6'],
+    planRu: 'Фианкетто слона на g7 и последующий контрудар по центру e5 или c5.',
+  },
+  {
+    eco: 'C47',
+    nameRu: 'Дебют четырех коней',
+    nameEn: 'Four Knights Game',
+    variationRu: 'Перестановка ходов',
+    movesRequired: ['e4', 'e5', 'Nf3', 'Nc6', 'Nc3', 'Nf6'],
+    planRu: 'Симметричное развитие легких фигур и позиционная борьба за центр.',
+  },
+  {
+    eco: 'C45',
+    nameRu: 'Шотландская партия',
+    nameEn: 'Scotch Game',
+    variationRu: 'Перестановка ходов',
+    movesRequired: ['e4', 'e5', 'Nf3', 'Nc6', 'd4', 'exd4', 'Nxd4'],
+    planRu: 'Немедленное вскрытие центральных вертикалей и фигурная контригра.',
+  },
+];
+
 /**
  * Вспомогательное форматирование сыгранной цепочки ходов SAN в стандартную нотацию
  */
@@ -767,6 +883,24 @@ export function detectOpening(movesSan: string[]): RecognizedOpening {
     }
   }
   const continuations = Array.from(continuationsMap.values()).slice(0, 4);
+
+  // Проверка перестановок ходов (транспозиций), если прямой префикс не дал глубокого совпадения
+  if (!bestMatch || maxMatchedMoves < 3) {
+    const movesSet = new Set(movesSan);
+    for (const sig of CORE_SIGNATURES) {
+      if (sig.movesRequired.every((m) => movesSet.has(m))) {
+        bestMatch = {
+          eco: sig.eco,
+          nameRu: sig.nameRu,
+          nameEn: sig.nameEn,
+          variationRu: sig.variationRu,
+          moves: sig.movesRequired,
+          planRu: sig.planRu,
+        };
+        break;
+      }
+    }
+  }
 
   const playedFormatted = formatMovesSan(movesSan);
 

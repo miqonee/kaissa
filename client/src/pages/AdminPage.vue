@@ -29,22 +29,41 @@ const currentPersonalityMetrics = computed(() => {
     : (metrics.value.personalityMetricsVsBot || []);
 });
 
+const displayedLevelMetrics = computed(() => {
+  if (botTab.value === 'human') {
+    return currentLevelMetrics.value.filter((b) => b.totalGames > 0);
+  }
+  return currentLevelMetrics.value;
+});
+
+const displayedPersonalityMetrics = computed(() => {
+  if (botTab.value === 'human') {
+    return currentPersonalityMetrics.value.filter((p) => p.totalGames > 0);
+  }
+  return currentPersonalityMetrics.value;
+});
+
 const topLevel = computed(() => {
-  if (metrics.value?.topLevel) return metrics.value.topLevel;
-  const list = currentLevelMetrics.value.filter((l) => l.totalGames >= 1);
+  const list = currentLevelMetrics.value.filter((l) => l.totalGames >= 1 && l.wins > 0 && l.winRate > 0);
   if (!list.length) return null;
   return list.slice().sort((a, b) => b.winRate - a.winRate || b.totalGames - a.totalGames)[0];
 });
 
 const topPersonality = computed(() => {
-  if (metrics.value?.topPersonality) return metrics.value.topPersonality;
-  const list = currentPersonalityMetrics.value.filter((p) => p.totalGames >= 1);
+  const list = currentPersonalityMetrics.value.filter((p) => p.totalGames >= 1 && p.wins > 0 && p.winRate > 0);
   if (!list.length) return null;
   return list.slice().sort((a, b) => b.winRate - a.winRate || b.totalGames - a.totalGames)[0];
 });
 
-const bestPair = computed(() => metrics.value?.bestPair || null);
-const worstPair = computed(() => metrics.value?.worstPair || null);
+const bestPair = computed(() => {
+  const p = metrics.value?.bestPair;
+  return p && p.wins > 0 && p.winRate > 0 ? p : null;
+});
+
+const worstPair = computed(() => {
+  const p = metrics.value?.worstPair;
+  return p && p.totalGames >= 1 ? p : null;
+});
 
 async function loadData() {
   loading.value = true;
@@ -180,10 +199,10 @@ function fmtDuration(sec: number): string {
                 <span class="hl-label">Топ-уровень побед</span>
               </div>
               <div v-if="topLevel" class="hl-content">
-                <span class="hl-main">Ур.{{ topLevel.level }} {{ topLevel.name }}</span>
+                <span class="hl-main">Ур.{{ topLevel.level }} · {{ topLevel.name }}</span>
                 <span class="hl-sub mono">{{ topLevel.winRate }}% побед ({{ topLevel.totalGames }} игр) · {{ topLevel.elo }} Elo</span>
               </div>
-              <div v-else class="hl-empty dim tiny">Нет завершенных игр</div>
+              <div v-else class="hl-empty dim tiny">Пока нет побед</div>
             </div>
 
             <div class="highlight-card">
@@ -195,7 +214,7 @@ function fmtDuration(sec: number): string {
                 <span class="hl-main">{{ topPersonality.name }} · {{ topPersonality.badge }}</span>
                 <span class="hl-sub mono">{{ topPersonality.winRate }}% побед ({{ topPersonality.totalGames }} игр)</span>
               </div>
-              <div v-else class="hl-empty dim tiny">Нет завершенных игр</div>
+              <div v-else class="hl-empty dim tiny">Пока нет побед</div>
             </div>
 
             <div class="highlight-card">
@@ -207,7 +226,7 @@ function fmtDuration(sec: number): string {
                 <span class="hl-main">{{ bestPair.bot1Name }} + {{ bestPair.bot2Name }}</span>
                 <span class="hl-sub mono">{{ bestPair.winRate }}% побед ({{ bestPair.totalGames }} партий)</span>
               </div>
-              <div v-else class="hl-empty dim tiny">Пока недостаточно матчей</div>
+              <div v-else class="hl-empty dim tiny">Пока нет совместных побед</div>
             </div>
 
             <div class="highlight-card">
@@ -266,7 +285,7 @@ function fmtDuration(sec: number): string {
 
           <!-- Таблица 1: По уровням силы (12 уровней) -->
           <div v-if="botViewMode === 'levels'" class="table-wrap">
-            <table class="club">
+            <table v-if="displayedLevelMetrics.length" class="club">
               <thead>
                 <tr>
                   <th>Уровень</th>
@@ -280,13 +299,13 @@ function fmtDuration(sec: number): string {
               </thead>
               <tbody>
                 <tr
-                  v-for="b in currentLevelMetrics"
+                  v-for="b in displayedLevelMetrics"
                   :key="b.level"
-                  :class="{ 'highlight-top': topLevel?.level === b.level && b.totalGames >= 1 }"
+                  :class="{ 'highlight-top': topLevel?.level === b.level && b.wins > 0 }"
                 >
                   <td>
-                    <strong>Ур.{{ b.level }} {{ b.name }}</strong>
-                    <span v-if="topLevel?.level === b.level && b.totalGames >= 1" class="top-tag mono">
+                    <strong>Ур.{{ b.level }} · {{ b.name }}</strong>
+                    <span v-if="topLevel?.level === b.level && b.wins > 0" class="top-tag mono">
                       Топ
                     </span>
                   </td>
@@ -310,16 +329,19 @@ function fmtDuration(sec: number): string {
                 </tr>
               </tbody>
             </table>
+            <div v-else class="empty dim tiny" style="padding: 24px; text-align: center;">
+              Боты пока не играли партий против людей на этом сервере.
+            </div>
           </div>
 
           <!-- Таблица 2: По стилям (12 персоналий) -->
           <div v-else class="table-wrap">
-            <table class="club">
+            <table v-if="displayedPersonalityMetrics.length" class="club">
               <thead>
                 <tr>
                   <th>Персоналия</th>
                   <th>Стиль / тактика</th>
-                  <th>Базовый Elo</th>
+                  <th>Лучший Elo</th>
                   <th>Игр</th>
                   <th>В / П / Н</th>
                   <th>Win Rate</th>
@@ -329,21 +351,21 @@ function fmtDuration(sec: number): string {
               </thead>
               <tbody>
                 <tr
-                  v-for="p in currentPersonalityMetrics"
+                  v-for="p in displayedPersonalityMetrics"
                   :key="p.username"
-                  :class="{ 'highlight-top': topPersonality?.username === p.username && p.totalGames >= 1 }"
+                  :class="{ 'highlight-top': topPersonality?.username === p.username && p.wins > 0 }"
                 >
                   <td>
                     <strong>{{ p.name }}</strong>
                     <span class="bot-badge tiny" style="margin-left: 6px;">
                       {{ p.badge }}
                     </span>
-                    <span v-if="topPersonality?.username === p.username && p.totalGames >= 1" class="top-tag mono">
+                    <span v-if="topPersonality?.username === p.username && p.wins > 0" class="top-tag mono">
                       Топ
                     </span>
                   </td>
                   <td class="dim tiny">{{ p.description }}</td>
-                  <td class="mono">{{ p.defaultElo }}</td>
+                  <td class="mono" style="font-size: 11.5px;">{{ p.bestEloText || `${p.defaultElo} (Номинал)` }}</td>
                   <td class="mono dim">{{ p.totalGames }}</td>
                   <td class="mono dim">{{ p.wins }} / {{ p.losses }} / {{ p.draws }}</td>
                   <td>
@@ -363,6 +385,9 @@ function fmtDuration(sec: number): string {
                 </tr>
               </tbody>
             </table>
+            <div v-else class="empty dim tiny" style="padding: 24px; text-align: center;">
+              Боты пока не играли партий против людей на этом сервере.
+            </div>
           </div>
         </div>
       </div>

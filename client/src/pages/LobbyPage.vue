@@ -56,6 +56,14 @@ function setTimeControl(tc: TimeControl): void {
   socket.emit('lobby:set-time-control', tc);
 }
 
+function addBot(): void {
+  socket.emit('lobby:add-bot', (ack) => {
+    if (!ack?.ok && ack?.error) {
+      showNotification(ack.error);
+    }
+  });
+}
+
 const toastText = ref('');
 let toastTimer: number | undefined;
 
@@ -384,6 +392,16 @@ function modeLabel(m: string): string {
               <div class="slot-info">
                 <span class="slot-name dim">Ожидание игрока…</span>
               </div>
+              <button
+                v-if="isHost && !lobby.isAuto"
+                type="button"
+                class="small ghost add-bot-slot-btn"
+                title="Добавить бота со случайным стилем и уровнем +-150"
+                @click="addBot"
+              >
+                <AppIcon name="plus" :size="13" />
+                <span>Бот</span>
+              </button>
             </div>
           </div>
 
@@ -683,7 +701,27 @@ function modeLabel(m: string): string {
 .empty-slot {
   border-style: dashed;
   background: transparent;
-  opacity: 0.6;
+  opacity: 0.75;
+}
+
+.add-bot-slot-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  border-radius: var(--r-xs);
+  border: 1px dashed var(--line-2);
+  color: var(--ink-2);
+  background: var(--surface);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.add-bot-slot-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface-2);
 }
 
 .lobby-tools {

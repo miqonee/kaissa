@@ -101,9 +101,11 @@ export class GamesManager {
   triggerBotTurn(gameId: number): void {
     const g = this.games.get(gameId);
     if (!g || g.status !== 'active') return;
+    // Багхаус — только для людей: боты не умеют играть с карманами и парной координацией
+    if (g.mode === 'bughouse') return;
 
     const state = this.toGameState(g);
-    const boardsCount = g.mode === 'bughouse' ? 2 : 1;
+    const boardsCount = 1; // боты играют только team (одна доска); багхаус отсечён выше
 
     for (let b = 0; b < boardsCount; b++) {
       const moverUid = state.turnUserIds[b];
@@ -377,10 +379,11 @@ export class GamesManager {
   async checkFlags(): Promise<void> {
     for (const g of [...this.games.values()]) {
       if (g.status !== 'active' || g.timeControl.kind !== 'clock') continue;
+      if (!Array.isArray(g.clocks)) continue;
       const now = Date.now();
       for (let b = 0; b < g.clocks.length; b++) {
         const c = g.clocks[b];
-        if (c.active === null) continue;
+        if (!c || c.active === null) continue;
         const remaining = (c.active === 'w' ? c.whiteMs : c.blackMs) - (now - c.sinceMs);
         if (remaining <= 0) {
           await this.finishByFlag(g, b as Board, c.active);
@@ -642,10 +645,11 @@ export class GamesManager {
       ? [(g.engine as BughouseGame).turn(0), (g.engine as BughouseGame).turn(1)]
       : [(g.engine as TeamGame).turn()];
     const clocks: [number, number][] = g.clocks.map((c) => {
+      if (!c) return [0, 0] as [number, number];
       const s = clockSnapshot(c, now);
       return [s.whiteMs, s.blackMs];
     });
-    const clocksActive: ('w' | 'b' | null)[] = g.clocks.map((c) => c.active);
+    const clocksActive: ('w' | 'b' | null)[] = g.clocks.map((c) => c?.active ?? null);
 
     // Кто должен ходить на каждой доске
     const turnUserIds: number[] = [];

@@ -1,6 +1,7 @@
 // scripts/bots.mjs
 // Скрипт 3 шаблонных ботов для тестирования премува в Каиссе.
-// Запуск: node scripts/bots.mjs [КОД_СТОЛА] [--mode team|bughouse] [--min-delay 5] [--max-delay 10]
+// Запуск: node scripts/bots.mjs [КОД_СТОЛА] [--min-delay 5] [--max-delay 10]
+// Режим только team: боты для багхауса отключены.
 
 import { io } from 'socket.io-client';
 import jwt from 'jsonwebtoken';
@@ -11,13 +12,17 @@ const JWT_SECRET = process.env.JWT_SECRET || 'change-me-to-a-long-random-string'
 
 const args = process.argv.slice(2);
 let targetCode = null;
-let mode = 'team';
+const mode = 'team';
 let minDelaySec = 5;
 let maxDelaySec = 10;
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--mode' && args[i + 1]) {
-    mode = args[++i];
+    const requested = args[++i];
+    if (requested === 'bughouse') {
+      console.error('Боты для багхауса отключены — только режим team.');
+      process.exit(1);
+    }
   } else if (args[i] === '--min-delay' && args[i + 1]) {
     minDelaySec = Number(args[++i]);
   } else if (args[i] === '--max-delay' && args[i + 1]) {

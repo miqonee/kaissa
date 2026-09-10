@@ -405,6 +405,12 @@ export class LobbiesManager {
     this.broadcastCountdown(lobby);
 
     lobby.countdownTimer = setInterval(async () => {
+      // Лобби могли удалить/перезапустить пока тикает таймер
+      if (!this.lobbies.get(lobby.id)) {
+        if (lobby.countdownTimer) clearInterval(lobby.countdownTimer);
+        lobby.countdownTimer = null;
+        return;
+      }
       if (lobby.isPaused) return;
 
       if (lobby.autoCountdown !== null && lobby.autoCountdown > 0) {
@@ -498,6 +504,7 @@ export class LobbiesManager {
   async addBot(lobbyId: string, uid: number): Promise<{ ok: boolean; error?: string }> {
     const lobby = this.lobbies.get(lobbyId);
     if (!lobby || lobby.started || lobby.isAuto) return { ok: false, error: 'Нельзя добавить бота' };
+    if (lobby.mode === 'bughouse') return { ok: false, error: 'В багхаус ботов добавлять нельзя — только живые игроки' };
     const caller = lobby.members.get(uid);
     if (!caller?.host) return { ok: false, error: 'Только создатель стола может добавлять ботов' };
     if (lobby.members.size >= MAX_SLOTS) return { ok: false, error: 'Стол уже заполнен' };
@@ -638,6 +645,11 @@ export class LobbiesManager {
     const host = lobby.members.get(uid);
     if (!host?.host && !lobby.isAuto) return { ok: false, error: 'Только хост может начать игру' };
     if (lobby.members.size !== MAX_SLOTS) return { ok: false, error: 'Нужно 4 игрока' };
+
+    // Багхаус — только для людей: боты не умеют играть с карманами и парной координацией
+    if (lobby.mode === 'bughouse' && [...lobby.members.values()].some((m) => m.isBot)) {
+      return { ok: false, error: 'В багхаусе играют только люди (4/4). Уберите ботов со стола' };
+    }
 
     for (const m of lobby.members.values()) {
       if (!m.ready) return { ok: false, error: 'Не все готовы' };

@@ -24,7 +24,7 @@ export function initClock(baseMs: number, incMs: number): ClockState {
 
 /** Запустить часы для стороны, начинающей первой (без немедленного списания) */
 export function startClockFor(c: ClockState, color: 'w' | 'b', atMs: number): ClockState {
-  if (c.active !== null) return c;
+  if (!c || c.active !== null) return c;
   return { ...c, active: color, sinceMs: atMs };
 }
 
@@ -34,6 +34,7 @@ export function clockOnMove(
   moverColor: 'w' | 'b',
   atMs: number,
 ): { clock: ClockState; flagged: 'w' | 'b' | null } {
+  if (!c) return { clock: c, flagged: null };
   if (c.active === null) {
     // Первый ход в партии: часы ещё не запущены — просто активируем вторую сторону
     return { clock: { ...c, active: oppositeColor(moverColor), sinceMs: atMs }, flagged: null };
@@ -55,7 +56,7 @@ export function clockOnMove(
 
 /** Текущие остатки с учётом списания (для отдачи клиентам) */
 export function clockSnapshot(c: ClockState, atMs: number): { whiteMs: number; blackMs: number; running: boolean } {
-  if (c.active === null) return { whiteMs: c.whiteMs, blackMs: c.blackMs, running: false };
+  if (!c || c.active === null) return { whiteMs: c?.whiteMs ?? 0, blackMs: c?.blackMs ?? 0, running: false };
   const elapsed = Math.max(0, atMs - c.sinceMs);
   const remaining = Math.max(0, (c.active === 'w' ? c.whiteMs : c.blackMs) - elapsed);
   return c.active === 'w'

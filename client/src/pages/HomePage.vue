@@ -179,6 +179,39 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
   if (!tp.length) return 1200;
   return Math.round(tp.reduce((s, p) => s + p.rating, 0) / tp.length);
 }
+
+function teamPlayers(g: LiveGameInfo, team: number): LiveGameInfo['players'] {
+  return g.players.filter((p) => p.team === team);
+}
+
+// Подпись игрока в live-ленте: боты — «Бейдж · Elo» с полным тултипом, люди — ник.
+function livePlayerLabel(p: LiveGameInfo['players'][number]): string {
+  if (!p.isBot) return p.username;
+  const perso = getBotPersonality(p.username);
+  return perso ? `${perso.badge} · ${p.rating}` : `Бот · ${p.rating}`;
+}
+
+function livePlayerTitle(p: LiveGameInfo['players'][number]): string {
+  if (!p.isBot) return `${p.username} · ${p.rating}`;
+  return getBotTooltip(p.username, p.rating);
+}
+
+// Краткая сводка игроков лобби: боты — бейджем, люди — ником.
+function lobbyRosterLabel(l: LobbySummary): string {
+  return l.players
+    .map((p) => {
+      if (!p.isBot) return p.username;
+      const perso = getBotPersonality(p.username);
+      return perso ? perso.badge : 'Бот';
+    })
+    .join(', ');
+}
+
+function lobbyRosterTitle(l: LobbySummary): string {
+  return l.players
+    .map((p) => (p.isBot ? getBotTooltip(p.username, p.rating) : `${p.username} · ${p.rating}`))
+    .join('\n');
+}
 </script>
 
 <template>
@@ -249,12 +282,24 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
               <div class="live-meta">
                 <div class="players-line">
                   <span class="team t1">
-                    {{ g.players.filter((p) => p.team === 1).map((p) => p.username).join(' / ') }}
+                    <span
+                      v-for="p in teamPlayers(g, 1)"
+                      :key="p.username"
+                      class="live-player"
+                      :class="{ 'is-bot': p.isBot }"
+                      :title="livePlayerTitle(p)"
+                    >{{ livePlayerLabel(p) }}</span>
                     <small class="mono dim">({{ teamAvgRating(g.players, 1) }})</small>
                   </span>
                   <span class="vs">vs</span>
                   <span class="team t2">
-                    {{ g.players.filter((p) => p.team === 2).map((p) => p.username).join(' / ') }}
+                    <span
+                      v-for="p in teamPlayers(g, 2)"
+                      :key="p.username"
+                      class="live-player"
+                      :class="{ 'is-bot': p.isBot }"
+                      :title="livePlayerTitle(p)"
+                    >{{ livePlayerLabel(p) }}</span>
                     <small class="mono dim">({{ teamAvgRating(g.players, 2) }})</small>
                   </span>
                 </div>
@@ -292,12 +337,17 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
               @click="enterLobby(autoLobby)"
             >
               <div class="lobby-card-main single-line-main">
-                <span class="badge auto-chip">
-                  <AppIcon name="bolt" :size="12" />
-                  Быстрый старт {{ autoLobby.timeControl.kind === 'clock' ? `${autoLobby.timeControl.baseMin}+${autoLobby.timeControl.incSec}` : '' }}
+                <span class="badges-row">
+                  <span class="badge auto-chip">
+                    <AppIcon name="bolt" :size="12" />
+                    Быстрый старт {{ autoLobby.timeControl.kind === 'clock' ? `${autoLobby.timeControl.baseMin}+${autoLobby.timeControl.incSec}` : '' }}
+                  </span>
+                  <span class="badge">{{ modeLabel(autoLobby.mode) }}</span>
                 </span>
-                <span class="badge">{{ modeLabel(autoLobby.mode) }}</span>
-                <span class="auto-hint-text dim tiny">Боты замещаются игроками</span>
+                <span
+                  class="auto-hint-text dim tiny"
+                  title="Когда заходит человек — первый бот выходит и уступает место"
+                >Боты замещаются игроками</span>
               </div>
 
               <div class="lobby-card-meta">
@@ -329,8 +379,8 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
                   <span class="badge mono">{{ timeControlLabel(l.timeControl) }}</span>
                   <span class="badge">{{ modeLabel(l.mode) }}</span>
                 </div>
-                <div class="lobby-players-summary dim">
-                  {{ l.players.map((p) => p.username).join(', ') }}
+                <div class="lobby-players-summary dim" :title="lobbyRosterTitle(l)">
+                  {{ lobbyRosterLabel(l) }}
                 </div>
               </div>
 
@@ -636,6 +686,28 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  min-width: 0;
+}
+
+.badges-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.live-player + .live-player::before {
+  content: '/';
+  margin: 0 5px;
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+.live-player.is-bot {
+  color: var(--accent-2);
+  font-weight: 600;
+  cursor: help;
 }
 
 .auto-hint-text {
@@ -767,6 +839,14 @@ function teamAvgRating(players: { team: number; rating: number }[], team: number
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
+  }
+
+  .lobby-card.single-line-card {
+    flex-direction: column;
+  }
+
+  .lobby-card.single-line-card .single-line-main {
+    flex-wrap: wrap;
   }
 
   .lobby-card-meta {

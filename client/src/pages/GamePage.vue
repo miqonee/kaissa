@@ -185,12 +185,14 @@ function tickClocks(): void {
 
   if (!state.value || state.value.status !== 'active') return;
   const st = state.value;
+  if (!Array.isArray(st.clocks) || !Array.isArray(st.clocksActive)) return;
   st.clocks.forEach((_, b) => {
     const active = st.clocksActive[b];
     if (!active) return;
+    if (!localClocks.value[b]) return;
     const colorIdx = active === 'w' ? 0 : 1;
     const cur = localClocks.value[b]?.[colorIdx] ?? 0;
-    if (localClocks.value[b]) localClocks.value[b][colorIdx] = Math.max(0, cur - elapsed);
+    localClocks.value[b][colorIdx] = Math.max(0, cur - elapsed);
   });
 }
 
@@ -847,30 +849,49 @@ function resultHeadline(): string {
                 </div>
               </div>
 
-              <!-- Название дебюта и варианта -->
-              <div class="opening-name-block">
-                <h4 class="opening-title">{{ recognizedOpening.nameRu }}</h4>
-                <p v-if="recognizedOpening.variationRu" class="opening-variation">
-                  {{ recognizedOpening.variationRu }}
-                </p>
-                <span class="opening-name-en dim mono">{{ recognizedOpening.nameEn }}</span>
+              <!-- Развитие фигур после дебюта: важнее названия варианта -->
+              <div
+                v-if="movesSanHistory.length > 0"
+                class="development-row"
+                :title="`Не выведены: ${[...currentAnalysis.development.whiteUndeveloped, ...currentAnalysis.development.blackUndeveloped].join(', ') || 'все развиты'}`"
+              >
+                <span class="dim small-label">Развитие:</span>
+                <span class="mono dev-score">{{ currentAnalysis.development.whiteDeveloped }}/{{ currentAnalysis.development.whiteTotal }} — {{ currentAnalysis.development.blackDeveloped }}/{{ currentAnalysis.development.blackTotal }}</span>
+                <span class="dim tiny dev-summary">{{ currentAnalysis.development.summaryRu }}</span>
               </div>
 
-              <!-- Теоретические продолжения (вариации из текущей позиции) -->
-              <div v-if="recognizedOpening.continuations && recognizedOpening.continuations.length > 0" class="continuations-block">
-                <span class="dim small-label">Варианты теории:</span>
-                <div class="continuation-chips">
-                  <span
-                    v-for="c in recognizedOpening.continuations"
-                    :key="c.moveSan"
-                    class="cont-chip"
-                    :title="c.variationRu ? `${c.nameRu}: ${c.variationRu}` : c.nameRu"
-                  >
-                    <strong class="mono cont-move">{{ c.moveSan }}</strong>
-                    <span v-if="c.variationRu" class="cont-var dim">{{ c.variationRu }}</span>
-                  </span>
+              <!-- Название дебюта и варианта (после выхода из теории — свернуто) -->
+              <details
+                class="opening-details"
+                :open="recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame"
+              >
+                <summary class="dim small-label opening-summary">
+                  {{ (recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame) ? 'Дебют:' : `Дебют (${recognizedOpening.nameRu} — свернут, идёт ${currentAnalysis.positionPlan.structureNameRu})` }}
+                </summary>
+                <div class="opening-name-block">
+                  <h4 class="opening-title">{{ recognizedOpening.nameRu }}</h4>
+                  <p v-if="recognizedOpening.variationRu" class="opening-variation">
+                    {{ recognizedOpening.variationRu }}
+                  </p>
+                  <span class="opening-name-en dim mono">{{ recognizedOpening.nameEn }}</span>
                 </div>
-              </div>
+
+                <!-- Теоретические продолжения (вариации из текущей позиции) -->
+                <div v-if="recognizedOpening.continuations && recognizedOpening.continuations.length > 0 && recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame" class="continuations-block">
+                  <span class="dim small-label">Варианты теории:</span>
+                  <div class="continuation-chips">
+                    <span
+                      v-for="c in recognizedOpening.continuations"
+                      :key="c.moveSan"
+                      class="cont-chip"
+                      :title="c.variationRu ? `${c.nameRu}: ${c.variationRu}` : c.nameRu"
+                    >
+                      <strong class="mono cont-move">{{ c.moveSan }}</strong>
+                      <span v-if="c.variationRu" class="cont-var dim">{{ c.variationRu }}</span>
+                    </span>
+                  </div>
+                </div>
+              </details>
 
               <!-- Сыгранные ходы партии (полная нотация) -->
               <div v-if="recognizedOpening.playedMovesSan && recognizedOpening.playedMovesSan !== '—'" class="opening-moves-row">
@@ -1783,6 +1804,56 @@ function resultHeadline(): string {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-weight: 600;
+}
+
+.development-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  padding: 6px 10px;
+  cursor: help;
+}
+
+.dev-score {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-2);
+}
+
+.dev-summary {
+  flex-basis: 100%;
+  font-size: 11px;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+.opening-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.opening-summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.opening-summary::-webkit-details-marker {
+  display: none;
+}
+
+.opening-summary::before {
+  content: '▸ ';
+}
+
+.opening-details[open] .opening-summary::before {
+  content: '▾ ';
 }
 
 .opening-plan-box {

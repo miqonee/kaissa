@@ -106,7 +106,8 @@ adminRouter.get('/metrics', async (_req, res) => {
 
     const finalizeLevel = (acc: typeof combinedBotAcc): BotLevelMetric => {
       const draws = acc.totalGames - acc.wins - acc.losses;
-      const winRate = acc.totalGames ? Math.round((acc.wins / acc.totalGames) * 100) : 0;
+      // Score: ничья = пол-очка
+      const winRate = acc.totalGames ? Math.round(((acc.wins + 0.5 * draws) / acc.totalGames) * 100) : 0;
       const avgMoves = acc.totalGames ? Math.round(acc.totalMovesInGames / acc.totalGames) : 0;
       return {
         level: lvl.level,
@@ -158,27 +159,30 @@ adminRouter.get('/metrics', async (_req, res) => {
     const bestEloForHumans = (): string => {
       const vsHumanParts = matchingParts.filter((p) => p.game.participants.some((x) => !x.user.isBot));
       if (!vsHumanParts.length) return `${persona.defaultElo} (Номинал)`;
-      const map = new Map<number, { games: number; wins: number }>();
+      const map = new Map<number, { games: number; wins: number; draws: number }>();
       for (const p of vsHumanParts) {
         const elo = p.ratingBefore || persona.defaultElo;
         let entry = map.get(elo);
-        if (!entry) { entry = { games: 0, wins: 0 }; map.set(elo, entry); }
+        if (!entry) { entry = { games: 0, wins: 0, draws: 0 }; map.set(elo, entry); }
         entry.games++;
         const isWin = (p.game.result === '1-0' && p.team === 1) || (p.game.result === '0-1' && p.team === 2);
+        const isDraw = p.game.result === '1/2-1/2' || p.game.result === '*';
         if (isWin) entry.wins++;
+        else if (isDraw) entry.draws++;
       }
-      const list = [...map.entries()].map(([elo, stat]) => ({ elo, ...stat, winRate: Math.round((stat.wins / stat.games) * 100) }));
-      const withWins = list.filter((x) => x.wins > 0);
-      if (withWins.length > 0) {
-        withWins.sort((a, b) => b.winRate - a.winRate || b.games - a.games);
-        return `${withWins[0].elo} (${withWins[0].winRate}% побед)`;
+      const list = [...map.entries()].map(([elo, stat]) => ({ elo, ...stat, winRate: stat.games ? Math.round(((stat.wins + 0.5 * stat.draws) / stat.games) * 100) : 0 }));
+      const withScore = list.filter((x) => x.winRate > 0);
+      if (withScore.length > 0) {
+        withScore.sort((a, b) => b.winRate - a.winRate || b.games - a.games);
+        return `${withScore[0].elo} (${withScore[0].winRate}% очков)`;
       }
-      return `${list[0].elo} (0% побед)`;
+      return `${list[0].elo} (0% очков)`;
     };
 
     const finalizePersona = (acc: typeof combinedBotAcc, isHuman: boolean): BotPersonalityMetric => {
       const draws = acc.totalGames - acc.wins - acc.losses;
-      const winRate = acc.totalGames ? Math.round((acc.wins / acc.totalGames) * 100) : 0;
+      // Score: ничья = пол-очка
+      const winRate = acc.totalGames ? Math.round(((acc.wins + 0.5 * draws) / acc.totalGames) * 100) : 0;
       const avgMoves = acc.totalGames ? Math.round(acc.totalMovesInGames / acc.totalGames) : 0;
       const bestEloText = isHuman
         ? bestEloForHumans()
@@ -208,11 +212,11 @@ adminRouter.get('/metrics', async (_req, res) => {
     personalityMetricsVsBot.push(finalizePersona(combinedBotAcc, false));
   }
 
-  // 3. Дуэты и топ-уровни / персоналии (СТРОГО с wins > 0 и winRate > 0!)
+  // 3. Дуэты и топ-уровни / персоналии (по очкам: ничья = 0.5)
   const { best: bestPair, worst: worstPair } = botStatsTracker.getBestAndWorstPairs();
 
   const activeLevelList = botMetricsVsBot.concat(botMetricsVsHuman);
-  const playedLevels = activeLevelList.filter((l) => l.totalGames >= 1 && l.wins > 0);
+  const playedLevels = activeLevelList.filter((l) => l.totalGames >= 1 && l.winRate > 0);
   playedLevels.sort((a, b) => b.winRate - a.winRate || b.totalGames - a.totalGames);
   const topLevel = playedLevels[0]
     ? {
@@ -225,7 +229,7 @@ adminRouter.get('/metrics', async (_req, res) => {
     : null;
 
   const activePersonaList = personalityMetricsVsBot.concat(personalityMetricsVsHuman);
-  const playedPersonas = activePersonaList.filter((p) => p.totalGames >= 1 && p.wins > 0);
+  const playedPersonas = activePersonaList.filter((p) => p.totalGames >= 1 && p.winRate > 0);
   playedPersonas.sort((a, b) => b.winRate - a.winRate || b.totalGames - a.totalGames);
   const topPersonality = playedPersonas[0]
     ? {

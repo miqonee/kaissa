@@ -16,6 +16,16 @@ export interface PositionPlan {
   strategicPlanRu: string;
 }
 
+export interface DevelopmentInfo {
+  whiteDeveloped: number;
+  whiteTotal: number;
+  blackDeveloped: number;
+  blackTotal: number;
+  whiteUndeveloped: string[];
+  blackUndeveloped: string[];
+  summaryRu: string;
+}
+
 export interface PositionAnalysis {
   scoreCp: number;          // Оценка в сантипешках со стороны белых (+ = белые, - = чёрные)
   evalText: string;         // Строка оценки (+0.4, -1.2, 0.0, #M1, #-M2)
@@ -29,6 +39,7 @@ export interface PositionAnalysis {
   isDraw: boolean;
   isEndgame: boolean;
   positionPlan: PositionPlan;
+  development: DevelopmentInfo;
 }
 
 const PIECE_VALUES: Record<PieceSymbol, number> = {
@@ -230,6 +241,74 @@ function analyzePositionStructure(chess: Chess, isEndgame: boolean): PositionPla
   };
 }
 
+function analyzeDevelopment(chess: Chess): DevelopmentInfo {
+  const board = chess.board();
+  const files = 'abcdefgh';
+  const sq = (r: number, c: number): string => `${files[c]}${8 - r}`;
+  const at = (r: number, c: number): { type: string; color: string } | null => {
+    const p = board[r]?.[c];
+    return p ? { type: p.type, color: p.color } : null;
+  };
+
+  // Считаем развитие лёгких фигур + ферзь + король (рокировка/ход короля). Ладьи — позже, не шумят в дебюте.
+  const mk = (color: 'w' | 'b'): { r: number; c: number; type: 'n' | 'b' | 'q' | 'k'; label: string }[] => {
+    const home = color === 'w' ? 7 : 0;
+    return [
+      { r: home, c: 1, type: 'n', label: `К${sq(home, 1)}` },
+      { r: home, c: 6, type: 'n', label: `К${sq(home, 6)}` },
+      { r: home, c: 2, type: 'b', label: `С${sq(home, 2)}` },
+      { r: home, c: 5, type: 'b', label: `С${sq(home, 5)}` },
+      { r: home, c: 3, type: 'q', label: `Ф${sq(home, 3)}` },
+      { r: home, c: 4, type: 'k', label: `Кр${sq(home, 4)}` },
+    ];
+  };
+
+  const evalSide = (color: 'w' | 'b'): { developed: number; total: number; undeveloped: string[] } => {
+    const list = mk(color);
+    let developed = 0;
+    const undeveloped: string[] = [];
+    for (const s of list) {
+      const p = at(s.r, s.c);
+      const home = p && p.color === color && p.type === s.type;
+      if (home) undeveloped.push(s.label);
+      else developed++;
+    }
+    return { developed, total: list.length, undeveloped };
+  };
+
+  const w = evalSide('w');
+  const b = evalSide('b');
+  const parts: string[] = [];
+  if (w.undeveloped.length && w.developed < w.total) parts.push(`белые дома: ${w.undeveloped.join(', ')}`);
+  if (b.undeveloped.length && b.developed < b.total) parts.push(`чёрные дома: ${b.undeveloped.join(', ')}`);
+  const summaryRu =
+    w.developed === w.total && b.developed === b.total
+      ? 'Фигуры развиты, короли в безопасности — дальше план по структуре'
+      : `Развитие ${w.developed}/${w.total} — ${b.developed}/${b.total}${parts.length ? ` · ${parts.join(' · ')}` : ''}`;
+
+  return {
+    whiteDeveloped: w.developed,
+    whiteTotal: w.total,
+    blackDeveloped: b.developed,
+    blackTotal: b.total,
+    whiteUndeveloped: w.undeveloped,
+    blackUndeveloped: b.undeveloped,
+    summaryRu,
+  };
+}
+
+function emptyDevelopment(): DevelopmentInfo {
+  return {
+    whiteDeveloped: 0,
+    whiteTotal: 6,
+    blackDeveloped: 0,
+    blackTotal: 6,
+    whiteUndeveloped: [],
+    blackUndeveloped: [],
+    summaryRu: 'Начальная расстановка — выводите коней и слонов, рокируйтесь',
+  };
+}
+
 export function analyzePosition(fen: string): PositionAnalysis {
   const defaultPlan: PositionPlan = {
     stage: 'opening',
@@ -251,6 +330,7 @@ export function analyzePosition(fen: string): PositionAnalysis {
       isDraw: false,
       isEndgame: false,
       positionPlan: defaultPlan,
+      development: emptyDevelopment(),
     };
   }
 
@@ -271,6 +351,7 @@ export function analyzePosition(fen: string): PositionAnalysis {
       isDraw: false,
       isEndgame: false,
       positionPlan: defaultPlan,
+      development: emptyDevelopment(),
     };
   }
 
@@ -297,6 +378,7 @@ export function analyzePosition(fen: string): PositionAnalysis {
         structureNameRu: 'Мат на доске',
         strategicPlanRu: 'Партия завершена матом.',
       },
+      development: analyzeDevelopment(chess),
     };
   }
 
@@ -318,6 +400,7 @@ export function analyzePosition(fen: string): PositionAnalysis {
         structureNameRu: 'Ничейная позиция',
         strategicPlanRu: 'Партия завершена вничью.',
       },
+      development: analyzeDevelopment(chess),
     };
   }
 
@@ -380,6 +463,7 @@ export function analyzePosition(fen: string): PositionAnalysis {
 
   const materialDiff = Math.round((whiteMat - blackMat) / 100);
   const positionPlan = analyzePositionStructure(chess, isEndgame);
+  const development = analyzeDevelopment(chess);
 
   return {
     scoreCp: clampedCp,
@@ -394,5 +478,6 @@ export function analyzePosition(fen: string): PositionAnalysis {
     isDraw: false,
     isEndgame,
     positionPlan,
+    development,
   };
 }

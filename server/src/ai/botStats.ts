@@ -40,7 +40,7 @@ class BotStatsTracker {
   private statsByLevel = new Map<number, BotCounterStats>();
   private statsByUsername = new Map<string, BotCounterStats>();
   private statsByPair = new Map<string, BotPairRecord>();
-  private statsByUsernameRating = new Map<string, Map<number, { games: number; wins: number }>>();
+  private statsByUsernameRating = new Map<string, Map<number, { games: number; wins: number; draws: number }>>();
 
   /**
    * Зафиксировать результат чисто ботовской партии
@@ -77,11 +77,13 @@ class BotStatsTracker {
       const elo = p.ratingBefore || 1200;
       let rEntry = ratingMap.get(elo);
       if (!rEntry) {
-        rEntry = { games: 0, wins: 0 };
+        rEntry = { games: 0, wins: 0, draws: 0 };
         ratingMap.set(elo, rEntry);
       }
       rEntry.games += 1;
-      if (!isDraw && p.team === winnerTeam) {
+      if (isDraw) {
+        rEntry.draws += 1;
+      } else if (p.team === winnerTeam) {
         rEntry.wins += 1;
       }
 
@@ -147,17 +149,18 @@ class BotStatsTracker {
     if (!ratingMap || ratingMap.size === 0) {
       return `${defaultElo} (Номинал)`;
     }
+    // Score = (победы + 0.5 * ничьи) / игры — ничья даёт пол-очка.
     const entries = [...ratingMap.entries()].map(([elo, stat]) => ({
       elo,
       games: stat.games,
       wins: stat.wins,
-      winRate: Math.round((stat.wins / stat.games) * 100),
+      winRate: stat.games ? Math.round(((stat.wins + 0.5 * stat.draws) / stat.games) * 100) : 0,
     }));
 
-    const withWins = entries.filter((e) => e.wins > 0);
-    if (withWins.length > 0) {
-      withWins.sort((a, b) => b.winRate - a.winRate || b.games - a.games);
-      return `${withWins[0].elo} (${withWins[0].winRate}% побед)`;
+    const withScore = entries.filter((e) => e.winRate > 0);
+    if (withScore.length > 0) {
+      withScore.sort((a, b) => b.winRate - a.winRate || b.games - a.games);
+      return `${withScore[0].elo} (${withScore[0].winRate}% очков)`;
     }
 
     const totalG = entries.reduce((s, e) => s + e.games, 0);
@@ -171,7 +174,8 @@ class BotStatsTracker {
       const p1 = getBotPersonality(p.bot1Username);
       const p2 = getBotPersonality(p.bot2Username);
       if (!p1 || !p2) continue; // Игнорируем устаревших тестовых ботов
-      const winRate = p.totalGames > 0 ? Math.round((p.wins / p.totalGames) * 100) : 0;
+      // Score: ничья = пол-очка
+      const winRate = p.totalGames > 0 ? Math.round(((p.wins + 0.5 * p.draws) / p.totalGames) * 100) : 0;
       list.push({
         pairKey: p.pairKey,
         bot1Name: p1.name,
@@ -192,9 +196,9 @@ class BotStatsTracker {
     const pairs = this.getAllPairMetrics().filter((p) => p.totalGames >= 1);
     if (!pairs.length) return { best: null, worst: null };
 
-    // Лучшая пара — строго при наличии хотя бы одной победы!
-    const pairsWithWins = pairs.filter((p) => p.wins > 0);
-    const sortedBest = pairsWithWins.sort((a, b) => b.winRate - a.winRate || b.totalGames - a.totalGames);
+    // Лучшая пара — по очкам (ничья = 0.5), при наличии хотя бы очков!
+    const pairsWithScore = pairs.filter((p) => p.winRate > 0);
+    const sortedBest = pairsWithScore.sort((a, b) => b.winRate - a.winRate || b.totalGames - a.totalGames);
     const best = sortedBest[0] || null;
 
     // Худшая пара

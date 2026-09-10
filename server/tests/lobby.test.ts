@@ -223,4 +223,48 @@ describe('Auto Lobby and Team Modes', () => {
     const [botHigh, botLow] = botsAfterTwo.slice().sort((a, b) => b.rating - a.rating);
     expect(botHigh.rating).toBeGreaterThan(botLow.rating);
   });
+
+  it('rejects addBot in bughouse lobby (bots disabled)', async () => {
+    const mgr = new LobbiesManager();
+    const lobby = new Lobby(
+      {
+        id: 'BUG_NO_BOT',
+        code: 'BUG001',
+        name: 'Багхаус',
+        mode: 'bughouse',
+        timeControl: { kind: 'none', baseMin: 0, incSec: 0 },
+        private: false,
+        teamMode: 'auto',
+      },
+      { uid: 1, username: 'h1', rating: 1200, ready: true, host: true, joinedAt: Date.now(), isBot: false },
+    );
+    (mgr as any).lobbies.set(lobby.id, lobby);
+
+    const res = await mgr.addBot(lobby.id, 1);
+    expect(res.ok).toBe(false);
+    expect(lobby.members.size).toBe(1);
+  });
+
+  it('rejects start of bughouse lobby with bots in lineup', async () => {
+    const mgr = new LobbiesManager();
+    const lobby = new Lobby(
+      {
+        id: 'BUG_START',
+        code: 'BUG002',
+        name: 'Багхаус',
+        mode: 'bughouse',
+        timeControl: { kind: 'none', baseMin: 0, incSec: 0 },
+        private: false,
+        teamMode: 'auto',
+      },
+      { uid: 1, username: 'h1', rating: 1200, ready: true, host: true, joinedAt: Date.now(), isBot: false },
+    );
+    lobby.members.set(2, { uid: 2, username: 'h2', rating: 1200, ready: true, host: false, joinedAt: Date.now(), isBot: false });
+    lobby.members.set(3, { uid: 3, username: 'h3', rating: 1200, ready: true, host: false, joinedAt: Date.now(), isBot: false });
+    lobby.members.set(4, { uid: 4, username: 'bot_x', rating: 1200, ready: true, host: false, joinedAt: Date.now(), isBot: true, botLevel: 4 });
+    (mgr as any).lobbies.set(lobby.id, lobby);
+
+    const res = await mgr.start(lobby.id, 1);
+    expect(res.ok).toBe(false);
+  });
 });

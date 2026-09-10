@@ -158,8 +158,9 @@ function chooseTeam(team: 1 | 2 | null): void {
   socket.emit('lobby:set-team', team);
 }
 
-function kick(userId: number): void {
-  if (confirm('Исключить этого игрока из стола?')) {
+function kick(userId: number, username?: string, isBot?: boolean): void {
+  const label = isBot ? `Убрать бота «${username ?? 'бот'}» из стола?` : 'Исключить этого игрока из стола?';
+  if (confirm(label)) {
     socket.emit('lobby:kick', userId);
   }
 }
@@ -226,6 +227,7 @@ function modeLabel(m: string): string {
         </div>
         <p class="dim hero-desc">
           Соберите 4 игроков за столом. При старте команды распределятся по рейтингу поровну (1+4 против 2+3).
+          <span v-if="lobby.mode === 'bughouse'">В багхаусе играют только люди — боты отключены.</span>
         </p>
       </div>
 
@@ -371,11 +373,11 @@ function modeLabel(m: string): string {
                   <AppIcon v-if="p.ready" name="check" :size="12" /><span>{{ p.ready ? 'Готов' : 'Ждём…' }}</span>
                 </span>
                 <button
-                  v-if="isHost && !lobby.isAuto && p.userId !== me?.id && !p.isBot"
+                  v-if="isHost && !lobby.isAuto && p.userId !== me?.id"
                   class="small danger icon-only"
-                  title="Исключить игрока"
-                  :aria-label="`Исключить ${p.username}`"
-                  @click="kick(p.userId)"
+                  :title="p.isBot ? `Убрать бота ${p.username}` : 'Исключить игрока'"
+                  :aria-label="p.isBot ? `Убрать бота ${p.username}` : `Исключить ${p.username}`"
+                  @click="kick(p.userId, p.username, p.isBot)"
                 >
                   <AppIcon name="close" :size="14" />
                 </button>
@@ -391,9 +393,10 @@ function modeLabel(m: string): string {
               <div class="slot-idx mono">{{ lobby.players.length + i }}</div>
               <div class="slot-info">
                 <span class="slot-name dim">Ожидание игрока…</span>
+                <span v-if="lobby.mode === 'bughouse'" class="dim tiny">Только люди — боты в багхаусе отключены</span>
               </div>
               <button
-                v-if="isHost && !lobby.isAuto"
+                v-if="isHost && !lobby.isAuto && lobby.mode !== 'bughouse'"
                 type="button"
                 class="small ghost add-bot-slot-btn"
                 title="Добавить бота со случайным стилем и уровнем +-150"

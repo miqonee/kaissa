@@ -81,9 +81,13 @@ function submit() {
               <p class="mode-short">{{ info.short }}</p>
               <ul class="mode-rules">
                 <li v-for="(r, i) in info.rules" :key="i">{{ r }}</li>
+                <li v-if="info.mode === 'bughouse'">Только живые игроки — боты отключены</li>
               </ul>
             </div>
           </div>
+          <p v-if="selectedMode === 'bughouse'" class="dim tiny" style="margin: 0;">
+            В багхаус ботов добавить нельзя: нужны 4 человека за столом.
+          </p>
         </div>
 
         <!-- Контроль времени -->

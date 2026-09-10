@@ -44,20 +44,20 @@ const displayedPersonalityMetrics = computed(() => {
 });
 
 const topLevel = computed(() => {
-  const list = currentLevelMetrics.value.filter((l) => l.totalGames >= 1 && l.wins > 0 && l.winRate > 0);
+  const list = currentLevelMetrics.value.filter((l) => l.totalGames >= 1 && l.winRate > 0);
   if (!list.length) return null;
   return list.slice().sort((a, b) => b.winRate - a.winRate || b.totalGames - a.totalGames)[0];
 });
 
 const topPersonality = computed(() => {
-  const list = currentPersonalityMetrics.value.filter((p) => p.totalGames >= 1 && p.wins > 0 && p.winRate > 0);
+  const list = currentPersonalityMetrics.value.filter((p) => p.totalGames >= 1 && p.winRate > 0);
   if (!list.length) return null;
   return list.slice().sort((a, b) => b.winRate - a.winRate || b.totalGames - a.totalGames)[0];
 });
 
 const bestPair = computed(() => {
   const p = metrics.value?.bestPair;
-  return p && p.wins > 0 && p.winRate > 0 ? p : null;
+  return p && p.winRate > 0 ? p : null;
 });
 
 const worstPair = computed(() => {
@@ -180,8 +180,8 @@ function fmtDuration(sec: number): string {
           <div class="bot-head-left">
             <h3>Калибровка и статистика ботов</h3>
             <span class="hint">12 уровней Stockfish · 12 стилей гроссмейстеров</span>
-            <span v-if="topLevel && !isBotMetricsOpen" class="top-stat-pill mono">
-              Топ: Ур.{{ topLevel.level }} ({{ topLevel.winRate }}% побед)
+            <span v-if="topLevel && !isBotMetricsOpen" class="top-stat-pill mono" title="Очки = (победы + 0.5 × ничьи) / игры">
+              Топ: Ур.{{ topLevel.level }} ({{ topLevel.winRate }}% очков)
             </span>
           </div>
           <button class="small ghost bot-toggle-btn" type="button" aria-label="Свернуть / развернуть блок">
@@ -200,9 +200,9 @@ function fmtDuration(sec: number): string {
               </div>
               <div v-if="topLevel" class="hl-content">
                 <span class="hl-main">Ур.{{ topLevel.level }} · {{ topLevel.name }}</span>
-                <span class="hl-sub mono">{{ topLevel.winRate }}% побед ({{ topLevel.totalGames }} игр) · {{ topLevel.elo }} Elo</span>
+                <span class="hl-sub mono" title="Очки = (победы + 0.5 × ничьи) / игры">{{ topLevel.winRate }}% очков ({{ topLevel.totalGames }} игр) · {{ topLevel.elo }} Elo</span>
               </div>
-              <div v-else class="hl-empty dim tiny">Пока нет побед</div>
+              <div v-else class="hl-empty dim tiny">Пока нет очков</div>
             </div>
 
             <div class="highlight-card">
@@ -212,9 +212,9 @@ function fmtDuration(sec: number): string {
               </div>
               <div v-if="topPersonality" class="hl-content">
                 <span class="hl-main">{{ topPersonality.name }} · {{ topPersonality.badge }}</span>
-                <span class="hl-sub mono">{{ topPersonality.winRate }}% побед ({{ topPersonality.totalGames }} игр)</span>
+                <span class="hl-sub mono" title="Очки = (победы + 0.5 × ничьи) / игры">{{ topPersonality.winRate }}% очков ({{ topPersonality.totalGames }} игр)</span>
               </div>
-              <div v-else class="hl-empty dim tiny">Пока нет побед</div>
+              <div v-else class="hl-empty dim tiny">Пока нет очков</div>
             </div>
 
             <div class="highlight-card">
@@ -224,9 +224,9 @@ function fmtDuration(sec: number): string {
               </div>
               <div v-if="bestPair" class="hl-content">
                 <span class="hl-main">{{ bestPair.bot1Name }} + {{ bestPair.bot2Name }}</span>
-                <span class="hl-sub mono">{{ bestPair.winRate }}% побед ({{ bestPair.totalGames }} партий)</span>
+                <span class="hl-sub mono" title="Очки = (победы + 0.5 × ничьи) / партии">{{ bestPair.winRate }}% очков ({{ bestPair.totalGames }} партий)</span>
               </div>
-              <div v-else class="hl-empty dim tiny">Пока нет совместных побед</div>
+              <div v-else class="hl-empty dim tiny">Пока нет очков у дуэтов</div>
             </div>
 
             <div class="highlight-card">
@@ -236,7 +236,7 @@ function fmtDuration(sec: number): string {
               </div>
               <div v-if="worstPair && worstPair.pairKey !== bestPair?.pairKey" class="hl-content">
                 <span class="hl-main">{{ worstPair.bot1Name }} + {{ worstPair.bot2Name }}</span>
-                <span class="hl-sub mono">{{ worstPair.winRate }}% побед ({{ worstPair.totalGames }} партий)</span>
+                <span class="hl-sub mono" title="Очки = (победы + 0.5 × ничьи) / партии">{{ worstPair.winRate }}% очков ({{ worstPair.totalGames }} партий)</span>
               </div>
               <div v-else class="hl-empty dim tiny">Пока недостаточно матчей</div>
             </div>
@@ -277,6 +277,7 @@ function fmtDuration(sec: number): string {
                 class="tiny pill"
                 :class="{ active: botTab === 'bot' }"
                 @click="botTab = 'bot'"
+                title="Демо и тюнинг-партии ИИ vs ИИ (in-memory, сбрасывается при рестарте сервера)"
               >
                 ИИ vs ИИ (Демо/Тюнинг)
               </button>
@@ -292,20 +293,20 @@ function fmtDuration(sec: number): string {
                   <th>Номинал Elo</th>
                   <th>Игр</th>
                   <th>В / П / Н</th>
-                  <th>Win Rate</th>
-                  <th>Мат / Флаг / Пат</th>
-                  <th>Ср. ходов</th>
+                  <th title="Очки = (победы + 0.5 × ничьи) / игры">Очки</th>
+                  <th title="Мат / Флаг / Пат">М / Ф / П</th>
+                  <th title="Среднее число полуходов в партии">Ср. ходов</th>
                 </tr>
               </thead>
               <tbody>
                 <tr
                   v-for="b in displayedLevelMetrics"
                   :key="b.level"
-                  :class="{ 'highlight-top': topLevel?.level === b.level && b.wins > 0 }"
+                  :class="{ 'highlight-top': topLevel?.level === b.level && b.winRate > 0 }"
                 >
                   <td>
                     <strong>Ур.{{ b.level }} · {{ b.name }}</strong>
-                    <span v-if="topLevel?.level === b.level && b.wins > 0" class="top-tag mono">
+                    <span v-if="topLevel?.level === b.level && b.winRate > 0" class="top-tag mono">
                       Топ
                     </span>
                   </td>
@@ -315,6 +316,7 @@ function fmtDuration(sec: number): string {
                   <td>
                     <span
                       class="badge mono"
+                      :title="`${b.wins} побед, ${b.draws} ничьих, ${b.losses} поражений из ${b.totalGames}`"
                       :class="{
                         ok: b.winRate >= 45 && b.winRate <= 65,
                         danger: b.winRate > 65,
@@ -324,7 +326,7 @@ function fmtDuration(sec: number): string {
                       {{ b.winRate }}%
                     </span>
                   </td>
-                  <td class="mono dim">{{ b.checkmateCount }} / {{ b.timeoutCount }} / {{ b.stalemateCount }}</td>
+                  <td class="mono dim" :title="`Мат: ${b.checkmateCount}, флаг: ${b.timeoutCount}, пат: ${b.stalemateCount}`">{{ b.checkmateCount }} / {{ b.timeoutCount }} / {{ b.stalemateCount }}</td>
                   <td class="mono dim">{{ b.avgMoves }}</td>
                 </tr>
               </tbody>
@@ -334,43 +336,44 @@ function fmtDuration(sec: number): string {
             </div>
           </div>
 
-          <!-- Таблица 2: По стилям (12 персоналий) -->
+          <!-- Таблица 2: По стилям (12 персоналий) — описание и Elo только в тултипе бейджа -->
           <div v-else class="table-wrap">
             <table v-if="displayedPersonalityMetrics.length" class="club">
               <thead>
                 <tr>
                   <th>Персоналия</th>
-                  <th>Стиль / тактика</th>
-                  <th>Лучший Elo</th>
                   <th>Игр</th>
                   <th>В / П / Н</th>
-                  <th>Win Rate</th>
-                  <th>Мат / Флаг / Пат</th>
-                  <th>Ср. ходов</th>
+                  <th title="Очки = (победы + 0.5 × ничьи) / игры">Очки</th>
+                  <th title="Мат / Флаг / Пат">М / Ф / П</th>
+                  <th title="Среднее число полуходов в партии">Ср. ходов</th>
                 </tr>
               </thead>
               <tbody>
                 <tr
                   v-for="p in displayedPersonalityMetrics"
                   :key="p.username"
-                  :class="{ 'highlight-top': topPersonality?.username === p.username && p.wins > 0 }"
+                  :class="{ 'highlight-top': topPersonality?.username === p.username && p.winRate > 0 }"
                 >
                   <td>
-                    <strong>{{ p.name }}</strong>
-                    <span class="bot-badge tiny" style="margin-left: 6px;">
+                    <strong :title="p.username">{{ p.name }}</strong>
+                    <span
+                      class="bot-badge tiny"
+                      style="margin-left: 6px;"
+                      :title="`${p.title} — ${p.description} · ${p.bestEloText || `${p.defaultElo} (Номинал)`}`"
+                    >
                       {{ p.badge }}
                     </span>
-                    <span v-if="topPersonality?.username === p.username && p.wins > 0" class="top-tag mono">
+                    <span v-if="topPersonality?.username === p.username && p.winRate > 0" class="top-tag mono">
                       Топ
                     </span>
                   </td>
-                  <td class="dim tiny">{{ p.description }}</td>
-                  <td class="mono" style="font-size: 11.5px;">{{ p.bestEloText || `${p.defaultElo} (Номинал)` }}</td>
                   <td class="mono dim">{{ p.totalGames }}</td>
                   <td class="mono dim">{{ p.wins }} / {{ p.losses }} / {{ p.draws }}</td>
                   <td>
                     <span
                       class="badge mono"
+                      :title="`${p.wins} побед, ${p.draws} ничьих, ${p.losses} поражений из ${p.totalGames}`"
                       :class="{
                         ok: p.winRate >= 45 && p.winRate <= 65,
                         danger: p.winRate > 65,
@@ -380,7 +383,7 @@ function fmtDuration(sec: number): string {
                       {{ p.winRate }}%
                     </span>
                   </td>
-                  <td class="mono dim">{{ p.checkmateCount }} / {{ p.timeoutCount }} / {{ p.stalemateCount }}</td>
+                  <td class="mono dim" :title="`Мат: ${p.checkmateCount}, флаг: ${p.timeoutCount}, пат: ${p.stalemateCount}`">{{ p.checkmateCount }} / {{ p.timeoutCount }} / {{ p.stalemateCount }}</td>
                   <td class="mono dim">{{ p.avgMoves }}</td>
                 </tr>
               </tbody>
@@ -610,6 +613,11 @@ function fmtDuration(sec: number): string {
   background: var(--accent);
   color: #000000;
   margin-left: 6px;
+}
+
+.bot-badge.tiny[title] {
+  cursor: help;
+  white-space: nowrap;
 }
 
 .highlight-top {

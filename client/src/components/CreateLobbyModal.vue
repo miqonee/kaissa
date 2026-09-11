@@ -17,6 +17,14 @@ const selectedMode = ref<GameMode>('bughouse');
 const lobbyName = ref('');
 const isPrivate = ref(false);
 const selectedTeamMode = ref<TeamMode>('auto');
+const expandedRules = ref<Record<GameMode, boolean>>({
+  bughouse: false,
+  team: false,
+});
+
+function toggleRules(mode: GameMode) {
+  expandedRules.value[mode] = !expandedRules.value[mode];
+}
 
 const TC_PRESETS: { label: string; tc: TimeControl }[] = [
   { label: '3+2 блиц', tc: { kind: 'clock', baseMin: 3, incSec: 2 } },
@@ -79,15 +87,20 @@ function submit() {
                 </span>
               </div>
               <p class="mode-short">{{ info.short }}</p>
-              <ul class="mode-rules">
+              <button
+                type="button"
+                class="mode-rules-toggle"
+                @click.stop="toggleRules(info.mode)"
+              >
+                <span>{{ expandedRules[info.mode] ? 'Скрыть правила' : 'Правила режима' }}</span>
+                <AppIcon :name="expandedRules[info.mode] ? 'chevron-up' : 'chevron-down'" :size="13" />
+              </button>
+              <ul v-if="expandedRules[info.mode]" class="mode-rules">
                 <li v-for="(r, i) in info.rules" :key="i">{{ r }}</li>
                 <li v-if="info.mode === 'bughouse'">Только живые игроки — боты отключены</li>
               </ul>
             </div>
           </div>
-          <p v-if="selectedMode === 'bughouse'" class="dim tiny" style="margin: 0;">
-            В багхаус ботов добавить нельзя: нужны 4 человека за столом.
-          </p>
         </div>
 
         <!-- Контроль времени -->
@@ -164,13 +177,39 @@ function submit() {
 
 <style scoped>
 .create-modal {
-  max-width: 660px;
+  max-width: 620px;
+  max-height: min(92vh, 700px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.create-modal :deep(.modal-body),
+.modal-body {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding: 14px 20px;
+}
+
+.create-modal :deep(.modal-foot),
+.modal-foot {
+  flex-shrink: 0;
+  padding: 12px 20px;
+  background: var(--surface-2);
+}
+
+.form-row {
+  margin-bottom: 12px;
+}
+.form-row:last-child {
+  margin-bottom: 0;
 }
 
 .mode-cards {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 10px;
 }
 @media (max-width: 600px) {
   .mode-cards {
@@ -181,7 +220,7 @@ function submit() {
 .mode-card {
   border: 1.5px solid var(--line-2);
   border-radius: var(--r-m);
-  padding: 14px;
+  padding: 12px 14px;
   background: var(--surface-inset);
   cursor: pointer;
   transition: all 0.15s;
@@ -204,12 +243,12 @@ function submit() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .mode-title {
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--ink);
 }
@@ -217,8 +256,8 @@ function submit() {
 .mode-check {
   background: var(--accent-2);
   color: var(--accent-ink);
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
@@ -226,36 +265,58 @@ function submit() {
 }
 
 .mode-short {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink-2);
-  margin: 0 0 10px;
-  line-height: 1.4;
+  margin: 0 0 6px;
+  line-height: 1.35;
+}
+
+.mode-rules-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 0;
+  margin-top: auto;
+  align-self: flex-start;
+  opacity: 0.85;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.mode-rules-toggle:hover {
+  opacity: 1;
+  color: var(--ink);
 }
 
 .mode-rules {
-  margin: 0;
+  margin: 8px 0 0;
   padding-left: 16px;
   font-size: 11.5px;
   color: var(--ink-3);
-  line-height: 1.45;
+  line-height: 1.4;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .tc-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 6px;
 }
 
 .tc-btn {
-  padding: 8px 10px;
+  padding: 6px 8px;
   border-radius: var(--r-s);
   border: 1px solid var(--line-2);
   background: var(--surface-inset);
   color: var(--ink-2);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
 }
 
@@ -272,22 +333,22 @@ function submit() {
 }
 
 .private-row {
-  margin-top: 18px;
-  padding-top: 14px;
+  margin-top: 10px;
+  padding-top: 10px;
   border-top: 1px solid var(--line);
 }
 
 .checkbox-label {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
   cursor: pointer;
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .checkbox-label input {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   margin-top: 2px;
   cursor: pointer;
 }
@@ -300,7 +361,7 @@ function submit() {
 
 .checkbox-label small {
   display: block;
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 11.5px;
+  line-height: 1.35;
 }
 </style>

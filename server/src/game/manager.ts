@@ -121,7 +121,7 @@ export class GamesManager {
       const history = teamGame ? teamGame.chess.history({ verbose: true }) : [];
       const lastMove = history.length > 0 ? history[history.length - 1] : null;
 
-      const delayMs = getBotThinkingDelayMs(fen, lastMove, g.ply);
+      const delayMs = getBotThinkingDelayMs(fen, lastMove, g.ply, Boolean(g.isDemo));
       const timer = setTimeout(async () => {
         this.botTimers.delete(key);
         const currentGame = this.games.get(gameId);

@@ -151,6 +151,13 @@ describe('AI Chess Engine & Stockfish WASM', () => {
       expect(ms).toBeGreaterThanOrEqual(3000);
       expect(ms).toBeLessThanOrEqual(5000);
     }
+
+    // Chess TV (isDemo): быстрый зрительский темп 1.0 - 2.0 с даже при шахе
+    for (let i = 0; i < 10; i++) {
+      const ms = getBotThinkingDelayMs(checkFen, null, 20, true);
+      expect(ms).toBeGreaterThanOrEqual(1000);
+      expect(ms).toBeLessThanOrEqual(2000);
+    }
   });
 
   it('advances passed pawn in king and pawn endgame', async () => {

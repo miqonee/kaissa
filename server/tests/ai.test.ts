@@ -152,11 +152,24 @@ describe('AI Chess Engine & Stockfish WASM', () => {
       expect(ms).toBeLessThanOrEqual(5000);
     }
 
-    // Chess TV (isDemo): быстрый зрительский темп 1.0 - 2.0 с даже при шахе
+    // Chess TV (isDemo): динамический темп 1.0 - 5.0 с по стадиям
+    // 1. Дебют Chess TV: 1.0 - 2.0 с
     for (let i = 0; i < 10; i++) {
-      const ms = getBotThinkingDelayMs(checkFen, null, 20, true);
+      const ms = getBotThinkingDelayMs(openingFen, null, 2, true);
       expect(ms).toBeGreaterThanOrEqual(1000);
       expect(ms).toBeLessThanOrEqual(2000);
+    }
+    // 2. Шах королю / острая тактика Chess TV: 3.5 - 5.0 с
+    for (let i = 0; i < 10; i++) {
+      const ms = getBotThinkingDelayMs(checkFen, null, 20, true);
+      expect(ms).toBeGreaterThanOrEqual(3500);
+      expect(ms).toBeLessThanOrEqual(5000);
+    }
+    // 3. Миттельшпиль Chess TV: 2.0 - 3.5 с
+    for (let i = 0; i < 10; i++) {
+      const ms = getBotThinkingDelayMs(quietMiddlegameFen, null, 17, true);
+      expect(ms).toBeGreaterThanOrEqual(2000);
+      expect(ms).toBeLessThanOrEqual(3500);
     }
   });
 

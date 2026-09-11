@@ -37,8 +37,11 @@ export function getBotConfig(levelOrUsername: number | string): BotConfig {
 }
 
 /**
- * Расчёт задержки перед ходом:
- * - Для Chess TV (демо-партии на главной): динамичный зрительский темп 1.0 – 2.0 с
+ * Расчёт задержки перед ходом в зависимости от стадии и ситуации:
+ * - Для Chess TV (демо-партии на главной, 1.0 - 5.0 с):
+ *   - Дебют / очевидные ответные взятия: 1.0 – 2.0 с
+ *   - Сложные счётные позиции (шах королю, острая тактика): 3.5 – 5.0 с
+ *   - Обычный миттельшпиль / позиционная игра: 2.0 – 3.5 с
  * - Для игровых партий (1.0 - 10.0 с):
  *   - Дебют / очевидные ответные взятия: 1.0 – 2.5 с
  *   - Сложные счётные позиции (шах королю, острая тактика): 5.0 – 10.0 с
@@ -50,27 +53,26 @@ export function getBotThinkingDelayMs(
   ply?: number,
   isDemo?: boolean,
 ): number {
-  // Для демонстрационных партий Chess TV на главной странице темп всегда быстрый
-  if (isDemo) {
-    return Math.floor(1000 + Math.random() * 1000); // 1.0 - 2.0 с
-  }
-
   if (!fen) {
-    return Math.floor(1000 + Math.random() * 9000);
+    return isDemo
+      ? Math.floor(1000 + Math.random() * 4000)
+      : Math.floor(1000 + Math.random() * 9000);
   }
 
   let chess: Chess;
   try {
     chess = new Chess(fen);
   } catch {
-    return Math.floor(1000 + Math.random() * 9000);
+    return isDemo
+      ? Math.floor(1000 + Math.random() * 4000)
+      : Math.floor(1000 + Math.random() * 9000);
   }
 
   const moves = chess.moves({ verbose: true });
   const moveNumber = parseInt(fen.split(' ')[5] || '1', 10);
   const currentPly = ply ?? (moveNumber * 2 - (chess.turn() === 'w' ? 2 : 1));
 
-  // 1. Дебют или очевидное ответное взятие (1.0 - 2.5 с)
+  // 1. Дебют или очевидное ответное взятие (Chess TV: 1.0 - 2.0 с, обычные: 1.0 - 2.5 с)
   const isOpening = currentPly <= 8;
   const isRecapture = Boolean(
     lastMove?.to &&
@@ -79,21 +81,27 @@ export function getBotThinkingDelayMs(
   );
 
   if (isOpening || isRecapture) {
-    return Math.floor(1000 + Math.random() * 1500);
+    return isDemo
+      ? Math.floor(1000 + Math.random() * 1000)
+      : Math.floor(1000 + Math.random() * 1500);
   }
 
-  // 2. Сложные счётные позиции (5.0 - 10.0 с)
+  // 2. Сложные счётные позиции (Chess TV: 3.5 - 5.0 с, обычные: 5.0 - 10.0 с)
   // Шах королю или высокая тактическая напряженность (множество взятий и шахов)
   const isCheck = chess.isCheck();
   const checksAndCaptures = moves.filter((m) => m.captured || m.san.includes('+') || m.san.includes('#')).length;
   const isSharpPosition = isCheck || checksAndCaptures >= 5;
 
   if (isSharpPosition) {
-    return Math.floor(5000 + Math.random() * 5000);
+    return isDemo
+      ? Math.floor(3500 + Math.random() * 1500)
+      : Math.floor(5000 + Math.random() * 5000);
   }
 
-  // 3. Обычный миттельшпиль / позиционная игра (3.0 - 5.0 с)
-  return Math.floor(3000 + Math.random() * 2000);
+  // 3. Обычный миттельшпиль / позиционная игра (Chess TV: 2.0 - 3.5 с, обычные: 3.0 - 5.0 с)
+  return isDemo
+    ? Math.floor(2000 + Math.random() * 1500)
+    : Math.floor(3000 + Math.random() * 2000);
 }
 
 /**

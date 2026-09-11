@@ -314,8 +314,8 @@ function lobbyRosterTitle(l: LobbySummary): string {
                       <small class="mono team-elo">({{ teamAvgRating(g.players, 2) }})</small>
                     </span>
                   </div>
-                  <span class="spectate-hint">
-                    <AppIcon name="eye" :size="13" /> Смотреть
+                  <span class="spectate-hint" title="Смотреть партию">
+                    <AppIcon name="eye" :size="15" />
                   </span>
                 </div>
               </div>
@@ -355,7 +355,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
                 <span
                   class="auto-hint-text dim tiny"
                   title="Когда заходит человек — первый бот выходит и уступает место"
-                >Боты замещаются игроками · выбор времени за столом</span>
+                >Боты замещаются игроками</span>
               </div>
 
               <div class="lobby-card-meta">
@@ -547,8 +547,9 @@ function lobbyRosterTitle(l: LobbySummary): string {
 }
 
 .live-list.single-game .live-boards {
-  max-width: 380px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
 }
 
 .live-list.multi-games {
@@ -573,7 +574,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
   cursor: pointer;
   border: 1px solid var(--line);
   border-radius: var(--r-m);
-  padding: 12px 14px;
+  padding: 10px 12px;
   background: var(--surface-inset);
   transition: all 0.15s;
 }
@@ -672,16 +673,18 @@ function lobbyRosterTitle(l: LobbySummary): string {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
   color: var(--accent);
-  font-weight: 600;
-  font-size: 11.5px;
   flex-shrink: 0;
-  white-space: nowrap;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-xs);
+  transition: color var(--t-fast), background var(--t-fast);
 }
 
 .live-game:hover .spectate-hint {
   color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 /* Карточки столов */

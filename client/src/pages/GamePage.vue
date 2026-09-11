@@ -3,12 +3,11 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Chess, type Square } from 'chess.js';
 import type { ChatMessage, GameParticipantInfo, GameState, PieceType } from 'shared';
-import { detectOpening, getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
+import { getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
 import { getSocket, onSocketResync } from '../api/socket';
 import { useAuthStore } from '../stores/auth';
 import { api } from '../api/rest';
 import { openLichessAnalysis } from '../api/lichess';
-import { analyzePosition } from '../utils/analysis';
 import {
   playMoveSound,
   playCaptureSound,
@@ -34,24 +33,6 @@ const error = ref('');
 const chat = ref<ChatMessage[]>([]);
 const chatText = ref('');
 const chatBox = ref<HTMLElement | null>(null);
-
-const movesSanHistory = ref<string[]>([]);
-const isChatOpen = ref(false);
-const unreadChatCount = ref(0);
-
-function toggleChat(): void {
-  isChatOpen.value = !isChatOpen.value;
-  if (isChatOpen.value) {
-    unreadChatCount.value = 0;
-    setTimeout(() => {
-      if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
-    }, 60);
-  }
-}
-
-const recognizedOpening = computed(() => detectOpening(movesSanHistory.value));
-const board0Fen = computed(() => fenOf(0));
-const currentAnalysis = computed(() => analyzePosition(board0Fen.value));
 
 const selectedDrop = ref<PieceType | null>(null);
 const promoDialog = ref<{ board: 0 | 1; from: string; to: string } | null>(null);
@@ -350,9 +331,6 @@ onMounted(() => {
     if (st.gameId !== gameId) return;
     clearTimeout(watchRetryTimer);
     state.value = st;
-    if (st.moves && Array.isArray(st.moves)) {
-      movesSanHistory.value = [...st.moves];
-    }
     if (st.status !== 'active') showResult.value = true;
     rebuildLocalClocks();
   });
@@ -365,7 +343,7 @@ onMounted(() => {
     };
     selectedDrop.value = null;
 
-    // Звуки ходов и обновление истории SAN для дебютной базы
+    // Звуки ходов
     if (mv.dropPiece) {
       playDropSound();
     } else {
@@ -377,12 +355,6 @@ onMounted(() => {
           to: mv.to as Square,
           ...(mv.promotion ? { promotion: mv.promotion as 'q' } : {}),
         });
-        if (mv.boardIndex === 0 && m?.san) {
-          // Защита: не пушим одиночный ход как ход #1, если партия уже в разгаре
-          if (movesSanHistory.value.length > 0 || prevFen.startsWith('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR')) {
-            movesSanHistory.value.push(m.san);
-          }
-        }
         if (m.captured === 'q') {
           playQueenLossSound();
         } else if (c.isCheck()) {
@@ -417,9 +389,6 @@ onMounted(() => {
   socket.on('game:chat', (msg) => {
     if (msg.gameId !== gameId) return;
     chat.value.push(msg);
-    if (!isChatOpen.value && msg.userId !== myId.value) {
-      unreadChatCount.value++;
-    }
     scrollChat();
   });
 
@@ -443,11 +412,6 @@ onMounted(() => {
   api.get<{ state: GameState }>(`/api/games/${gameId}/state`).then((res) => {
     if (res.state) {
       if (!state.value) state.value = res.state;
-      if (res.state.moves && Array.isArray(res.state.moves)) {
-        if (movesSanHistory.value.length === 0 || res.state.moves.length >= movesSanHistory.value.length) {
-          movesSanHistory.value = [...res.state.moves];
-        }
-      }
       if (res.state.status !== 'active') showResult.value = true;
       rebuildLocalClocks();
     }
@@ -789,184 +753,36 @@ function resultHeadline(): string {
           </div>
         </div>
 
-        <!-- Панель дебюта и анализа -->
-        <div class="panel opening-panel">
+        <!-- Панель чата -->
+        <div class="panel chat-panel">
           <div class="panel-head">
-            <div class="opening-head-title">
-              <AppIcon name="book-open" :size="15" />
-              <h3>Дебют и анализ</h3>
+            <div class="chat-head-title">
+              <AppIcon name="message-square" :size="15" />
+              <h3>Чат матча</h3>
             </div>
-            <div class="opening-badges">
-              <span v-if="state.mode === 'team'" class="eco-badge mono">{{ recognizedOpening.eco }}</span>
-              <span
-                v-if="state.mode === 'team'"
-                class="stage-badge"
-                :class="currentAnalysis.isEndgame ? 'middlegame' : recognizedOpening.stage"
-              >
-                {{
-                  currentAnalysis.isEndgame
-                    ? currentAnalysis.positionPlan.structureNameRu
-                    : (recognizedOpening.stage === 'theory' ? recognizedOpening.stageLabelRu : currentAnalysis.positionPlan.structureNameRu)
-                }}
-              </span>
-              <span
-                v-if="state.mode === 'team'"
-                class="eval-pill mono"
-                :class="{
-                  'eval-w': currentAnalysis.scoreCp > 35,
-                  'eval-b': currentAnalysis.scoreCp < -35,
-                  'eval-eq': Math.abs(currentAnalysis.scoreCp) <= 35
-                }"
-                :title="`Оценка: ${currentAnalysis.evalText} (${currentAnalysis.verdictRu})`"
-              >
-                {{ currentAnalysis.evalText }}
-              </span>
-            </div>
+            <span class="hint">{{ chat.length }}</span>
           </div>
-
-          <div class="panel-body opening-body">
-            <template v-if="state.mode === 'team'">
-              <!-- Оценка позиции и шкала перевеса -->
-              <div class="eval-section">
-                <div class="eval-bar-track" :title="`Шансы сторон: белые ${currentAnalysis.evalPercent}% / чёрные ${100 - currentAnalysis.evalPercent}%`">
-                  <div class="eval-bar-fill white" :style="{ width: `${currentAnalysis.evalPercent}%` }"></div>
-                  <div class="eval-bar-fill black" :style="{ width: `${100 - currentAnalysis.evalPercent}%` }"></div>
-                </div>
-                <div class="eval-meta-row">
-                  <span class="eval-verdict-text dim">{{ currentAnalysis.verdictRu }}</span>
-                  <span
-                    v-if="currentAnalysis.materialDiff !== 0"
-                    class="material-badge mono"
-                    :class="{ 'mat-w': currentAnalysis.materialDiff > 0, 'mat-b': currentAnalysis.materialDiff < 0 }"
-                  >
-                    {{ currentAnalysis.materialDiff > 0 ? `Белые +${currentAnalysis.materialDiff}` : `Чёрные +${Math.abs(currentAnalysis.materialDiff)}` }}
-                  </span>
-                </div>
+          <div class="panel-body chat-body">
+            <div ref="chatBox" class="chat-log">
+              <div v-for="m in chat" :key="m.id" class="chat-msg" :class="{ system: m.system }">
+                <template v-if="m.system">
+                  <span class="dim system-msg">{{ m.text }}</span>
+                </template>
+                <template v-else>
+                  <span class="chat-user">{{ m.username }}:</span>
+                  <span class="chat-text">{{ m.text }}</span>
+                </template>
               </div>
-
-              <!-- Развитие фигур после дебюта: важнее названия варианта -->
-              <div
-                v-if="movesSanHistory.length > 0"
-                class="development-row"
-                :title="currentAnalysis.development.complete ? 'Фигуры развиты, короли в безопасности — дальше план по структуре' : `Не выведены: ${[...currentAnalysis.development.whiteUndeveloped, ...currentAnalysis.development.blackUndeveloped].join(', ')}`"
-              >
-                <span class="dim small-label">Развитие:</span>
-                <span class="mono dev-score">{{ currentAnalysis.development.whiteDeveloped }}/{{ currentAnalysis.development.whiteTotal }} — {{ currentAnalysis.development.blackDeveloped }}/{{ currentAnalysis.development.blackTotal }}</span>
-                <span class="dim tiny dev-summary">{{ currentAnalysis.development.summaryRu }}</span>
-              </div>
-
-              <!-- Название дебюта и варианта (после выхода из теории — свернуто) -->
-              <details
-                class="opening-details"
-                :open="recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame"
-              >
-                <summary class="dim small-label opening-summary">
-                  {{ (recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame) ? 'Дебют:' : `Дебют (${recognizedOpening.nameRu} — свернут, идёт ${currentAnalysis.positionPlan.structureNameRu})` }}
-                </summary>
-                <div class="opening-name-block">
-                  <h4 class="opening-title">{{ recognizedOpening.nameRu }}</h4>
-                  <p v-if="recognizedOpening.variationRu" class="opening-variation">
-                    {{ recognizedOpening.variationRu }}
-                  </p>
-                  <span class="opening-name-en dim mono">{{ recognizedOpening.nameEn }}</span>
-                </div>
-
-                <!-- Теоретические продолжения (вариации из текущей позиции) -->
-                <div v-if="recognizedOpening.continuations && recognizedOpening.continuations.length > 0 && recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame" class="continuations-block">
-                  <span class="dim small-label">Варианты теории:</span>
-                  <div class="continuation-chips">
-                    <span
-                      v-for="c in recognizedOpening.continuations"
-                      :key="c.moveSan"
-                      class="cont-chip"
-                      :title="c.variationRu ? `${c.nameRu}: ${c.variationRu}` : c.nameRu"
-                    >
-                      <strong class="mono cont-move">{{ c.moveSan }}</strong>
-                      <span v-if="c.variationRu" class="cont-var dim">{{ c.variationRu }}</span>
-                    </span>
-                  </div>
-                </div>
-              </details>
-
-              <!-- Сыгранные ходы партии (полная нотация) -->
-              <div v-if="recognizedOpening.playedMovesSan && recognizedOpening.playedMovesSan !== '—'" class="opening-moves-row">
-                <div class="moves-header-row">
-                  <span class="dim small-label">Ходы партии:</span>
-                  <span class="dim tiny mono">{{ movesSanHistory.length }} полуходов</span>
-                </div>
-                <div class="moves-history-box mono">
-                  {{ recognizedOpening.playedMovesSan }}
-                </div>
-              </div>
-
-              <!-- Стратегический план стороны или позиции -->
-              <div class="opening-plan-box">
-                <span class="dim small-label">
-                  {{ (recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame) ? 'План по дебюту:' : `План (${currentAnalysis.positionPlan.structureNameRu}):` }}
-                </span>
-                <p class="plan-text">
-                  {{ (recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame) ? recognizedOpening.planRu : currentAnalysis.positionPlan.strategicPlanRu }}
-                </p>
-              </div>
-            </template>
-
-            <template v-else>
-              <div class="opening-name-block">
-                <h4 class="opening-title">Багхаус (Шведские шахматы)</h4>
-                <p class="opening-variation">Две параллельные доски с дропами</p>
-              </div>
-              <div class="opening-plan-box">
-                <span class="dim small-label">Правила и тактика:</span>
-                <p class="plan-text">
-                  Сбитая на одной доске фигура немедленно передается в карман напарника. Координируйте атаки и требуйте нужные фигуры для мата!
-                </p>
-              </div>
-            </template>
-          </div>
-        </div>
-
-        <!-- Выдвижная шторка чата (высотой 40px, вровень с team-players-bar bottom, раскрывается вверх) -->
-        <div class="chat-drawer-wrapper">
-          <div class="chat-drawer-container" :class="{ 'is-expanded': isChatOpen }">
-            <div
-              class="chat-bar-toggle"
-              :class="{ 'has-unread': unreadChatCount > 0 && !isChatOpen }"
-              @click="toggleChat"
-              title="Открыть / свернуть чат"
-            >
-              <div class="chat-toggle-left">
-                <AppIcon name="message-square" :size="15" />
-                <span class="chat-toggle-label">Чат матча</span>
-                <span v-if="unreadChatCount > 0 && !isChatOpen" class="unread-pill">
-                  +{{ unreadChatCount }}
-                </span>
-              </div>
-              <div class="chat-toggle-right">
-                <span class="chat-msg-count dim mono">{{ chat.length }}</span>
-                <AppIcon :name="isChatOpen ? 'chevron-down' : 'chevron-up'" :size="15" />
+              <div v-if="!chat.length" class="empty-chat dim">
+                Пока сообщений нет. Напишите первое!
               </div>
             </div>
-
-            <!-- Раскрывающееся тело чата (выдвигается вверх над панелью дебютов) -->
-            <div v-show="isChatOpen" class="chat-expanded-content">
-              <div ref="chatBox" class="chat-log">
-                <div v-for="m in chat" :key="m.id" class="chat-msg" :class="{ system: m.system }">
-                  <template v-if="m.system">
-                    <span class="dim system-msg">{{ m.text }}</span>
-                  </template>
-                  <template v-else>
-                    <span class="chat-user">{{ m.username }}:</span>
-                    <span class="chat-text">{{ m.text }}</span>
-                  </template>
-                </div>
-              </div>
-              <form class="chat-input-row" @submit.prevent="sendChat">
-                <input v-model="chatText" placeholder="Сообщение всем…" maxlength="300" />
-                <button type="submit" class="primary icon-only" aria-label="Отправить">
-                  <AppIcon name="arrow-right" :size="15" />
-                </button>
-              </form>
-            </div>
+            <form class="chat-input-row" @submit.prevent="sendChat">
+              <input v-model="chatText" placeholder="Сообщение всем…" maxlength="300" />
+              <button type="submit" class="primary icon-only" aria-label="Отправить">
+                <AppIcon name="arrow-right" :size="15" />
+              </button>
+            </form>
           </div>
         </div>
       </aside>
@@ -1127,43 +943,50 @@ function resultHeadline(): string {
   align-items: center;
   gap: 12px;
 }
+:global(main.page:has(.game-page)) {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
 .game-page {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-top: -12px;
+  gap: 8px;
+  margin-top: 0;
+  width: 100%;
 }
 
 .game-page.team {
   max-width: 1080px;
-  margin: -12px auto 0;
+  margin: 0 auto;
   width: 100%;
 }
 
 :global(main.page:has(.game-page.bughouse)) {
   max-width: 1760px;
-  padding-left: 18px;
-  padding-right: 18px;
+  padding-left: 14px;
+  padding-right: 14px;
 }
 
 .game-page.bughouse {
   max-width: 1720px;
-  margin: -12px auto 0;
+  margin: 0 auto;
   width: 100%;
 }
 
 .game-page.bughouse .game-layout {
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  gap: 16px;
 }
 
 .game-topbar {
-  padding: 10px 18px;
+  padding: 6px 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px;
+  min-height: 38px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -1171,7 +994,7 @@ function resultHeadline(): string {
 .game-title-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -1181,7 +1004,7 @@ function resultHeadline(): string {
   gap: 4px;
   color: var(--ink-3);
   font-weight: 500;
-  margin-right: 6px;
+  margin-right: 4px;
 }
 .back-link:hover {
   color: var(--ink);
@@ -1190,20 +1013,21 @@ function resultHeadline(): string {
 }
 
 .game-title-group h1 {
-  font-size: 20px;
+  font-size: 17px;
+  margin: 0;
 }
 
 .game-topbar-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .game-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 16px;
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 14px;
+  align-items: start;
   width: 100%;
 }
 @media (max-width: 1024px) {
@@ -1215,10 +1039,11 @@ function resultHeadline(): string {
 /* ================= 2x2 ОДНА ДОСКА ================= */
 .team-board-wrapper {
   width: 100%;
+  max-width: min(100%, calc(100dvh - 195px));
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 0;
+  gap: 6px;
 }
 
 .team-players-bar {
@@ -1226,9 +1051,9 @@ function resultHeadline(): string {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: var(--gap-xs);
-  height: 40px;
-  min-height: 40px;
-  padding: 0 10px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 8px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-m);
@@ -1378,14 +1203,17 @@ function resultHeadline(): string {
 }
 
 .clock-display {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
-  padding: 4px 12px;
+  padding: 2px 10px;
   border-radius: var(--r-s);
   background: var(--surface-inset);
   border: 1px solid var(--line);
-  min-width: 84px;
+  min-width: 78px;
+  height: 30px;
+  line-height: 30px;
   text-align: center;
+  box-sizing: border-box;
 }
 
 .clock-display.running {
@@ -1398,13 +1226,14 @@ function resultHeadline(): string {
 .board-frame {
   width: 100%;
   aspect-ratio: 1;
+  position: relative;
 }
 
 /* ================= БАГХАУС ================= */
 .boards-container.two-boards {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: 16px;
   width: 100%;
 }
 @media (max-width: 900px) {
@@ -1420,8 +1249,9 @@ function resultHeadline(): string {
   min-width: 0;
 }
 
-.bughouse-board-col .board-wrap {
-  max-width: min(100%, calc(100vh - 230px));
+.bughouse-board-col .board-wrap,
+.bughouse-board-col .board-frame {
+  max-width: min(100%, calc(100dvh - 240px));
   margin: 0 auto;
 }
 
@@ -1551,440 +1381,32 @@ function resultHeadline(): string {
   letter-spacing: 0.05em;
 }
 
-/* ================= ПАНЕЛЬ ДЕБЮТА ================= */
-.opening-panel {
+/* ================= ЧАТ ================= */
+.chat-panel {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 190px;
+  min-height: 240px;
 }
 
-.opening-head-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.opening-badges {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.eco-badge {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: var(--r-xs);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-}
-
-.stage-badge {
-  font-size: 10.5px;
-  font-weight: 600;
-  padding: 1px 6px;
-  border-radius: var(--r-xs);
-}
-
-.stage-badge.theory {
-  background: color-mix(in srgb, var(--ok) 18%, transparent);
-  color: var(--ok);
-  border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent);
-}
-
-.stage-badge.middlegame {
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-}
-
-.stage-badge.start {
-  background: var(--surface-3);
-  color: var(--ink-2);
-}
-
-.eval-pill {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: var(--r-xs);
-  transition: all 0.2s ease;
-}
-
-.eval-pill.eval-w {
-  background: color-mix(in srgb, var(--ok) 20%, transparent);
-  color: var(--ok);
-  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
-}
-
-.eval-pill.eval-b {
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-}
-
-.eval-pill.eval-eq {
-  background: var(--surface-3);
-  color: var(--ink-2);
-  border: 1px solid var(--line);
-}
-
-/* Шкала и оценка позиции */
-.eval-section {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  background: var(--surface-2);
-  padding: 7px 9px;
-  border-radius: var(--r-s);
-  border: 1px solid var(--line);
-}
-
-.eval-bar-track {
-  display: flex;
-  height: 5px;
-  width: 100%;
-  border-radius: 3px;
-  overflow: hidden;
-  background: var(--surface-3);
-}
-
-.eval-bar-fill {
-  height: 100%;
-  transition: width 0.25s ease-out;
-}
-
-.eval-bar-fill.white {
-  background: #ffffff;
-}
-
-.eval-bar-fill.black {
-  background: #2b2b2b;
-}
-
-.eval-meta-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.eval-verdict-text {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ink-2);
-}
-
-.material-badge {
-  font-size: 10.5px;
-  font-weight: 700;
-  padding: 0 5px;
-  border-radius: 3px;
-}
-
-.material-badge.mat-w {
-  background: #ffffff;
-  color: #111111;
-}
-
-.material-badge.mat-b {
-  background: #222222;
-  color: #ffffff;
-  border: 1px solid #444444;
-}
-
-.opening-body {
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  overflow-y: auto;
-}
-
-.opening-name-block {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.opening-title {
-  font-size: 14.5px;
-  font-weight: 700;
-  color: var(--ink);
-  margin: 0;
-  line-height: 1.3;
-}
-
-.opening-variation {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--accent);
-  margin: 0;
-}
-
-.opening-name-en {
-  font-size: 11px;
-  color: var(--ink-3);
-}
-
-/* Ветки теории */
-.continuations-block {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.continuation-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.cont-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  padding: 2px 7px;
-  border-radius: var(--r-xs);
-  font-size: 11px;
-  cursor: default;
-}
-
-.cont-move {
-  color: var(--accent);
-  font-weight: 700;
-}
-
-.cont-var {
-  font-size: 10px;
-  color: var(--ink-3);
-  max-width: 140px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Ходы партии */
-.opening-moves-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.moves-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.moves-history-box {
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-s);
-  padding: 6px 8px;
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--ink-2);
-  max-height: 90px;
-  overflow-y: auto;
-  word-break: break-word;
-}
-
-.small-label {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: 600;
-}
-
-.development-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-s);
-  padding: 6px 10px;
-  cursor: help;
-}
-
-.dev-score {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--accent-2);
-}
-
-.dev-summary {
-  flex-basis: 100%;
-  font-size: 11px;
-  line-height: 1.4;
-  text-transform: none;
-  letter-spacing: 0;
-  font-weight: 400;
-}
-
-.opening-details {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.opening-summary {
-  cursor: pointer;
-  list-style: none;
-}
-
-.opening-summary::-webkit-details-marker {
-  display: none;
-}
-
-.opening-summary::before {
-  content: '▸ ';
-}
-
-.opening-details[open] .opening-summary::before {
-  content: '▾ ';
-}
-
-.opening-plan-box {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: var(--surface-2);
-  padding: 8px 10px;
-  border-radius: var(--r-s);
-  border: 1px solid var(--line);
-}
-
-.plan-text {
-  margin: 0;
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--ink-2);
-}
-
-/* ================= ВЫДВИЖНОЙ ЧАТ ================= */
-.chat-drawer-wrapper {
-  height: 40px;
-  min-height: 40px;
-  flex: none;
-  position: relative;
-  box-sizing: border-box;
-}
-
-.chat-drawer-container {
-  width: 100%;
-  height: 40px;
-  box-sizing: border-box;
-}
-
-.chat-bar-toggle {
-  height: 40px;
-  min-height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 12px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-m);
-  cursor: pointer;
-  user-select: none;
-  box-sizing: border-box;
-  transition: all 0.15s ease;
-}
-
-.chat-bar-toggle:hover {
-  border-color: var(--accent);
-  background: var(--surface-2);
-}
-
-.chat-bar-toggle.has-unread {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 15%, var(--surface));
-}
-
-.chat-toggle-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.chat-toggle-label {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.unread-pill {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 10px;
-  background: var(--accent);
-  color: #000;
-}
-
-.chat-toggle-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ink-2);
-}
-
-.chat-msg-count {
-  font-size: 11px;
-}
-
-/* Раскрытая шторка: раскрывается вверх над панелью дебютов */
-.chat-drawer-container.is-expanded {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 380px;
-  max-height: calc(100vh - 260px);
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-m);
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
-  animation: slide-up-chat 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes slide-up-chat {
-  from {
-    transform: translateY(20px);
-    opacity: 0.7;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.chat-drawer-container.is-expanded .chat-bar-toggle {
-  border: none;
-  border-bottom: 1px solid var(--line);
-  border-radius: var(--r-m) var(--r-m) 0 0;
-  background: var(--surface-2);
-}
-
-.chat-expanded-content {
+.chat-panel > .panel-body {
   flex: 1;
-  display: flex;
-  flex-direction: column;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-head-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   padding: 10px 12px;
-  gap: 8px;
-  overflow: hidden;
 }
 
 .chat-log {
@@ -1993,11 +1415,14 @@ function resultHeadline(): string {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-height: 140px;
+  max-height: calc(100dvh - 380px);
 }
 
 .chat-msg {
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.35;
+  word-break: break-word;
 }
 
 .chat-user {
@@ -2008,13 +1433,20 @@ function resultHeadline(): string {
 
 .system-msg {
   font-style: italic;
+  font-size: 11.5px;
+}
+
+.empty-chat {
   font-size: 12px;
+  text-align: center;
+  margin: auto 0;
+  padding: 16px 8px;
 }
 
 .chat-input-row {
   display: flex;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
 /* Модалки */
@@ -2111,31 +1543,42 @@ function resultHeadline(): string {
 
 /* Мобильная адаптация игры: компактные панели игроков и максимум места под доску */
 @media (max-width: 640px) {
+  :global(main.page:has(.game-page)) {
+    padding: 4px 6px 14px;
+  }
   .game-page {
-    gap: 10px;
+    gap: 6px;
   }
   .game-topbar {
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
+    padding: 4px 8px;
+    min-height: 34px;
+  }
+  .game-title-group h1 {
+    font-size: 14.5px;
   }
   .game-layout {
-    gap: 12px;
+    gap: 10px;
+  }
+  .team-board-wrapper {
+    max-width: min(100%, calc(100dvh - 165px));
   }
   .team-players-bar {
     padding: 2px 6px;
     gap: 4px;
-    height: 36px;
-    min-height: 36px;
+    height: 34px;
+    min-height: 34px;
   }
   .clock-display.center {
     font-size: 15px;
-    padding: 0 8px;
+    padding: 0 6px;
     min-width: 60px;
-    height: 28px;
-    line-height: 28px;
+    height: 26px;
+    line-height: 26px;
   }
   .member-pill.compact {
-    height: 26px;
+    height: 24px;
     padding: 0 4px;
     font-size: 11px;
     gap: 3px;
@@ -2154,6 +1597,12 @@ function resultHeadline(): string {
   .bughouse-clocks-bar {
     padding: 4px 8px;
     font-size: 12.5px;
+  }
+  .chat-panel {
+    min-height: 200px;
+  }
+  .chat-log {
+    max-height: 220px;
   }
 }
 </style>

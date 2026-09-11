@@ -124,8 +124,10 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
       if (ctx?.lobbyId) lobbies.setTeamMode(ctx.lobbyId, ctx.uid, mode);
     });
 
-    socket.on('lobby:set-time-control', (tc) => {
-      if (ctx?.lobbyId) lobbies.setTimeControl(ctx.lobbyId, ctx.uid, tc);
+    socket.on('lobby:set-time-control', (payload: any) => {
+      const lobbyId = (payload && typeof payload === 'object' && 'lobbyId' in payload) ? payload.lobbyId : ctx?.lobbyId;
+      const tc = (payload && typeof payload === 'object' && 'tc' in payload) ? payload.tc : payload;
+      if (lobbyId && ctx?.uid) lobbies.setTimeControl(lobbyId, ctx.uid, tc);
     });
 
     socket.on('lobby:add-bot', async (cb) => {

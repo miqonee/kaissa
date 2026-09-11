@@ -156,7 +156,7 @@ export type ClientToServerEvents = {
   'lobby:set-team': (team: 1 | 2 | null) => void;
   'lobby:pause-toggle': () => void;
   'lobby:set-team-mode': (mode: TeamMode) => void;
-  'lobby:set-time-control': (tc: TimeControl) => void;
+  'lobby:set-time-control': (payload: TimeControl | { lobbyId: string; tc: TimeControl }) => void;
   'lobby:add-bot': (cb?: (res: Ack<null>) => void) => void;
 
   // Игра

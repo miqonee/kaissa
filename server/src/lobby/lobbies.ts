@@ -493,9 +493,13 @@ export class LobbiesManager {
 
   setTimeControl(lobbyId: string, uid: number, tc: TimeControl): void {
     const lobby = this.lobbies.get(lobbyId);
-    if (!lobby || lobby.started || lobby.isAuto) return;
+    if (!lobby || lobby.started) return;
     const m = lobby.members.get(uid);
-    if (!m?.host) return;
+    if (lobby.isAuto) {
+      if (m && m.isBot) return;
+    } else {
+      if (!m?.host) return;
+    }
     lobby.timeControl = tc;
     this.broadcastState(lobby);
     this.broadcastList();

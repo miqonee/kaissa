@@ -192,6 +192,33 @@ function livePlayerLabel(p: LiveGameInfo['players'][number]): string {
   return perso ? perso.badge : 'Бот';
 }
 
+function botDisplayName(p: LiveGameInfo['players'][number]): string {
+  if (!p.isBot) return p.username;
+  const perso = getBotPersonality(p.username);
+  if (!perso) return 'Бот';
+  const parts = perso.name.split(' ');
+  return parts.length > 1 ? parts[parts.length - 1] : perso.name;
+}
+
+const QUICK_TC_OPTIONS: { label: string; tc: TimeControl }[] = [
+  { label: '1+0', tc: { kind: 'clock', baseMin: 1, incSec: 0 } },
+  { label: '3+0', tc: { kind: 'clock', baseMin: 3, incSec: 0 } },
+  { label: '5+0', tc: { kind: 'clock', baseMin: 5, incSec: 0 } },
+  { label: '10+0', tc: { kind: 'clock', baseMin: 10, incSec: 0 } },
+];
+
+function isCurrentTc(cur: TimeControl | undefined, target: TimeControl): boolean {
+  if (!cur) return false;
+  if (cur.kind !== target.kind) return false;
+  if (cur.kind === 'none') return true;
+  return cur.baseMin === target.baseMin && cur.incSec === target.incSec;
+}
+
+function setAutoLobbyTimeControl(tc: TimeControl): void {
+  if (!autoLobby.value) return;
+  socket.emit('lobby:set-time-control', { lobbyId: autoLobby.value.id, tc });
+}
+
 function livePlayerTitle(p: LiveGameInfo['players'][number]): string {
   if (!p.isBot) return `${p.username} · ${p.rating}`;
   return getBotTooltip(p.username, p.rating);
@@ -281,34 +308,45 @@ function lobbyRosterTitle(l: LobbySummary): string {
                 />
               </div>
               <div class="live-meta">
-                <div class="players-line">
-                  <span class="team t1">
-                    <span
-                      v-for="p in teamPlayers(g, 1)"
-                      :key="p.username"
-                      class="live-player"
-                      :class="{ 'is-bot': p.isBot }"
-                      :title="livePlayerTitle(p)"
-                    >{{ livePlayerLabel(p) }}</span>
-                    <small class="mono dim">({{ teamAvgRating(g.players, 1) }})</small>
-                  </span>
-                  <span class="vs">vs</span>
-                  <span class="team t2">
-                    <span
-                      v-for="p in teamPlayers(g, 2)"
-                      :key="p.username"
-                      class="live-player"
-                      :class="{ 'is-bot': p.isBot }"
-                      :title="livePlayerTitle(p)"
-                    >{{ livePlayerLabel(p) }}</span>
-                    <small class="mono dim">({{ teamAvgRating(g.players, 2) }})</small>
-                  </span>
-                </div>
-                <div class="meta-row">
-                  <span class="badge">{{ modeLabel(g.mode) }}</span>
-                  <span class="mono dim">ход {{ Math.ceil(g.moveNumber / (g.mode === 'bughouse' ? 1 : 2)) }}</span>
+                <div class="live-row">
+                  <span class="badge mode-badge">{{ modeLabel(g.mode) }}</span>
+                  <div class="players-line">
+                    <span class="team t1">
+                      <span
+                        v-for="p in teamPlayers(g, 1)"
+                        :key="p.username"
+                        class="live-player"
+                        :class="{ 'is-bot': p.isBot }"
+                        :title="livePlayerTitle(p)"
+                      >
+                        <span v-if="p.isBot" class="bot-pill">
+                          <span class="bot-tag">Бот</span>
+                          <span class="bot-name">{{ botDisplayName(p) }}</span>
+                        </span>
+                        <span v-else class="human-name">{{ p.username }}</span>
+                      </span>
+                      <small class="mono team-elo">({{ teamAvgRating(g.players, 1) }})</small>
+                    </span>
+                    <span class="vs">vs</span>
+                    <span class="team t2">
+                      <span
+                        v-for="p in teamPlayers(g, 2)"
+                        :key="p.username"
+                        class="live-player"
+                        :class="{ 'is-bot': p.isBot }"
+                        :title="livePlayerTitle(p)"
+                      >
+                        <span v-if="p.isBot" class="bot-pill">
+                          <span class="bot-tag">Бот</span>
+                          <span class="bot-name">{{ botDisplayName(p) }}</span>
+                        </span>
+                        <span v-else class="human-name">{{ p.username }}</span>
+                      </span>
+                      <small class="mono team-elo">({{ teamAvgRating(g.players, 2) }})</small>
+                    </span>
+                  </div>
                   <span class="spectate-hint">
-                    <AppIcon name="eye" :size="14" /> Смотреть
+                    <AppIcon name="eye" :size="13" /> Смотреть
                   </span>
                 </div>
               </div>
@@ -341,10 +379,23 @@ function lobbyRosterTitle(l: LobbySummary): string {
                 <span class="badges-row">
                   <span class="badge auto-chip">
                     <AppIcon name="bolt" :size="12" />
-                    Быстрый старт {{ autoLobby.timeControl.kind === 'clock' ? `${autoLobby.timeControl.baseMin}+${autoLobby.timeControl.incSec}` : '' }}
+                    Быстрый старт
                   </span>
                   <span class="badge">{{ modeLabel(autoLobby.mode) }}</span>
                 </span>
+                <div class="auto-tc-pills" @click.stop>
+                  <button
+                    v-for="preset in QUICK_TC_OPTIONS"
+                    :key="preset.label"
+                    type="button"
+                    class="tiny pill mono auto-tc-btn"
+                    :class="{ active: isCurrentTc(autoLobby.timeControl, preset.tc) }"
+                    :title="`Контроль времени: ${preset.label}`"
+                    @click.stop="setAutoLobbyTimeControl(preset.tc)"
+                  >
+                    {{ preset.label }}
+                  </button>
+                </div>
                 <span
                   class="auto-hint-text dim tiny"
                   title="Когда заходит человек — первый бот выходит и уступает место"
@@ -590,48 +641,104 @@ function lobbyRosterTitle(l: LobbySummary): string {
   margin-top: 8px;
 }
 
+.live-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.mode-badge {
+  font-size: 11px;
+  padding: 1px 7px;
+  flex-shrink: 0;
+}
+
 .players-line {
   font-size: 12px;
   font-weight: 500;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
 }
 
 .players-line .vs {
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: 11.5px;
   font-style: italic;
+  margin: 0 2px;
 }
 
 .team {
   color: var(--ink);
   min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
 
-.meta-row {
-  display: flex;
+.bot-pill {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 8px;
-  font-size: 12.5px;
+  gap: 4px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--accent);
+  padding: 0 5px;
+  border-radius: var(--r-xs);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.bot-tag {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+}
+
+.human-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.team-elo {
+  color: var(--ink-3);
+  margin-left: 2px;
+  font-size: 11px;
 }
 
 .spectate-hint {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   color: var(--accent);
   font-weight: 600;
+  font-size: 11.5px;
+  flex-shrink: 0;
 }
 
 .live-game:hover .spectate-hint {
   color: var(--accent-2);
+}
+
+.auto-tc-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.auto-tc-btn {
+  padding: 1px 6px;
+  font-size: 11px;
+  border-radius: var(--r-xs);
 }
 
 /* Карточки столов */

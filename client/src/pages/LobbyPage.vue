@@ -260,8 +260,8 @@ function modeLabel(m: string): string {
           <div v-if="lobby.isAuto" class="auto-lobby-banner">
             <div class="auto-banner-info">
               <span class="countdown-chip" :class="{ paused: countdown?.paused }">
-                <span v-if="countdown?.paused">⏸ Пауза ({{ countdown?.pausedCount }}/{{ countdown?.neededCount }})</span>
-                <span v-else>⏱ Автостарт через {{ countdown?.seconds ?? 10 }} с</span>
+                <span v-if="countdown?.paused">Пауза ({{ countdown?.pausedCount }}/{{ countdown?.neededCount }})</span>
+                <span v-else>Автостарт через {{ countdown?.seconds ?? 10 }} с</span>
               </span>
               <p class="dim tiny auto-hint">
                 Вход человека вытесняет бота. При 2 игроках команды балансируются адаптивно.
@@ -307,8 +307,8 @@ function modeLabel(m: string): string {
             </div>
           </div>
 
-          <!-- Контроль времени (для хоста обычных столов) -->
-          <div v-if="isHost && !lobby.isAuto" class="tc-selector">
+          <!-- Контроль времени (для хоста обычных столов или игроков быстрого стола) -->
+          <div v-if="(isHost && !lobby.isAuto) || (lobby.isAuto && me)" class="tc-selector">
             <span class="dim tiny">Контроль времени:</span>
             <div class="tc-pills">
               <button

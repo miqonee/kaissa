@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { GameSummary, MoveRecord, PieceType, Pocket } from 'shared';
-import { timeControlLabel } from 'shared';
+import { detectOpening, timeControlLabel } from 'shared';
 import ChessBoard from './ChessBoard.vue';
 import PocketBar from './PocketBar.vue';
 import AppIcon from './AppIcon.vue';
 import { buildMoveRows, buildReplay, type ReplayMoveView } from '../game/replay';
+import { analyzePosition } from '../utils/analysis';
 import {
   playMoveSound,
   playCaptureSound,
@@ -204,6 +205,17 @@ function fenOf(b: number): string {
   return frame.value.boards[b]?.fen ?? '';
 }
 
+const playedMovesSan = computed(() => {
+  return data.value.moves
+    .slice(0, cursor.value)
+    .filter((m) => m.boardIndex === 0)
+    .map((m) => m.san);
+});
+
+const board0Fen = computed(() => fenOf(0));
+const recognizedOpening = computed(() => detectOpening(playedMovesSan.value));
+const currentAnalysis = computed(() => analyzePosition(board0Fen.value));
+
 const rowsByBoard = computed(() => {
   const out = [];
   for (let b = 0; b < boardsCount.value; b++) out.push(buildMoveRows(data.value, b as 0 | 1));
@@ -353,6 +365,72 @@ function pieceLabel(t: PieceType): string {
         </div>
 
         <p v-if="!total" class="empty tiny">В этой партии не было ходов.</p>
+
+        <!-- Дебют и оценка текущей позиции (для режима 1 доски) -->
+        <div v-if="boardsCount === 1" class="rp-analysis-card">
+          <div class="rp-an-top">
+            <div class="rp-an-title-group">
+              <AppIcon name="book-open" :size="13" />
+              <strong class="rp-op-name truncate" :title="recognizedOpening.nameRu">
+                {{ recognizedOpening.nameRu }}
+              </strong>
+            </div>
+            <div class="rp-an-badges">
+              <span class="eco-badge mono">{{ recognizedOpening.eco }}</span>
+              <span
+                class="eval-pill mono"
+                :class="{
+                  'eval-w': currentAnalysis.scoreCp > 35,
+                  'eval-b': currentAnalysis.scoreCp < -35,
+                  'eval-eq': Math.abs(currentAnalysis.scoreCp) <= 35
+                }"
+                :title="`Оценка: ${currentAnalysis.evalText} (${currentAnalysis.verdictRu})`"
+              >
+                {{ currentAnalysis.evalText }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Шкала оценки -->
+          <div class="rp-eval-track" :title="`Шансы сторон: белые ${currentAnalysis.evalPercent}% / чёрные ${100 - currentAnalysis.evalPercent}%`">
+            <div class="rp-eval-fill white" :style="{ width: `${currentAnalysis.evalPercent}%` }"></div>
+            <div class="rp-eval-fill black" :style="{ width: `${100 - currentAnalysis.evalPercent}%` }"></div>
+          </div>
+
+          <div class="rp-an-sub">
+            <span class="dim tiny">{{ currentAnalysis.verdictRu }}</span>
+            <span
+              v-if="currentAnalysis.materialDiff !== 0"
+              class="rp-mat-pill mono tiny"
+              :class="{ 'mat-w': currentAnalysis.materialDiff > 0, 'mat-b': currentAnalysis.materialDiff < 0 }"
+            >
+              {{ currentAnalysis.materialDiff > 0 ? `Белые +${currentAnalysis.materialDiff}` : `Чёрные +${Math.abs(currentAnalysis.materialDiff)}` }}
+            </span>
+          </div>
+
+          <p v-if="recognizedOpening.variationRu" class="rp-an-var dim tiny truncate" :title="recognizedOpening.variationRu">
+            {{ recognizedOpening.variationRu }}
+          </p>
+
+          <details class="rp-details">
+            <summary class="dim tiny rp-details-summary">
+              План: {{ (recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame) ? 'дебют' : currentAnalysis.positionPlan.structureNameRu }}
+            </summary>
+            <div class="rp-details-content">
+              <p class="dim tiny rp-plan-text">
+                {{ (recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame) ? recognizedOpening.planRu : currentAnalysis.positionPlan.strategicPlanRu }}
+              </p>
+              <div v-if="recognizedOpening.continuations?.length && recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame" class="rp-cont-block">
+                <span class="dim tiny label">Теория:</span>
+                <div class="rp-cont-chips">
+                  <span v-for="c in recognizedOpening.continuations" :key="c.moveSan" class="rp-cont-chip tiny mono">
+                    {{ c.moveSan }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
       </aside>
     </div>
 
@@ -540,7 +618,7 @@ function pieceLabel(t: PieceType): string {
 
 /* ---------- Компактный режим (модалка) ---------- */
 .compact .rp-moves {
-  max-height: 300px;
+  max-height: 220px;
 }
 
 /* В модалке компактнее транспорт: меньше отступы и кнопка плеера */
@@ -709,5 +787,194 @@ function pieceLabel(t: PieceType): string {
   .rp-boards.two {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------- Анализ и дебют в плеере ---------- */
+.rp-analysis-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  padding: 8px 10px;
+  margin-top: 4px;
+}
+
+.rp-an-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.rp-an-title-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+}
+
+.rp-op-name {
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.rp-an-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.eco-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.eval-pill {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
+}
+
+.eval-pill.eval-w {
+  background: color-mix(in srgb, var(--ok) 20%, transparent);
+  color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
+}
+
+.eval-pill.eval-b {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.eval-pill.eval-eq {
+  background: var(--surface-3);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+}
+
+.rp-eval-track {
+  display: flex;
+  height: 4px;
+  width: 100%;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--surface-3);
+}
+
+.rp-eval-fill {
+  height: 100%;
+  transition: width 0.2s ease-out;
+}
+
+.rp-eval-fill.white {
+  background: #ffffff;
+}
+
+.rp-eval-fill.black {
+  background: #2b2b2b;
+}
+
+.rp-an-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.rp-mat-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.rp-mat-pill.mat-w {
+  background: #ffffff;
+  color: #111111;
+}
+
+.rp-mat-pill.mat-b {
+  background: #222222;
+  color: #ffffff;
+  border: 1px solid #444444;
+}
+
+.rp-an-var {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.rp-details {
+  margin-top: 2px;
+}
+
+.rp-details-summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+}
+
+.rp-details-summary::-webkit-details-marker {
+  display: none;
+}
+
+.rp-details-summary::before {
+  content: '▸ ';
+}
+
+.rp-details[open] .rp-details-summary::before {
+  content: '▾ ';
+}
+
+.rp-details-content {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rp-plan-text {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.rp-cont-block {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.rp-cont-chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.rp-cont-chip {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  color: var(--accent);
+  font-weight: 600;
 }
 </style>

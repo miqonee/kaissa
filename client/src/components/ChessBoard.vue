@@ -45,6 +45,7 @@ const emit = defineEmits<{
 
 const el = ref<HTMLElement | null>(null);
 let cg: CgApi | null = null;
+let ro: ResizeObserver | null = null;
 
 // ---------- утилиты по FEN ----------
 
@@ -165,6 +166,13 @@ onMounted(() => {
   if (!el.value) return;
   cg = Chessground(el.value, config() as never);
   requestAnimationFrame(() => cg?.redrawAll());
+
+  if (typeof ResizeObserver !== 'undefined') {
+    ro = new ResizeObserver(() => {
+      cg?.redrawAll();
+    });
+    ro.observe(el.value);
+  }
 });
 
 watch(
@@ -248,6 +256,8 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  ro?.disconnect();
+  ro = null;
   cg?.destroy();
   cg = null;
 });

@@ -267,4 +267,31 @@ describe('Auto Lobby and Team Modes', () => {
     const res = await mgr.start(lobby.id, 1);
     expect(res.ok).toBe(false);
   });
+
+  it('allows human to change time control in auto lobby', () => {
+    const mgr = new LobbiesManager();
+    const lobby = new Lobby(
+      {
+        id: 'AUTO_TC',
+        code: 'AUTOTC',
+        name: 'Быстрый стол 2х2',
+        mode: 'team',
+        timeControl: { kind: 'clock', baseMin: 3, incSec: 0 },
+        private: false,
+        teamMode: 'auto',
+      },
+      { uid: 1, username: 'bot_host', rating: 1200, ready: true, host: true, joinedAt: Date.now(), isBot: true, botLevel: 3 },
+    );
+    lobby.isAuto = true;
+    lobby.members.set(2, { uid: 10, username: 'human_player', rating: 1350, ready: true, host: false, joinedAt: Date.now(), isBot: false });
+    (mgr as any).lobbies.set(lobby.id, lobby);
+
+    // Bot cannot change time control
+    mgr.setTimeControl(lobby.id, 1, { kind: 'clock', baseMin: 1, incSec: 0 });
+    expect(lobby.timeControl).toEqual({ kind: 'clock', baseMin: 3, incSec: 0 });
+
+    // Human player CAN change time control in auto lobby
+    mgr.setTimeControl(lobby.id, 10, { kind: 'clock', baseMin: 5, incSec: 0 });
+    expect(lobby.timeControl).toEqual({ kind: 'clock', baseMin: 5, incSec: 0 });
+  });
 });

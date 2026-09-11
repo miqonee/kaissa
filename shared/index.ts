@@ -501,18 +501,18 @@ export interface BotLevelConfig {
 }
 
 export const BOT_LEVELS: BotLevelConfig[] = [
-  { level: 1, name: 'Начинающий', minElo: 0, maxElo: 699, nominalElo: 600, skillLevel: 0, depth: 3 },
-  { level: 2, name: 'Младший любитель', minElo: 700, maxElo: 899, nominalElo: 800, skillLevel: 2, depth: 4 },
-  { level: 3, name: 'Любитель', minElo: 900, maxElo: 1074, nominalElo: 1000, skillLevel: 4, depth: 5 },
-  { level: 4, name: 'Клубный любитель', minElo: 1075, maxElo: 1249, nominalElo: 1150, skillLevel: 6, depth: 6 },
-  { level: 5, name: '3-й разряд', minElo: 1250, maxElo: 1424, nominalElo: 1350, skillLevel: 8, depth: 7 },
-  { level: 6, name: '2-й разряд', minElo: 1425, maxElo: 1574, nominalElo: 1500, skillLevel: 10, depth: 8 },
-  { level: 7, name: '1-й разряд', minElo: 1575, maxElo: 1724, nominalElo: 1650, skillLevel: 12, depth: 9 },
-  { level: 8, name: 'Сильный 1-й разряд', minElo: 1725, maxElo: 1874, nominalElo: 1800, skillLevel: 14, depth: 10 },
-  { level: 9, name: 'Кандидат в мастера', minElo: 1875, maxElo: 2024, nominalElo: 1950, skillLevel: 16, depth: 11 },
-  { level: 10, name: 'Мастер FIDE', minElo: 2025, maxElo: 2199, nominalElo: 2100, skillLevel: 18, depth: 12 },
-  { level: 11, name: 'Международный мастер', minElo: 2200, maxElo: 2399, nominalElo: 2300, skillLevel: 19, depth: 13 },
-  { level: 12, name: 'Гроссмейстер', minElo: 2400, maxElo: 9999, nominalElo: 2500, skillLevel: 20, depth: 14 },
+  { level: 1, name: 'Начинающий', minElo: 0, maxElo: 699, nominalElo: 600, skillLevel: 2, depth: 4 },
+  { level: 2, name: 'Младший любитель', minElo: 700, maxElo: 899, nominalElo: 800, skillLevel: 4, depth: 5 },
+  { level: 3, name: 'Любитель', minElo: 900, maxElo: 1074, nominalElo: 1000, skillLevel: 6, depth: 6 },
+  { level: 4, name: 'Клубный любитель', minElo: 1075, maxElo: 1249, nominalElo: 1150, skillLevel: 8, depth: 7 },
+  { level: 5, name: '3-й разряд', minElo: 1250, maxElo: 1424, nominalElo: 1350, skillLevel: 10, depth: 8 },
+  { level: 6, name: '2-й разряд', minElo: 1425, maxElo: 1574, nominalElo: 1500, skillLevel: 12, depth: 9 },
+  { level: 7, name: '1-й разряд', minElo: 1575, maxElo: 1724, nominalElo: 1650, skillLevel: 14, depth: 10 },
+  { level: 8, name: 'Сильный 1-й разряд', minElo: 1725, maxElo: 1874, nominalElo: 1800, skillLevel: 16, depth: 11 },
+  { level: 9, name: 'Кандидат в мастера', minElo: 1875, maxElo: 2024, nominalElo: 1950, skillLevel: 18, depth: 12 },
+  { level: 10, name: 'Мастер FIDE', minElo: 2025, maxElo: 2199, nominalElo: 2100, skillLevel: 19, depth: 13 },
+  { level: 11, name: 'Международный мастер', minElo: 2200, maxElo: 2399, nominalElo: 2300, skillLevel: 20, depth: 14 },
+  { level: 12, name: 'Гроссмейстер', minElo: 2400, maxElo: 9999, nominalElo: 2500, skillLevel: 20, depth: 15 },
 ];
 
 export function eloToLevel(elo: number): number {

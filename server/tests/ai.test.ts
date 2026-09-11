@@ -6,7 +6,7 @@ import { chooseBotMove, getBotConfig, getBotThinkingDelayMs } from '../src/ai/en
 import { stockfish } from '../src/ai/stockfish.js';
 import { selectMoveByPersonality } from '../src/ai/personalities.js';
 import { getOpeningBookMove } from '../src/ai/openings.js';
-import { BOT_PERSONALITIES, detectOpening, eloToLevel, levelToElo, getBotPersonality, getBotTooltip } from 'shared';
+import { BOT_LEVELS, BOT_PERSONALITIES, detectOpening, eloToLevel, levelToElo, getBotPersonality, getBotTooltip } from 'shared';
 
 describe('AI Chess Engine & Stockfish WASM', () => {
   it('evaluates initial board neutrally', () => {
@@ -46,6 +46,14 @@ describe('AI Chess Engine & Stockfish WASM', () => {
 
     expect(levelToElo(4)).toBe(1150);
     expect(levelToElo(12)).toBe(2500);
+
+    // Новая калибровка силы движка со сдвигом параметров на -1
+    expect(BOT_LEVELS[0].skillLevel).toBe(2);
+    expect(BOT_LEVELS[0].depth).toBe(4);
+    expect(BOT_LEVELS[2].skillLevel).toBe(6);
+    expect(BOT_LEVELS[2].depth).toBe(6);
+    expect(BOT_LEVELS[11].skillLevel).toBe(20);
+    expect(BOT_LEVELS[11].depth).toBe(15);
   });
 
   it('provides all 12 personalities with badges, descriptions, and tooltips', () => {

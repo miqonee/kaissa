@@ -9,7 +9,7 @@ export async function cleanupPureBotGames(): Promise<void> {
     const botGames = await prisma.game.findMany({
       where: {
         participants: {
-          every: {
+          some: {
             user: { isBot: true },
           },
         },
@@ -22,6 +22,17 @@ export async function cleanupPureBotGames(): Promise<void> {
       await prisma.gameParticipant.deleteMany({ where: { gameId: { in: ids } } });
       await prisma.game.deleteMany({ where: { id: { in: ids } } });
       console.log(`[cleanup] Удалено ${botGames.length} старых партий ботов из базы данных`);
+    }
+
+    const botUsers = await prisma.user.findMany({ where: { isBot: true }, select: { id: true } });
+    if (botUsers.length > 0) {
+      const botIds = botUsers.map((b) => b.id);
+      await prisma.ratingHistory.deleteMany({ where: { userId: { in: botIds } } });
+      await prisma.user.updateMany({
+        where: { isBot: true },
+        data: { wins: 0, losses: 0, draws: 0 },
+      });
+      console.log(`[cleanup] Сброшена статистика для ${botUsers.length} ботов`);
     }
   } catch (e) {
     console.error('[cleanup] Ошибка очистки партий ботов:', e);

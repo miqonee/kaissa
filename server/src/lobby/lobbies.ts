@@ -142,7 +142,9 @@ export class LobbiesManager {
     const id = `AUTO_${this.idSeq++}`;
     const code = genCode();
     const host = chosen[0];
-    const baseElo = 1150;
+    // Ротация силы столов из ботов: Любительский (~950), Клубный (~1200), Разрядный (~1500), Мастерский (~1800)
+    const tiers = [950, 1200, 1500, 1800];
+    const baseElo = tiers[Math.floor(Math.random() * tiers.length)];
 
     const lobby = new Lobby(
       {
@@ -194,10 +196,13 @@ export class LobbiesManager {
     if (!bots.length) return;
 
     if (humans.length === 0) {
-      // Нет людей — комфортный клубный рейтинг ~1150-1200
+      // Нет людей — сохраняем выбранную категорию рейтинга стола
+      const base = bots[0]?.rating || 1200;
       for (const b of bots) {
-        const jitter = Math.floor(Math.random() * 80 - 40);
-        b.rating = 1150 + jitter;
+        if (!b.rating || Math.abs(b.rating - base) > 250) {
+          const jitter = Math.floor(Math.random() * 80 - 40);
+          b.rating = base + jitter;
+        }
         b.botLevel = eloToLevel(b.rating);
       }
       return;

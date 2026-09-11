@@ -3,11 +3,12 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Chess, type Square } from 'chess.js';
 import type { ChatMessage, GameParticipantInfo, GameState, PieceType } from 'shared';
-import { getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
+import { detectOpening, getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
 import { getSocket, onSocketResync } from '../api/socket';
 import { useAuthStore } from '../stores/auth';
 import { api } from '../api/rest';
 import { openLichessAnalysis } from '../api/lichess';
+import { analyzePosition } from '../utils/analysis';
 import {
   playMoveSound,
   playCaptureSound,
@@ -34,15 +35,34 @@ const chat = ref<ChatMessage[]>([]);
 const chatText = ref('');
 const chatBox = ref<HTMLElement | null>(null);
 
+const movesSanHistory = ref<string[]>([]);
+const isChatOpen = ref(false);
+const unreadChatCount = ref(0);
+
+function toggleChat(): void {
+  isChatOpen.value = !isChatOpen.value;
+  if (isChatOpen.value) {
+    unreadChatCount.value = 0;
+    scrollChat();
+  }
+}
+
+const myId = computed(() => auth.user?.id ?? 0);
+const isParticipant = computed(() => state.value?.participants.some((p) => p.userId === myId.value) ?? false);
+const myParticipant = computed(() => state.value?.participants.find((p) => p.userId === myId.value) ?? null);
+
+const isPlaying = computed(() => isParticipant.value && state.value?.status === 'active');
+const isViewing = computed(() => !isPlaying.value);
+
+const board0Fen = computed(() => fenOf(0));
+const recognizedOpening = computed(() => detectOpening(movesSanHistory.value));
+const currentAnalysis = computed(() => analyzePosition(board0Fen.value));
+
 const selectedDrop = ref<PieceType | null>(null);
 const promoDialog = ref<{ board: 0 | 1; from: string; to: string } | null>(null);
 const showResult = ref(false);
 const showReplay = ref(false);
 const disconnected = ref<{ userId: number; username: string }[]>([]);
-
-const myId = computed(() => auth.user?.id ?? 0);
-const isParticipant = computed(() => state.value?.participants.some((p) => p.userId === myId.value) ?? false);
-const myParticipant = computed(() => state.value?.participants.find((p) => p.userId === myId.value) ?? null);
 
 const myBoard = computed<0 | 1 | null>(() => {
   if (!state.value || state.value.mode !== 'bughouse') return null;
@@ -331,6 +351,13 @@ onMounted(() => {
     if (st.gameId !== gameId) return;
     clearTimeout(watchRetryTimer);
     state.value = st;
+    if (st.moves && Array.isArray(st.moves)) {
+      movesSanHistory.value = [...st.moves];
+    }
+    if (st.chat && Array.isArray(st.chat) && chat.value.length === 0) {
+      chat.value = [...st.chat];
+      scrollChat();
+    }
     if (st.status !== 'active') showResult.value = true;
     rebuildLocalClocks();
   });
@@ -355,6 +382,9 @@ onMounted(() => {
           to: mv.to as Square,
           ...(mv.promotion ? { promotion: mv.promotion as 'q' } : {}),
         });
+        if (mv.boardIndex === 0 && m?.san) {
+          movesSanHistory.value.push(m.san);
+        }
         if (m.captured === 'q') {
           playQueenLossSound();
         } else if (c.isCheck()) {
@@ -389,6 +419,9 @@ onMounted(() => {
   socket.on('game:chat', (msg) => {
     if (msg.gameId !== gameId) return;
     chat.value.push(msg);
+    if (isViewing.value && !isChatOpen.value && msg.userId !== myId.value) {
+      unreadChatCount.value++;
+    }
     scrollChat();
   });
 
@@ -412,6 +445,13 @@ onMounted(() => {
   api.get<{ state: GameState }>(`/api/games/${gameId}/state`).then((res) => {
     if (res.state) {
       if (!state.value) state.value = res.state;
+      if (res.state.moves && Array.isArray(res.state.moves)) {
+        movesSanHistory.value = [...res.state.moves];
+      }
+      if (res.state.chat && Array.isArray(res.state.chat) && chat.value.length === 0) {
+        chat.value = [...res.state.chat];
+        scrollChat();
+      }
       if (res.state.status !== 'active') showResult.value = true;
       rebuildLocalClocks();
     }
@@ -753,8 +793,8 @@ function resultHeadline(): string {
           </div>
         </div>
 
-        <!-- Панель чата -->
-        <div class="panel chat-panel">
+        <!-- Вариант А: Игрок играет активный матч -> открытый чат на всю высоту (без статистики) -->
+        <div v-if="isPlaying" class="panel chat-panel">
           <div class="panel-head">
             <div class="chat-head-title">
               <AppIcon name="message-square" :size="15" />
@@ -785,6 +825,191 @@ function resultHeadline(): string {
             </form>
           </div>
         </div>
+
+        <!-- Вариант Б: Просмотр матча (зритель или оконченная игра) -> Дебют и анализ + шторка чата -->
+        <template v-else>
+          <div class="panel opening-panel">
+            <div class="panel-head">
+              <div class="opening-head-title">
+                <AppIcon name="book-open" :size="15" />
+                <h3>Дебют и анализ</h3>
+              </div>
+              <div class="opening-badges">
+                <span v-if="state.mode === 'team'" class="eco-badge mono">{{ recognizedOpening.eco }}</span>
+                <span
+                  v-if="state.mode === 'team'"
+                  class="stage-badge"
+                  :class="currentAnalysis.isEndgame ? 'middlegame' : recognizedOpening.stage"
+                >
+                  {{
+                    currentAnalysis.isEndgame
+                      ? currentAnalysis.positionPlan.structureNameRu
+                      : (recognizedOpening.stage === 'theory' ? recognizedOpening.stageLabelRu : currentAnalysis.positionPlan.structureNameRu)
+                  }}
+                </span>
+                <span
+                  v-if="state.mode === 'team'"
+                  class="eval-pill mono"
+                  :class="{
+                    'eval-w': currentAnalysis.scoreCp > 35,
+                    'eval-b': currentAnalysis.scoreCp < -35,
+                    'eval-eq': Math.abs(currentAnalysis.scoreCp) <= 35
+                  }"
+                  :title="`Оценка: ${currentAnalysis.evalText} (${currentAnalysis.verdictRu})`"
+                >
+                  {{ currentAnalysis.evalText }}
+                </span>
+              </div>
+            </div>
+
+            <div class="panel-body opening-body">
+              <template v-if="state.mode === 'team'">
+                <!-- Оценка позиции и шкала перевеса -->
+                <div class="eval-section">
+                  <div class="eval-bar-track" :title="`Шансы сторон: белые ${currentAnalysis.evalPercent}% / чёрные ${100 - currentAnalysis.evalPercent}%`">
+                    <div class="eval-bar-fill white" :style="{ width: `${currentAnalysis.evalPercent}%` }"></div>
+                    <div class="eval-bar-fill black" :style="{ width: `${100 - currentAnalysis.evalPercent}%` }"></div>
+                  </div>
+                  <div class="eval-meta-row">
+                    <span class="eval-verdict-text dim">{{ currentAnalysis.verdictRu }}</span>
+                    <span
+                      v-if="currentAnalysis.materialDiff !== 0"
+                      class="material-badge mono"
+                      :class="{ 'mat-w': currentAnalysis.materialDiff > 0, 'mat-b': currentAnalysis.materialDiff < 0 }"
+                    >
+                      {{ currentAnalysis.materialDiff > 0 ? `Белые +${currentAnalysis.materialDiff}` : `Чёрные +${Math.abs(currentAnalysis.materialDiff)}` }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Развитие фигур -->
+                <div
+                  v-if="movesSanHistory.length > 0"
+                  class="development-row"
+                  :title="currentAnalysis.development.complete ? 'Фигуры развиты, короли в безопасности — дальше план по структуре' : `Не выведены: ${[...currentAnalysis.development.whiteUndeveloped, ...currentAnalysis.development.blackUndeveloped].join(', ')}`"
+                >
+                  <span class="dim small-label">Развитие:</span>
+                  <span class="mono dev-score">{{ currentAnalysis.development.whiteDeveloped }}/{{ currentAnalysis.development.whiteTotal }} — {{ currentAnalysis.development.blackDeveloped }}/{{ currentAnalysis.development.blackTotal }}</span>
+                  <span class="dim tiny dev-summary">{{ currentAnalysis.development.summaryRu }}</span>
+                </div>
+
+                <!-- Название дебюта и варианта -->
+                <details
+                  class="opening-details"
+                  :open="recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame"
+                >
+                  <summary class="dim small-label opening-summary">
+                    {{ (recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame) ? 'Дебют:' : `Дебют (${recognizedOpening.nameRu} — свернут, идёт ${currentAnalysis.positionPlan.structureNameRu})` }}
+                  </summary>
+                  <div class="opening-name-block">
+                    <h4 class="opening-title">{{ recognizedOpening.nameRu }}</h4>
+                    <p v-if="recognizedOpening.variationRu" class="opening-variation">
+                      {{ recognizedOpening.variationRu }}
+                    </p>
+                    <span class="opening-name-en dim mono">{{ recognizedOpening.nameEn }}</span>
+                  </div>
+
+                  <!-- Теоретические продолжения -->
+                  <div v-if="recognizedOpening.continuations && recognizedOpening.continuations.length > 0 && recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame" class="continuations-block">
+                    <span class="dim small-label">Варианты теории:</span>
+                    <div class="continuation-chips">
+                      <span
+                        v-for="c in recognizedOpening.continuations"
+                        :key="c.moveSan"
+                        class="cont-chip"
+                        :title="c.variationRu ? `${c.nameRu}: ${c.variationRu}` : c.nameRu"
+                      >
+                        <strong class="mono cont-move">{{ c.moveSan }}</strong>
+                        <span v-if="c.variationRu" class="cont-var dim">{{ c.variationRu }}</span>
+                      </span>
+                    </div>
+                  </div>
+                </details>
+
+                <!-- Сыгранные ходы партии -->
+                <div v-if="recognizedOpening.playedMovesSan && recognizedOpening.playedMovesSan !== '—'" class="opening-moves-row">
+                  <div class="moves-header-row">
+                    <span class="dim small-label">Ходы партии:</span>
+                    <span class="dim tiny mono">{{ movesSanHistory.length }} полуходов</span>
+                  </div>
+                  <div class="moves-history-box mono">
+                    {{ recognizedOpening.playedMovesSan }}
+                  </div>
+                </div>
+
+                <!-- Стратегический план -->
+                <div class="opening-plan-box">
+                  <span class="dim small-label">
+                    {{ (recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame) ? 'План по дебюту:' : `План (${currentAnalysis.positionPlan.structureNameRu}):` }}
+                  </span>
+                  <p class="plan-text">
+                    {{ (recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame) ? recognizedOpening.planRu : currentAnalysis.positionPlan.strategicPlanRu }}
+                  </p>
+                </div>
+              </template>
+
+              <template v-else>
+                <div class="opening-name-block">
+                  <h4 class="opening-title">Багхаус (Шведские шахматы)</h4>
+                  <p class="opening-variation">Две параллельные доски с дропами</p>
+                </div>
+                <div class="opening-plan-box">
+                  <span class="dim small-label">Правила и тактика:</span>
+                  <p class="plan-text">
+                    Сбитая на одной доске фигура немедленно передается в карман напарника. Координируйте атаки и требуйте нужные фигуры для мата!
+                  </p>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Выдвижная шторка чата для режима просмотра -->
+          <div class="chat-drawer-wrapper">
+            <div class="chat-drawer-container" :class="{ 'is-expanded': isChatOpen }">
+              <div
+                class="chat-bar-toggle"
+                :class="{ 'has-unread': unreadChatCount > 0 && !isChatOpen }"
+                @click="toggleChat"
+                title="Открыть / свернуть чат"
+              >
+                <div class="chat-toggle-left">
+                  <AppIcon name="message-square" :size="15" />
+                  <span class="chat-toggle-label">Чат матча</span>
+                  <span v-if="unreadChatCount > 0 && !isChatOpen" class="unread-pill">
+                    +{{ unreadChatCount }}
+                  </span>
+                </div>
+                <div class="chat-toggle-right">
+                  <span class="chat-msg-count dim mono">{{ chat.length }}</span>
+                  <AppIcon :name="isChatOpen ? 'chevron-down' : 'chevron-up'" :size="15" />
+                </div>
+              </div>
+
+              <div v-show="isChatOpen" class="chat-expanded-content">
+                <div ref="chatBox" class="chat-log">
+                  <div v-for="m in chat" :key="m.id" class="chat-msg" :class="{ system: m.system }">
+                    <template v-if="m.system">
+                      <span class="dim system-msg">{{ m.text }}</span>
+                    </template>
+                    <template v-else>
+                      <span class="chat-user">{{ m.username }}:</span>
+                      <span class="chat-text">{{ m.text }}</span>
+                    </template>
+                  </div>
+                  <div v-if="!chat.length" class="empty-chat dim">
+                    Пока сообщений нет. Напишите первое!
+                  </div>
+                </div>
+                <form class="chat-input-row" @submit.prevent="sendChat">
+                  <input v-model="chatText" placeholder="Сообщение всем…" maxlength="300" />
+                  <button type="submit" class="primary icon-only" aria-label="Отправить">
+                    <AppIcon name="arrow-right" :size="15" />
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </template>
       </aside>
     </div>
 
@@ -1447,6 +1672,441 @@ function resultHeadline(): string {
   display: flex;
   gap: 8px;
   margin-top: 8px;
+}
+
+/* ================= ПАНЕЛЬ ДЕБЮТА (В РЕЖИМЕ ПРОСМОТРА) ================= */
+.opening-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 190px;
+}
+
+.opening-head-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.opening-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.eco-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.stage-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+}
+
+.stage-badge.theory {
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent);
+}
+
+.stage-badge.middlegame {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.stage-badge.start {
+  background: var(--surface-3);
+  color: var(--ink-2);
+}
+
+.eval-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  transition: all 0.2s ease;
+}
+
+.eval-pill.eval-w {
+  background: color-mix(in srgb, var(--ok) 20%, transparent);
+  color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
+}
+
+.eval-pill.eval-b {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.eval-pill.eval-eq {
+  background: var(--surface-3);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+}
+
+/* Шкала и оценка позиции */
+.eval-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: var(--surface-2);
+  padding: 7px 9px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line);
+}
+
+.eval-bar-track {
+  display: flex;
+  height: 5px;
+  width: 100%;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--surface-3);
+}
+
+.eval-bar-fill {
+  height: 100%;
+  transition: width 0.25s ease-out;
+}
+
+.eval-bar-fill.white {
+  background: #ffffff;
+}
+
+.eval-bar-fill.black {
+  background: #2b2b2b;
+}
+
+.eval-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.eval-verdict-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.material-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 0 5px;
+  border-radius: 3px;
+}
+
+.material-badge.mat-w {
+  background: #ffffff;
+  color: #111111;
+}
+
+.material-badge.mat-b {
+  background: #222222;
+  color: #ffffff;
+  border: 1px solid #444444;
+}
+
+.opening-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.opening-name-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.opening-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.opening-variation {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 0;
+}
+
+.opening-name-en {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* Ветки теории */
+.continuations-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.continuation-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.cont-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  padding: 2px 7px;
+  border-radius: var(--r-xs);
+  font-size: 11px;
+  cursor: default;
+}
+
+.cont-move {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.cont-var {
+  font-size: 10px;
+  color: var(--ink-3);
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ходы партии */
+.opening-moves-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.moves-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.moves-history-box {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  padding: 6px 8px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+  max-height: 90px;
+  overflow-y: auto;
+  word-break: break-word;
+}
+
+.small-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.development-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  padding: 6px 10px;
+  cursor: help;
+}
+
+.dev-score {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-2);
+}
+
+.dev-summary {
+  flex-basis: 100%;
+  font-size: 11px;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+.opening-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.opening-summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.opening-summary::-webkit-details-marker {
+  display: none;
+}
+
+.opening-summary::before {
+  content: '▸ ';
+}
+
+.opening-details[open] .opening-summary::before {
+  content: '▾ ';
+}
+
+.opening-plan-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface-2);
+  padding: 8px 10px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line);
+}
+
+.plan-text {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+/* ================= ВЫДВИЖНОЙ ЧАТ ДЛЯ РЕЖИМА ПРОСМОТРА ================= */
+.chat-drawer-wrapper {
+  height: 40px;
+  min-height: 40px;
+  flex: none;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.chat-drawer-container {
+  width: 100%;
+  height: 40px;
+  box-sizing: border-box;
+}
+
+.chat-bar-toggle {
+  height: 40px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+
+.chat-bar-toggle:hover {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.chat-bar-toggle.has-unread {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, var(--surface));
+}
+
+.chat-toggle-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-toggle-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.unread-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #000;
+}
+
+.chat-toggle-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+}
+
+.chat-msg-count {
+  font-size: 11px;
+}
+
+.chat-drawer-container.is-expanded {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 360px;
+  max-height: calc(100vh - 260px);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
+  animation: slide-up-chat 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slide-up-chat {
+  from {
+    transform: translateY(20px);
+    opacity: 0.7;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.chat-drawer-container.is-expanded .chat-bar-toggle {
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--r-m) var(--r-m) 0 0;
+  background: var(--surface-2);
+}
+
+.chat-expanded-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 10px 12px;
+  gap: 8px;
+  overflow: hidden;
 }
 
 /* Модалки */

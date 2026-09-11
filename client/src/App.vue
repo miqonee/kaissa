@@ -102,7 +102,10 @@ const connLabel = computed(() => {
               <span class="me-name">{{ auth.user.username }}</span>
               <span class="rating-chip mono">{{ auth.user.rating }}</span>
             </router-link>
-            <button class="logout-btn" @click="logout" title="Выйти из аккаунта">Выйти</button>
+            <button class="logout-btn" @click="logout" title="Выйти из аккаунта" aria-label="Выйти">
+              <AppIcon name="log-out" :size="14" />
+              <span class="logout-text">Выйти</span>
+            </button>
           </template>
           <template v-else>
             <router-link to="/login" class="login-header-btn">Войти / Регистрация</router-link>
@@ -225,6 +228,16 @@ const connLabel = computed(() => {
   }
   50% {
     opacity: 1;
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-header-btn {
+    height: 30px;
+    padding: 0 6px;
+    font-size: 11px;
+    gap: 3px;
+    flex-shrink: 0;
   }
 }
 

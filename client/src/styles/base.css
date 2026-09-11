@@ -333,6 +333,9 @@ main.page {
 
 /* Кнопка выхода в шапке */
 .topbar-right .logout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   height: 32px;
   padding: 0 10px;
   border-radius: var(--r-s);
@@ -340,6 +343,7 @@ main.page {
   color: var(--ink-3);
   background: transparent;
   border: 1px solid transparent;
+  cursor: pointer;
   transition: color var(--t-fast), background var(--t-fast), border-color var(--t-fast);
 }
 
@@ -355,7 +359,7 @@ main.page {
 @media (max-width: 720px) {
   .topbar {
     height: auto;
-    min-height: 50px;
+    min-height: 48px;
     padding: 6px var(--gap-s) 6px;
     box-sizing: border-box;
   }
@@ -365,47 +369,74 @@ main.page {
     grid-template-columns: auto 1fr;
     grid-template-rows: auto auto;
     align-items: center;
-    gap: 4px 8px;
+    gap: 4px 6px;
+    width: 100%;
   }
 
   .brand {
     grid-column: 1;
     grid-row: 1;
-    font-size: 19px;
+    font-size: 18px;
+    flex-shrink: 0;
   }
 
   .topbar-right {
     grid-column: 2;
     grid-row: 1;
+    display: flex;
     justify-content: flex-end;
-    gap: 5px;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
   }
 
   .topbar-right .me-link {
-    padding: 0 7px;
-    font-size: 12.5px;
+    padding: 0 6px;
+    font-size: 12px;
+    max-width: 130px;
+    flex-shrink: 1;
+    min-width: 0;
   }
 
   .me-name {
-    max-width: 75px;
+    max-width: 65px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .topbar-right .logout-btn {
-    padding: 0 6px;
-    font-size: 12px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    justify-content: center;
+    border-radius: var(--r-s);
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--ink-3);
+    flex-shrink: 0;
+  }
+
+  .topbar-right .logout-btn .logout-text {
+    display: none;
+  }
+
+  .topbar-right .logout-btn:hover {
+    color: var(--bad);
+    background: var(--bad-soft);
+    border-color: color-mix(in srgb, var(--bad) 30%, transparent);
   }
 
   .topbar-right .icon-btn {
     width: 30px;
     height: 30px;
+    flex-shrink: 0;
   }
 
   .conn-indicator {
     height: 30px;
     padding: 0 6px;
+    flex-shrink: 0;
   }
 
   .conn-indicator .conn-text {
@@ -440,7 +471,7 @@ main.page {
     display: none;
   }
   .brand {
-    font-size: 17px;
+    font-size: 16.5px;
   }
 }
 

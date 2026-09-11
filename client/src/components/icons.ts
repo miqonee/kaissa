@@ -33,7 +33,8 @@ export type IconName =
   | 'eye'
   | 'trash'
   | 'bolt'
-  | 'flag';
+  | 'flag'
+  | 'log-out';
 
 /** Иконки, которые рисуются заливкой, а не обводкой */
 export const FILLED_ICONS: ReadonlySet<IconName> = new Set<IconName>([
@@ -95,4 +96,5 @@ export const ICON_PATHS: Record<IconName, string[]> = {
   ],
   bolt: ['M13 2L3 14h9l-1 8 10-12h-9l1-8z'],
   flag: ['M4 3v18', 'M4 4h12l-2 4 2 4H4z'],
+  'log-out': ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'M16 17l5-5-5-5', 'M21 12H9'],
 };

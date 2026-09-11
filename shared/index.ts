@@ -246,6 +246,7 @@ export interface GameState {
   /** какой цвет тикает на каждой доске (null — часы стоят) */
   clocksActive: ('w' | 'b' | null)[];
   startedAt: number;
+  chat?: ChatMessage[];
 }
 
 // ---------- Live-трансляция (главная) ----------

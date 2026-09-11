@@ -200,25 +200,6 @@ function botDisplayName(p: LiveGameInfo['players'][number]): string {
   return parts.length > 1 ? parts[parts.length - 1] : perso.name;
 }
 
-const QUICK_TC_OPTIONS: { label: string; tc: TimeControl }[] = [
-  { label: '1+0', tc: { kind: 'clock', baseMin: 1, incSec: 0 } },
-  { label: '3+0', tc: { kind: 'clock', baseMin: 3, incSec: 0 } },
-  { label: '5+0', tc: { kind: 'clock', baseMin: 5, incSec: 0 } },
-  { label: '10+0', tc: { kind: 'clock', baseMin: 10, incSec: 0 } },
-];
-
-function isCurrentTc(cur: TimeControl | undefined, target: TimeControl): boolean {
-  if (!cur) return false;
-  if (cur.kind !== target.kind) return false;
-  if (cur.kind === 'none') return true;
-  return cur.baseMin === target.baseMin && cur.incSec === target.incSec;
-}
-
-function setAutoLobbyTimeControl(tc: TimeControl): void {
-  if (!autoLobby.value) return;
-  socket.emit('lobby:set-time-control', { lobbyId: autoLobby.value.id, tc });
-}
-
 function livePlayerTitle(p: LiveGameInfo['players'][number]): string {
   if (!p.isBot) return `${p.username} · ${p.rating}`;
   return getBotTooltip(p.username, p.rating);
@@ -318,13 +299,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
                         class="live-player"
                         :class="{ 'is-bot': p.isBot }"
                         :title="livePlayerTitle(p)"
-                      >
-                        <span v-if="p.isBot" class="bot-pill">
-                          <span class="bot-tag">Бот</span>
-                          <span class="bot-name">{{ botDisplayName(p) }}</span>
-                        </span>
-                        <span v-else class="human-name">{{ p.username }}</span>
-                      </span>
+                      >{{ p.isBot ? botDisplayName(p) : p.username }}</span>
                       <small class="mono team-elo">({{ teamAvgRating(g.players, 1) }})</small>
                     </span>
                     <span class="vs">vs</span>
@@ -335,13 +310,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
                         class="live-player"
                         :class="{ 'is-bot': p.isBot }"
                         :title="livePlayerTitle(p)"
-                      >
-                        <span v-if="p.isBot" class="bot-pill">
-                          <span class="bot-tag">Бот</span>
-                          <span class="bot-name">{{ botDisplayName(p) }}</span>
-                        </span>
-                        <span v-else class="human-name">{{ p.username }}</span>
-                      </span>
+                      >{{ p.isBot ? botDisplayName(p) : p.username }}</span>
                       <small class="mono team-elo">({{ teamAvgRating(g.players, 2) }})</small>
                     </span>
                   </div>
@@ -379,27 +348,14 @@ function lobbyRosterTitle(l: LobbySummary): string {
                 <span class="badges-row">
                   <span class="badge auto-chip">
                     <AppIcon name="bolt" :size="12" />
-                    Быстрый старт
+                    Быстрый старт {{ autoLobby.timeControl.kind === 'clock' ? `${autoLobby.timeControl.baseMin}+${autoLobby.timeControl.incSec}` : '' }}
                   </span>
                   <span class="badge">{{ modeLabel(autoLobby.mode) }}</span>
                 </span>
-                <div class="auto-tc-pills" @click.stop>
-                  <button
-                    v-for="preset in QUICK_TC_OPTIONS"
-                    :key="preset.label"
-                    type="button"
-                    class="tiny pill mono auto-tc-btn"
-                    :class="{ active: isCurrentTc(autoLobby.timeControl, preset.tc) }"
-                    :title="`Контроль времени: ${preset.label}`"
-                    @click.stop="setAutoLobbyTimeControl(preset.tc)"
-                  >
-                    {{ preset.label }}
-                  </button>
-                </div>
                 <span
                   class="auto-hint-text dim tiny"
                   title="Когда заходит человек — первый бот выходит и уступает место"
-                >Боты замещаются игроками</span>
+                >Боты замещаются игроками · выбор времени за столом</span>
               </div>
 
               <div class="lobby-card-meta">
@@ -639,20 +595,26 @@ function lobbyRosterTitle(l: LobbySummary): string {
 
 .live-meta {
   margin-top: 8px;
+  width: 100%;
+  overflow: hidden;
 }
 
 .live-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
   font-size: 12px;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .mode-badge {
   font-size: 11px;
-  padding: 1px 7px;
+  padding: 1px 6px;
   flex-shrink: 0;
+  line-height: 1.3;
 }
 
 .players-line {
@@ -660,17 +622,19 @@ function lobbyRosterTitle(l: LobbySummary): string {
   font-weight: 500;
   display: flex;
   align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
+  gap: 4px;
   flex: 1;
   min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .players-line .vs {
   color: var(--ink-3);
-  font-size: 11.5px;
+  font-size: 11px;
   font-style: italic;
   margin: 0 2px;
+  flex-shrink: 0;
 }
 
 .team {
@@ -679,39 +643,29 @@ function lobbyRosterTitle(l: LobbySummary): string {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.bot-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  color: var(--accent);
-  padding: 0 5px;
-  border-radius: var(--r-xs);
-  font-size: 11px;
+.live-player {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90px;
+}
+
+.live-player.is-bot {
+  color: var(--accent-2);
   font-weight: 600;
-  line-height: 1.35;
-}
-
-.bot-tag {
-  font-size: 9.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.8;
-}
-
-.human-name {
-  font-weight: 600;
-  color: var(--ink);
+  cursor: help;
 }
 
 .team-elo {
   color: var(--ink-3);
   margin-left: 2px;
   font-size: 11px;
+  flex-shrink: 0;
 }
 
 .spectate-hint {
@@ -723,22 +677,11 @@ function lobbyRosterTitle(l: LobbySummary): string {
   font-weight: 600;
   font-size: 11.5px;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .live-game:hover .spectate-hint {
   color: var(--accent-2);
-}
-
-.auto-tc-pills {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.auto-tc-btn {
-  padding: 1px 6px;
-  font-size: 11px;
-  border-radius: var(--r-xs);
 }
 
 /* Карточки столов */

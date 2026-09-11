@@ -178,7 +178,7 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
     });
 
     socket.on('game:chat', (gameId, text) => {
-      if (ctx) gamesManager.chat(Number(gameId), ctx.uid, String(text));
+      if (ctx) gamesManager.chat(Number(gameId), ctx.uid, String(text), ctx.username);
     });
 
     // ---------- Комнаты игры / трансляции ----------

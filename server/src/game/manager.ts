@@ -74,6 +74,7 @@ interface ActiveGame {
   reason: EndReason | null;
   disconnected: Set<number>;
   chatIdSeq: number;
+  chat: ChatMessage[];
   isDemo?: boolean;
 }
 
@@ -228,6 +229,7 @@ export class GamesManager {
       reason: null,
       disconnected: new Set(),
       chatIdSeq: 1,
+      chat: [],
       isDemo: Boolean(opts.isDemo),
     };
     this.games.set(game.id, game);
@@ -542,7 +544,7 @@ export class GamesManager {
   }
 
   private systemMessage(g: ActiveGame, text: string): void {
-    this.io?.to(this.gameRoom(g.id)).emit('game:chat', {
+    const msg: ChatMessage & { gameId: number } = {
       id: this.chatGlobalSeq++,
       userId: 0,
       username: 'system',
@@ -550,7 +552,10 @@ export class GamesManager {
       at: Date.now(),
       system: true,
       gameId: g.id,
-    } as ChatMessage & { gameId: number });
+    };
+    g.chat.push(msg);
+    if (g.chat.length > 50) g.chat.shift();
+    this.io?.to(this.gameRoom(g.id)).emit('game:chat', msg);
   }
 
   private usernameOf(g: ActiveGame, uid: number): string {
@@ -587,21 +592,25 @@ export class GamesManager {
 
   // ---------------- Чат ----------------
 
-  chat(gameId: number, uid: number, text: string): void {
+  chat(gameId: number, uid: number, text: string, senderUsername?: string): void {
     const g = this.games.get(gameId);
     if (!g) return;
     const p = g.participants.find((x) => x.uid === uid);
-    if (!p) return;
+    const username = p ? p.username : senderUsername;
+    if (!username) return;
     const clean = text.trim().slice(0, 300);
     if (!clean) return;
-    this.io?.to(this.gameRoom(gameId)).emit('game:chat', {
+    const msg: ChatMessage & { gameId: number } = {
       id: this.chatGlobalSeq++,
       userId: uid,
-      username: p.username,
+      username,
       text: clean,
       at: Date.now(),
       gameId,
-    });
+    };
+    g.chat.push(msg);
+    if (g.chat.length > 50) g.chat.shift();
+    this.io?.to(this.gameRoom(gameId)).emit('game:chat', msg);
   }
 
   // ---------------- Live ----------------
@@ -705,6 +714,7 @@ export class GamesManager {
       clocks,
       clocksActive,
       startedAt: g.startedAt,
+      chat: g.chat.slice(-50),
     };
   }
 

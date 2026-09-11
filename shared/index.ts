@@ -503,8 +503,8 @@ export interface BotLevelConfig {
 export const BOT_LEVELS: BotLevelConfig[] = [
   { level: 1, name: 'Начинающий', minElo: 0, maxElo: 699, nominalElo: 600, skillLevel: 2, depth: 4 },
   { level: 2, name: 'Младший любитель', minElo: 700, maxElo: 899, nominalElo: 800, skillLevel: 4, depth: 5 },
-  { level: 3, name: 'Любитель', minElo: 900, maxElo: 1074, nominalElo: 1000, skillLevel: 6, depth: 6 },
-  { level: 4, name: 'Клубный любитель', minElo: 1075, maxElo: 1249, nominalElo: 1150, skillLevel: 8, depth: 7 },
+  { level: 3, name: 'Любитель', minElo: 900, maxElo: 1074, nominalElo: 1000, skillLevel: 5, depth: 6 },
+  { level: 4, name: 'Клубный любитель', minElo: 1075, maxElo: 1249, nominalElo: 1150, skillLevel: 7, depth: 7 },
   { level: 5, name: '3-й разряд', minElo: 1250, maxElo: 1424, nominalElo: 1350, skillLevel: 10, depth: 8 },
   { level: 6, name: '2-й разряд', minElo: 1425, maxElo: 1574, nominalElo: 1500, skillLevel: 12, depth: 9 },
   { level: 7, name: '1-й разряд', minElo: 1575, maxElo: 1724, nominalElo: 1650, skillLevel: 14, depth: 10 },

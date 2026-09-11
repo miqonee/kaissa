@@ -50,8 +50,10 @@ describe('AI Chess Engine & Stockfish WASM', () => {
     // Новая калибровка силы движка со сдвигом параметров на -1
     expect(BOT_LEVELS[0].skillLevel).toBe(2);
     expect(BOT_LEVELS[0].depth).toBe(4);
-    expect(BOT_LEVELS[2].skillLevel).toBe(6);
+    expect(BOT_LEVELS[2].skillLevel).toBe(5);
     expect(BOT_LEVELS[2].depth).toBe(6);
+    expect(BOT_LEVELS[3].skillLevel).toBe(7);
+    expect(BOT_LEVELS[3].depth).toBe(7);
     expect(BOT_LEVELS[11].skillLevel).toBe(20);
     expect(BOT_LEVELS[11].depth).toBe(15);
   });
@@ -118,11 +120,36 @@ describe('AI Chess Engine & Stockfish WASM', () => {
     expect(decDynamic?.from).toBeDefined();
   });
 
-  it('thinking delay is within 1.2 - 2.8s', () => {
+  it('thinking delay is within 1.0 - 10.0s and adapts by game stage', () => {
+    // Дефолтный вызов: 1.0 - 10.0 с
     for (let i = 0; i < 20; i++) {
       const ms = getBotThinkingDelayMs();
-      expect(ms).toBeGreaterThanOrEqual(1200);
-      expect(ms).toBeLessThanOrEqual(2800);
+      expect(ms).toBeGreaterThanOrEqual(1000);
+      expect(ms).toBeLessThanOrEqual(10000);
+    }
+
+    // Дебют (ход 2): 1.0 - 2.5 с
+    const openingFen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2';
+    for (let i = 0; i < 10; i++) {
+      const ms = getBotThinkingDelayMs(openingFen, null, 2);
+      expect(ms).toBeGreaterThanOrEqual(1000);
+      expect(ms).toBeLessThanOrEqual(2500);
+    }
+
+    // Король под шахом (сложная позиция): 5.0 - 10.0 с
+    const checkFen = 'rnb1kbnr/pppp1ppp/8/4p3/5PPq/8/PPPPP2P/RNBQKBNR w KQkq - 1 3';
+    for (let i = 0; i < 10; i++) {
+      const ms = getBotThinkingDelayMs(checkFen, null, 20);
+      expect(ms).toBeGreaterThanOrEqual(5000);
+      expect(ms).toBeLessThanOrEqual(10000);
+    }
+
+    // Спокойный миттельшпиль: 3.0 - 5.0 с
+    const quietMiddlegameFen = 'r2q1rk1/pp1nbppp/2p1pn2/3p4/2PP4/2N1PN2/PP2BPPP/R1BQ1RK1 w - - 4 9';
+    for (let i = 0; i < 10; i++) {
+      const ms = getBotThinkingDelayMs(quietMiddlegameFen, null, 17);
+      expect(ms).toBeGreaterThanOrEqual(3000);
+      expect(ms).toBeLessThanOrEqual(5000);
     }
   });
 

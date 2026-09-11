@@ -257,8 +257,8 @@ function optsSkillLevel(opts: SearchOptions): number {
   if (opts.elo !== undefined) {
     if (opts.elo < 700) return 2;
     if (opts.elo < 900) return 4;
-    if (opts.elo < 1075) return 6;
-    if (opts.elo < 1250) return 8;
+    if (opts.elo < 1075) return 5;
+    if (opts.elo < 1250) return 7;
     if (opts.elo < 1425) return 10;
     if (opts.elo < 1575) return 12;
     if (opts.elo < 1725) return 14;
@@ -267,7 +267,7 @@ function optsSkillLevel(opts: SearchOptions): number {
     if (opts.elo < 2200) return 19;
     return 20;
   }
-  return 8;
+  return 7;
 }
 
 export const stockfish = new StockfishEngine();

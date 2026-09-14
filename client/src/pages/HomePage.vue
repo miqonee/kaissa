@@ -9,11 +9,13 @@ import { useAuthStore } from '../stores/auth';
 import ChessBoard from '../components/ChessBoard.vue';
 import CreateLobbyModal from '../components/CreateLobbyModal.vue';
 import AppIcon from '../components/AppIcon.vue';
+import BotHoverCard from '../components/BotHoverCard.vue';
 
 const router = useRouter();
 const auth = useAuthStore();
 const lobbies = ref<LobbySummary[]>([]);
 const liveGames = ref<LiveGameInfo[]>([]);
+const loadingLobbies = ref(true);
 
 const autoLobby = computed(() => lobbies.value.find((l) => l.isAuto));
 const userLobbies = computed(() => lobbies.value.filter((l) => !l.isAuto));
@@ -47,7 +49,9 @@ onMounted(async () => {
   try {
     const res = await api.get<{ lobbies: LobbySummary[] }>('/api/lobbies');
     if (res.lobbies) lobbies.value = res.lobbies;
-  } catch {}
+  } catch {} finally {
+    loadingLobbies.value = false;
+  }
   socket.emit('live:subscribe');
   socket.emit('lobby-list:subscribe');
   // Реконнект сокета теряет комнаты live/lobby-list — подписаться заново
@@ -166,7 +170,11 @@ function enterLobby(l: LobbySummary): void {
     return;
   }
   socket.emit('lobby:join', l.id, (ack) => {
-    if (ack.ok && ack.data) router.push(`/lobby/${ack.data.lobby.id}`);
+    if (ack.ok && ack.data) {
+      router.push(`/lobby/${ack.data.lobby.id}`);
+    } else if (ack && !ack.ok) {
+      showToast(ack.error || 'Не удалось войти в стол');
+    }
   });
 }
 
@@ -243,6 +251,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
             placeholder="КОД СТОЛА"
             maxlength="6"
             class="mono join-input"
+            @input="joinError = ''"
           />
           <button type="submit" class="brass join-btn" :disabled="!joinCode.trim() || joinBusy">
             Войти
@@ -293,24 +302,24 @@ function lobbyRosterTitle(l: LobbySummary): string {
                   <span class="badge mode-badge">{{ modeLabel(g.mode) }}</span>
                   <div class="players-line">
                     <span class="team t1">
-                      <span
-                        v-for="p in teamPlayers(g, 1)"
-                        :key="p.username"
-                        class="live-player"
-                        :class="{ 'is-bot': p.isBot }"
-                        :title="livePlayerTitle(p)"
-                      >{{ p.isBot ? botDisplayName(p) : p.username }}</span>
+                      <template v-for="(p, pIdx) in teamPlayers(g, 1)" :key="p.username">
+                        <span v-if="pIdx > 0" class="team-sep">/</span>
+                        <BotHoverCard v-if="p.isBot" :username="p.username" :rating="p.rating">
+                          <span class="live-player is-bot">{{ botDisplayName(p) }}</span>
+                        </BotHoverCard>
+                        <span v-else class="live-player">{{ p.username }}</span>
+                      </template>
                       <small class="mono team-elo">({{ teamAvgRating(g.players, 1) }})</small>
                     </span>
                     <span class="vs">vs</span>
                     <span class="team t2">
-                      <span
-                        v-for="p in teamPlayers(g, 2)"
-                        :key="p.username"
-                        class="live-player"
-                        :class="{ 'is-bot': p.isBot }"
-                        :title="livePlayerTitle(p)"
-                      >{{ p.isBot ? botDisplayName(p) : p.username }}</span>
+                      <template v-for="(p, pIdx) in teamPlayers(g, 2)" :key="p.username">
+                        <span v-if="pIdx > 0" class="team-sep">/</span>
+                        <BotHoverCard v-if="p.isBot" :username="p.username" :rating="p.rating">
+                          <span class="live-player is-bot">{{ botDisplayName(p) }}</span>
+                        </BotHoverCard>
+                        <span v-else class="live-player">{{ p.username }}</span>
+                      </template>
                       <small class="mono team-elo">({{ teamAvgRating(g.players, 2) }})</small>
                     </span>
                   </div>
@@ -337,7 +346,11 @@ function lobbyRosterTitle(l: LobbySummary): string {
             <span class="hint">{{ lobbies.length }} открыто</span>
           </div>
 
-          <div class="panel-body lobby-rows" v-if="lobbies.length">
+          <div v-if="loadingLobbies" class="empty dim" style="padding: 32px 16px;">
+            Загрузка столов…
+          </div>
+
+          <div v-else-if="lobbies.length" class="panel-body lobby-rows">
             <!-- Быстрый стол 2х2 (ультракомпактная карточка во главе) -->
             <div
               v-if="autoLobby"
@@ -660,6 +673,13 @@ function lobbyRosterTitle(l: LobbySummary): string {
   color: var(--accent-2);
   font-weight: 600;
   cursor: help;
+}
+
+.team-sep {
+  margin: 0 4px;
+  color: var(--ink-3);
+  font-weight: 400;
+  font-size: 11px;
 }
 
 .team-elo {

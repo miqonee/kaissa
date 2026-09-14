@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Chess } from 'chess.js';
 import { evaluateBoard } from '../src/ai/eval.js';
 import { searchBestMoves } from '../src/ai/minimax.js';
@@ -6,6 +6,8 @@ import { chooseBotMove, getBotConfig, getBotThinkingDelayMs } from '../src/ai/en
 import { stockfish } from '../src/ai/stockfish.js';
 import { selectMoveByPersonality } from '../src/ai/personalities.js';
 import { getOpeningBookMove } from '../src/ai/openings.js';
+import { cleanupPureBotGames } from '../src/ai/demoShowcase.js';
+import { prisma } from '../src/prisma.js';
 import { BOT_LEVELS, BOT_PERSONALITIES, detectOpening, eloToLevel, levelToElo, getBotPersonality, getBotTooltip } from 'shared';
 
 describe('AI Chess Engine & Stockfish WASM', () => {
@@ -216,5 +218,52 @@ describe('AI Chess Engine & Stockfish WASM', () => {
     const mid = detectOpening(midgameMoves);
     expect(['C50', 'C54']).toContain(mid.eco);
     expect(mid.stage).toBe('middlegame');
+  });
+
+  describe('cleanupPureBotGames', () => {
+    it('only queries and deletes pure bot games (where NO humans participated)', async () => {
+      let capturedWhere: any = null;
+      const findManySpy = vi.spyOn(prisma.game, 'findMany').mockImplementation(((args: any) => {
+        capturedWhere = args?.where;
+        return Promise.resolve([{ id: 999 }]);
+      }) as any);
+      const moveDeleteSpy = vi.spyOn(prisma.gameMove, 'deleteMany').mockResolvedValue({ count: 1 } as any);
+      const partDeleteSpy = vi.spyOn(prisma.gameParticipant, 'deleteMany').mockResolvedValue({ count: 4 } as any);
+      const gameDeleteSpy = vi.spyOn(prisma.game, 'deleteMany').mockResolvedValue({ count: 1 } as any);
+
+      await cleanupPureBotGames();
+
+      expect(findManySpy).toHaveBeenCalled();
+      // Проверяем, что запрос требует отсутствия игроков-людей
+      expect(capturedWhere?.AND).toBeDefined();
+      const hasSomeBot = capturedWhere.AND.some((c: any) => c.participants?.some?.user?.isBot === true);
+      const hasNoneHuman = capturedWhere.AND.some((c: any) => c.participants?.none?.user?.isBot === false);
+      expect(hasSomeBot).toBe(true);
+      expect(hasNoneHuman).toBe(true);
+
+      expect(moveDeleteSpy).toHaveBeenCalledWith({ where: { gameId: { in: [999] } } });
+      expect(partDeleteSpy).toHaveBeenCalledWith({ where: { gameId: { in: [999] } } });
+      expect(gameDeleteSpy).toHaveBeenCalledWith({ where: { id: { in: [999] } } });
+
+      findManySpy.mockRestore();
+      moveDeleteSpy.mockRestore();
+      partDeleteSpy.mockRestore();
+      gameDeleteSpy.mockRestore();
+    });
+
+    it('does nothing when no pure bot games are found', async () => {
+      const findManySpy = vi.spyOn(prisma.game, 'findMany').mockResolvedValue([] as any);
+      const moveDeleteSpy = vi.spyOn(prisma.gameMove, 'deleteMany');
+      const gameDeleteSpy = vi.spyOn(prisma.game, 'deleteMany');
+
+      await cleanupPureBotGames();
+
+      expect(moveDeleteSpy).not.toHaveBeenCalled();
+      expect(gameDeleteSpy).not.toHaveBeenCalled();
+
+      findManySpy.mockRestore();
+      moveDeleteSpy.mockRestore();
+      gameDeleteSpy.mockRestore();
+    });
   });
 });

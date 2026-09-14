@@ -5,7 +5,7 @@ import type {
   BotPersonalityMetric,
   PlatformMetrics,
 } from 'shared';
-import { BOT_LEVELS, BOT_PERSONALITIES } from 'shared';
+import { BOT_LEVELS, BOT_PERSONALITIES, eloToLevel } from 'shared';
 import { currentUser, requireAdmin } from '../auth/auth.js';
 import { prisma } from '../prisma.js';
 import { presence } from '../socket/presence.js';
@@ -84,7 +84,10 @@ adminRouter.get('/metrics', async (_req, res) => {
   const botMetricsVsBot: BotLevelMetric[] = [];
 
   for (const lvl of BOT_LEVELS) {
-    const matchingParts = botParts.filter((p) => p.user.botLevel === lvl.level);
+    const matchingParts = botParts.filter((p) => {
+      const effectiveLevel = p.ratingBefore ? eloToLevel(p.ratingBefore) : (p.user.botLevel || 1);
+      return effectiveLevel === lvl.level;
+    });
     const humanAcc = createAcc();
     const botAcc = createAcc();
 

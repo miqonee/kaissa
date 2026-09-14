@@ -51,7 +51,7 @@ function outcome(g: GameSummary): { text: string; cls: string } {
   if (g.status === 'abandoned') return { text: 'Брошена', cls: 'dim' };
   if (g.result === '*' || g.result === '1/2-1/2') return { text: 'Ничья', cls: 'dim' };
   if (tab.value === 'all') {
-    return { text: g.result === '1-0' ? 'Победа белых' : 'Победа черных', cls: '' };
+    return { text: g.result === '1-0' ? 'Победа белых' : 'Победа чёрных', cls: '' };
   }
   const me = meOf(g);
   if (!me) return { text: g.result, cls: '' };
@@ -73,7 +73,7 @@ function delta(g: GameSummary): number {
 
 function deltaText(g: GameSummary): string {
   const d = delta(g);
-  if (g.status === 'abandoned' || g.status === 'active') return '';
+  if (g.status === 'abandoned' || g.status === 'active') return '—';
   if (d === 0) return '0';
   return (d > 0 ? '+' : '') + d;
 }

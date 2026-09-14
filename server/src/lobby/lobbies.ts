@@ -297,10 +297,10 @@ export class LobbiesManager {
       // 3 бота: напарник и 2 соперника с естественным разбросом +-50..150 Elo
       const delta1 = Math.floor(Math.random() * 200 - 120); // partner
       const delta2 = Math.floor(Math.random() * 210 - 80);  // opp1
-      const rPartner = Math.max(500, hElo + delta1);
-      const rOpp1 = Math.max(500, hElo + delta2);
+      const rPartner = Math.max(500, Math.min(2550, hElo + delta1));
+      const rOpp1 = Math.max(500, Math.min(2550, hElo + delta2));
       // opp2 balances teams: (hElo + rPartner) - rOpp1
-      const rOpp2 = Math.max(500, hElo + rPartner - rOpp1);
+      const rOpp2 = Math.max(500, Math.min(2550, hElo + rPartner - rOpp1));
 
       if (bots.length >= 3) {
         bots[0].rating = rPartner;
@@ -314,7 +314,7 @@ export class LobbiesManager {
       } else {
         for (const b of bots) {
           const spread = Math.floor(Math.random() * 200 - 100);
-          b.rating = Math.max(500, hElo + spread);
+          b.rating = Math.max(500, Math.min(2550, hElo + spread));
           b.botLevel = eloToLevel(b.rating);
         }
       }
@@ -326,8 +326,8 @@ export class LobbiesManager {
       // hA (выше) играет в команде с более слабым ботом, hB (ниже) с более сильным
       const jitterA = Math.floor(Math.random() * 60 - 30);
       const jitterB = Math.floor(Math.random() * 60 - 30);
-      const rBotA = Math.max(500, hA.rating + jitterA);
-      const rBotB = Math.max(500, hB.rating + jitterB);
+      const rBotA = Math.max(500, Math.min(2550, hA.rating + jitterA));
+      const rBotB = Math.max(500, Math.min(2550, hB.rating + jitterB));
 
       if (bots.length >= 2) {
         bots[0].rating = rBotA;
@@ -341,7 +341,7 @@ export class LobbiesManager {
 
     if (humans.length === 3) {
       const sorted = humans.slice().sort((a, b) => b.rating - a.rating);
-      const targetBotElo = Math.max(500, sorted[1].rating + sorted[2].rating - sorted[0].rating);
+      const targetBotElo = Math.max(500, Math.min(2550, sorted[1].rating + sorted[2].rating - sorted[0].rating));
       bots[0].rating = targetBotElo;
       bots[0].botLevel = eloToLevel(targetBotElo);
     }
@@ -367,6 +367,11 @@ export class LobbiesManager {
           botLevel: eloToLevel(b.rating),
         });
       }
+    }
+    // Гарантируем, что у лобби всегда есть хост
+    if (![...lobby.members.values()].some((m) => m.host)) {
+      const first = lobby.members.values().next().value;
+      if (first) first.host = true;
     }
     this.adaptAutoLobbyRatings(lobby);
     this.broadcastState(lobby);
@@ -443,6 +448,8 @@ export class LobbiesManager {
           if (botEntry.host) {
             member.host = true;
           }
+        } else {
+          return { ok: false, error: 'Лобби заполнено' };
         }
       }
     } else {

@@ -184,10 +184,10 @@ function fmtDuration(sec: number): string {
               Топ: Ур.{{ topLevel.level }} ({{ topLevel.winRate }}% очков)
             </span>
           </div>
-          <button class="small ghost bot-toggle-btn" type="button" aria-label="Свернуть / развернуть блок">
+          <span class="small ghost bot-toggle-btn" aria-label="Свернуть / развернуть блок">
             <span>{{ isBotMetricsOpen ? 'Свернуть' : 'Развернуть' }}</span>
             <AppIcon :name="isBotMetricsOpen ? 'chevron-up' : 'chevron-down'" :size="15" />
-          </button>
+          </span>
         </div>
 
         <div v-show="isBotMetricsOpen" class="panel-body bot-metrics-wrap">
@@ -319,7 +319,7 @@ function fmtDuration(sec: number): string {
                       :title="`${b.wins} побед, ${b.draws} ничьих, ${b.losses} поражений из ${b.totalGames}`"
                       :class="{
                         ok: b.winRate >= 45 && b.winRate <= 65,
-                        danger: b.winRate > 65,
+                        win: b.winRate > 65,
                         dim: b.winRate < 45,
                       }"
                     >
@@ -332,7 +332,7 @@ function fmtDuration(sec: number): string {
               </tbody>
             </table>
             <div v-else class="empty dim tiny" style="padding: 24px; text-align: center;">
-              Боты пока не играли партий против людей на этом сервере.
+              {{ botTab === 'bot' ? 'Партий ИИ против ИИ пока не зафиксировано на этом сервере.' : 'Боты пока не играли партий против людей на этом сервере.' }}
             </div>
           </div>
 
@@ -376,7 +376,7 @@ function fmtDuration(sec: number): string {
                       :title="`${p.wins} побед, ${p.draws} ничьих, ${p.losses} поражений из ${p.totalGames}`"
                       :class="{
                         ok: p.winRate >= 45 && p.winRate <= 65,
-                        danger: p.winRate > 65,
+                        win: p.winRate > 65,
                         dim: p.winRate < 45,
                       }"
                     >
@@ -389,7 +389,7 @@ function fmtDuration(sec: number): string {
               </tbody>
             </table>
             <div v-else class="empty dim tiny" style="padding: 24px; text-align: center;">
-              Боты пока не играли партий против людей на этом сервере.
+              {{ botTab === 'bot' ? 'Партий ИИ против ИИ пока не зафиксировано на этом сервере.' : 'Боты пока не играли партий против людей на этом сервере.' }}
             </div>
           </div>
         </div>

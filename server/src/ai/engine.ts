@@ -31,7 +31,19 @@ export interface BotSearchSpec {
 
 export function getBotConfig(levelOrUsername: number | string): BotConfig {
   if (typeof levelOrUsername === 'number') {
-    return BOT_PRESETS.find((b) => b.level === levelOrUsername) || BOT_PRESETS[0];
+    const level = Math.max(1, Math.min(12, levelOrUsername));
+    const preset = BOT_PRESETS.find((b) => b.level === level);
+    if (preset) return preset;
+    const lvlCfg = BOT_LEVELS[level - 1] || BOT_LEVELS[3];
+    return {
+      level,
+      name: lvlCfg.name,
+      username: 'bot_tal',
+      elo: lvlCfg.nominalElo,
+      depth: lvlCfg.depth,
+      errorRate: 0.05,
+      errorJitter: 0.02,
+    };
   }
   return BOT_PRESETS.find((b) => b.username === levelOrUsername) || BOT_PRESETS[0];
 }

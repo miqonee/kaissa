@@ -6,6 +6,7 @@ import { eloToLevel, getBotPersonality, getBotTooltip, timeControlLabel } from '
 import { getSocket, onSocketResync } from '../api/socket';
 import { useAuthStore } from '../stores/auth';
 import AppIcon from '../components/AppIcon.vue';
+import BotHoverCard from '../components/BotHoverCard.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -160,8 +161,12 @@ function chooseTeam(team: 1 | 2 | null): void {
 }
 
 function kick(userId: number, username?: string, isBot?: boolean): void {
-  const label = isBot ? `Убрать бота «${username ?? 'бот'}» из стола?` : 'Исключить этого игрока из стола?';
-  if (confirm(label)) {
+  if (isBot) {
+    // Удаляем бота мгновенно без раздражающего системного confirm
+    socket.emit('lobby:kick', userId);
+    return;
+  }
+  if (confirm(`Исключить игрока ${username ?? ''} из стола?`)) {
     socket.emit('lobby:kick', userId);
   }
 }
@@ -177,8 +182,10 @@ function summon(): void {
 function start(): void {
   socket.emit('lobby:start', (ack) => {
     if (!ack.ok) {
-      error.value = ack.error ?? 'Не удалось начать';
-      setTimeout(() => (error.value = ''), 3500);
+      const err = ack.error ?? 'Не удалось начать игру';
+      error.value = err;
+      showNotification(err);
+      setTimeout(() => (error.value = ''), 4000);
       return;
     }
     if (ack.data?.gameId) {
@@ -338,10 +345,17 @@ function modeLabel(m: string): string {
               </div>
               <div class="slot-info">
                 <div class="slot-name-row">
-                  <span class="slot-name" :title="p.isBot ? getBotTooltip(p.username, p.rating) : undefined">{{ p.username }}</span>
-                  <span v-if="p.isBot" class="bot-badge" :title="getBotTooltip(p.username, p.rating)">
-                    Бот Ур.{{ p.botLevel || eloToLevel(p.rating) }} · {{ getBotPersonality(p.username)?.badge || 'ИИ' }}
-                  </span>
+                  <template v-if="p.isBot">
+                    <BotHoverCard :username="p.username" :rating="p.rating">
+                      <span class="slot-name">{{ p.username }}</span>
+                      <span class="bot-badge">
+                        Бот Ур.{{ p.botLevel || eloToLevel(p.rating) }} · {{ getBotPersonality(p.username)?.badge || 'ИИ' }}
+                      </span>
+                    </BotHoverCard>
+                  </template>
+                  <template v-else>
+                    <span class="slot-name">{{ p.username }}</span>
+                  </template>
                   <span v-if="p.host" class="host-crown" title="Создатель стола">
                     <AppIcon name="crown" :size="12" /> Хост
                   </span>
@@ -455,7 +469,10 @@ function modeLabel(m: string): string {
     <!-- Нижняя полоса управления готовностью и стартом (Lichess style) -->
     <div class="start-bar panel">
       <div class="start-info">
-        <p v-if="lobby.players.length < 4" class="dim">
+        <p v-if="error" class="error-text start-error">
+          {{ error }}
+        </p>
+        <p v-else-if="lobby.players.length < 4" class="dim">
           Для начала матча нужно 4 игрока. Сейчас: {{ lobby.players.length }}/4.
         </p>
         <p v-else-if="!allReady" class="dim">
@@ -804,6 +821,11 @@ function modeLabel(m: string): string {
 .start-info p {
   margin: 0;
   font-size: 14px;
+}
+
+.start-error {
+  color: var(--danger, #ef4444) !important;
+  font-weight: 600;
 }
 
 .ok-hint {

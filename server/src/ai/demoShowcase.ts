@@ -1,18 +1,30 @@
 // server/src/ai/demoShowcase.ts
 // Фоновая демо-витрина партий ботов на главной странице (in-memory TV с ID 1 и 2)
-import { eloToLevel } from 'shared';
+import { eloToLevel, levelToElo } from 'shared';
 import { prisma } from '../prisma.js';
 import type { GamesManager } from '../game/manager.js';
 
 export async function cleanupPureBotGames(): Promise<void> {
   try {
+    // Удаляем исключительно партии, где 100% участников — боты (нет ни одного человека)
     const botGames = await prisma.game.findMany({
       where: {
-        participants: {
-          some: {
-            user: { isBot: true },
+        AND: [
+          {
+            participants: {
+              some: {
+                user: { isBot: true },
+              },
+            },
           },
-        },
+          {
+            participants: {
+              none: {
+                user: { isBot: false },
+              },
+            },
+          },
+        ],
       },
       select: { id: true },
     });
@@ -22,17 +34,6 @@ export async function cleanupPureBotGames(): Promise<void> {
       await prisma.gameParticipant.deleteMany({ where: { gameId: { in: ids } } });
       await prisma.game.deleteMany({ where: { id: { in: ids } } });
       console.log(`[cleanup] Удалено ${botGames.length} старых партий ботов из базы данных`);
-    }
-
-    const botUsers = await prisma.user.findMany({ where: { isBot: true }, select: { id: true } });
-    if (botUsers.length > 0) {
-      const botIds = botUsers.map((b) => b.id);
-      await prisma.ratingHistory.deleteMany({ where: { userId: { in: botIds } } });
-      await prisma.user.updateMany({
-        where: { isBot: true },
-        data: { wins: 0, losses: 0, draws: 0 },
-      });
-      console.log(`[cleanup] Сброшена статистика для ${botUsers.length} ботов`);
     }
   } catch (e) {
     console.error('[cleanup] Ошибка очистки партий ботов:', e);
@@ -46,6 +47,7 @@ export class DemoShowcase {
   private checkInterval: NodeJS.Timeout | null = null;
   private running = false;
   private isTransitioning = false;
+  private levelRotationIndex = 0;
 
   start(games: GamesManager): void {
     this.games = games;
@@ -101,35 +103,48 @@ export class DemoShowcase {
       const shuffled = bots.slice().sort(() => Math.random() - 0.5);
       const chosen = shuffled.slice(0, 4);
 
-      // Выбор формата партии: High-Elo (40%), Контрастный дуэт (35%), Клубный уровень (25%)
+      // Выбор формата партии для полного покрытия матрицы «12 Уровней x 12 Персон»:
+      // 1. Турнирный разрядный стол (40%): последовательно циклирует все 12 уровней (1..12) без пропусков
+      // 2. Контрастный дуэт «Мастер + Ученик» (30%): опытный (Ур. 7..12) + начинающий (Ур. 1..6)
+      // 3. Смежные разряды (20%): пара соседних уровней силы
+      // 4. Свободная калибровка (10%): случайный разброс разрядов для проверки неожиданных связок
       const roll = Math.random();
       let ratings: number[];
 
       if (roll < 0.40) {
-        // High-Elo стол гроссмейстеров (2100 - 2550 Elo, Ур. 10 - 12)
-        const base = Math.floor(2150 + Math.random() * 350);
-        ratings = [
-          base + Math.floor(Math.random() * 80 - 40),
-          base + Math.floor(Math.random() * 80 - 40),
-          base + Math.floor(Math.random() * 80 - 40),
-          base + Math.floor(Math.random() * 80 - 40),
-        ];
-      } else if (roll < 0.75) {
-        // Контрастный дуэт: мастер (1950 - 2350) + любитель (750 - 1100)
-        const highA = Math.floor(2000 + Math.random() * 300);
-        const lowA = Math.floor(800 + Math.random() * 250);
-        const highB = highA + Math.floor(Math.random() * 60 - 30);
-        const lowB = lowA + (highA - highB);
+        // Гарантированная ротация всех 12 уровней от Новичка (600) до Гроссмейстера (2500)
+        const targetLevel = (this.levelRotationIndex++ % 12) + 1;
+        const nominal = levelToElo(targetLevel);
+        ratings = [0, 1, 2, 3].map(() => {
+          const jitter = Math.floor(Math.random() * 70 - 35);
+          return Math.max(500, Math.min(2550, nominal + jitter));
+        });
+      } else if (roll < 0.70) {
+        // Контрастный дуэт: мастер (Ур. 7..12) + ученик (Ур. 1..6)
+        const highLevel = Math.floor(7 + Math.random() * 6); // 7..12
+        const lowLevel = Math.floor(1 + Math.random() * 6);  // 1..6
+        const highA = Math.max(500, Math.min(2550, levelToElo(highLevel) + Math.floor(Math.random() * 60 - 30)));
+        const lowA = Math.max(500, Math.min(2550, levelToElo(lowLevel) + Math.floor(Math.random() * 60 - 30)));
+        const highB = Math.max(500, Math.min(2550, highA + Math.floor(Math.random() * 50 - 25)));
+        const lowB = Math.max(500, Math.min(2550, lowA + (highA - highB)));
         ratings = [highA, lowA, highB, lowB];
-      } else {
-        // Клубный уровень (1150 - 1500 Elo, Ур. 4 - 6)
-        const base = Math.floor(1200 + Math.random() * 250);
+      } else if (roll < 0.90) {
+        // Смежные разряды: два соседних уровня
+        const baseLevel = Math.floor(1 + Math.random() * 11); // 1..11
+        const r1 = levelToElo(baseLevel);
+        const r2 = levelToElo(baseLevel + 1);
         ratings = [
-          base + Math.floor(Math.random() * 100 - 50),
-          base + Math.floor(Math.random() * 100 - 50),
-          base + Math.floor(Math.random() * 100 - 50),
-          base + Math.floor(Math.random() * 100 - 50),
-        ];
+          r1 + Math.floor(Math.random() * 50 - 25),
+          r2 + Math.floor(Math.random() * 50 - 25),
+          r1 + Math.floor(Math.random() * 50 - 25),
+          r2 + Math.floor(Math.random() * 50 - 25),
+        ].map((r) => Math.max(500, Math.min(2550, r)));
+      } else {
+        // Свободный подбор
+        ratings = [0, 1, 2, 3].map(() => {
+          const lvl = Math.floor(1 + Math.random() * 12);
+          return Math.max(500, Math.min(2550, levelToElo(lvl) + Math.floor(Math.random() * 60 - 30)));
+        });
       }
 
       const members = chosen.map((b, idx) => {

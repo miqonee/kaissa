@@ -126,6 +126,7 @@ onMounted(() => {
   });
   socket.on('lobby:closed', (reason) => {
     error.value = reason;
+    lobby.value = null;
   });
 });
 
@@ -430,9 +431,14 @@ function modeLabel(m: string): string {
         </div>
         <div class="panel-body chat-body">
           <div ref="chatBox" class="chat-log">
-            <div v-for="m in chat" :key="m.id" class="chat-msg">
-              <span class="chat-user">{{ m.username }}:</span>
-              <span class="chat-text">{{ m.text }}</span>
+            <div v-for="m in chat" :key="m.id" class="chat-msg" :class="{ system: m.system }">
+              <template v-if="m.system">
+                <span class="dim system-msg">{{ m.text }}</span>
+              </template>
+              <template v-else>
+                <span class="chat-user">{{ m.username }}:</span>
+                <span class="chat-text">{{ m.text }}</span>
+              </template>
             </div>
             <div v-if="!chat.length" class="empty-chat dim">
               Сообщений пока нет. Напишите что-нибудь игрокам!
@@ -766,6 +772,12 @@ function modeLabel(m: string): string {
   font-weight: 600;
   color: var(--accent-2);
   margin-right: 6px;
+}
+
+.system-msg {
+  font-style: italic;
+  font-size: 12.5px;
+  color: var(--accent-1, #eab308);
 }
 
 .empty-chat {

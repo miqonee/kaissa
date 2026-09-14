@@ -18,4 +18,8 @@ export const env = {
   corsOrigin: process.env.CORS_ORIGIN || '*',
   /** Кому автоматически выдать права администратора (через запятую) */
   adminUsernames: (process.env.ADMIN_USERNAMES || '').split(',').map((s) => s.trim()).filter(Boolean),
+  /** Время жизни нестартовавшего стола (в минутах) до автоматического закрытия */
+  lobbyTtlMinutes: parseInt(process.env.LOBBY_TTL_MINUTES || '20', 10),
+  /** За сколько минут до закрытия стола отправлять предупреждение в лобби */
+  lobbyWarnMinutes: parseInt(process.env.LOBBY_WARN_MINUTES || '2', 10),
 };

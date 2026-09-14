@@ -13,6 +13,7 @@ import type {
 import { eloToLevel } from 'shared';
 import { presence } from '../socket/presence.js';
 import { prisma } from '../prisma.js';
+import { env } from '../env.js';
 import type { GamesManager } from '../game/manager.js';
 
 const MAX_SLOTS = 4;
@@ -46,6 +47,7 @@ export class Lobby {
   members: Map<number, LobbyMember> = new Map();
   chatIdSeq = 1;
   createdAt = Date.now();
+  staleWarned = false;
   started = false;
   rematchOf: number | null = null;
 
@@ -115,11 +117,93 @@ export class LobbiesManager {
   private idSeq = 1;
   private io: SocketServer<never, ServerToClientEvents> | null = null;
   private games: GamesManager | null = null;
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
   attach(io: SocketServer<never, ServerToClientEvents>, games: GamesManager): void {
     this.io = io;
     this.games = games;
     void this.ensureAutoLobby();
+    this.startCleanupTimer();
+  }
+
+  startCleanupTimer(intervalMs = 30_000): void {
+    if (this.cleanupInterval) clearInterval(this.cleanupInterval);
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupStaleLobbies();
+    }, intervalMs);
+    if (this.cleanupInterval && typeof this.cleanupInterval.unref === 'function') {
+      this.cleanupInterval.unref();
+    }
+  }
+
+  stopCleanupTimer(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+  }
+
+  closeLobby(lobbyId: string, reason: string): boolean {
+    const lobby = this.lobbies.get(lobbyId);
+    if (!lobby) return false;
+
+    lobby.clearCountdown();
+    this.io?.to(this.room(lobbyId)).emit('lobby:closed', reason);
+    this.io?.in(this.room(lobbyId)).socketsLeave(this.room(lobbyId));
+    this.lobbies.delete(lobbyId);
+    this.broadcastList();
+
+    if (lobby.isAuto) {
+      void this.ensureAutoLobby();
+    }
+
+    return true;
+  }
+
+  cleanupStaleLobbies(now: number = Date.now()): string[] {
+    const ttlMs = env.lobbyTtlMinutes * 60 * 1000;
+    const warnMs = env.lobbyWarnMinutes * 60 * 1000;
+    const warnThresholdMs = Math.max(0, ttlMs - warnMs);
+    const dropped: string[] = [];
+
+    for (const [id, lobby] of this.lobbies.entries()) {
+      if (lobby.started) continue;
+
+      // Авто-лобби без людей считается дежурным пулом ожидания
+      if (lobby.isAuto) {
+        const hasHumans = [...lobby.members.values()].some((m) => !m.isBot);
+        if (!hasHumans) {
+          lobby.createdAt = now;
+          lobby.staleWarned = false;
+          continue;
+        }
+      }
+
+      const ageMs = now - lobby.createdAt;
+
+      // 1. Предупреждение за lobbyWarnMinutes минут до закрытия
+      if (ageMs >= warnThresholdMs && ageMs < ttlMs && !lobby.staleWarned) {
+        lobby.staleWarned = true;
+        const minutesLeft = Math.max(1, Math.round((ttlMs - ageMs) / 60_000));
+        const warnMsg: ChatMessage = {
+          id: lobby.chatIdSeq++,
+          userId: 0,
+          username: 'Система',
+          text: `Внимание: игра не началась. Стол будет автоматически расформирован через ${minutesLeft} мин. из-за неактивности.`,
+          at: now,
+          system: true,
+        };
+        this.io?.to(this.room(lobby.id)).emit('lobby:chat', warnMsg);
+      }
+
+      // 2. Закрытие по истечении TTL
+      if (ageMs >= ttlMs) {
+        this.closeLobby(id, `Стол закрыт: игра не началась в течение ${env.lobbyTtlMinutes} минут`);
+        dropped.push(id);
+      }
+    }
+
+    return dropped;
   }
 
   publicList(): Lobby[] {
@@ -384,6 +468,11 @@ export class LobbiesManager {
     if (lobby.isAuto) {
       this.adaptAutoLobbyRatings(lobby);
       if (!member.isBot) {
+        const humans = [...lobby.members.values()].filter((m) => !m.isBot);
+        if (humans.length === 1) {
+          lobby.createdAt = Date.now();
+          lobby.staleWarned = false;
+        }
         this.resetAutoCountdown(lobby);
       }
     }
@@ -561,6 +650,8 @@ export class LobbiesManager {
       const humans = [...lobby.members.values()].filter((m) => !m.isBot);
       if (humans.length === 0) {
         lobby.clearCountdown();
+        lobby.createdAt = Date.now();
+        lobby.staleWarned = false;
       } else {
         if (!humans.some((h) => h.host)) {
           humans[0].host = true;

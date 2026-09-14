@@ -294,4 +294,210 @@ describe('Auto Lobby and Team Modes', () => {
     mgr.setTimeControl(lobby.id, 10, { kind: 'clock', baseMin: 5, incSec: 0 });
     expect(lobby.timeControl).toEqual({ kind: 'clock', baseMin: 5, incSec: 0 });
   });
+
+  describe('Lobby Timeout and Stale Cleanup (20 min rule)', () => {
+    it('drops custom lobby if not started within 20 minutes', () => {
+      const mgr = new LobbiesManager();
+      const lobby = new Lobby(
+        {
+          id: 'CUSTOM_STALE',
+          code: 'STALE1',
+          name: 'Зависший стол',
+          mode: 'team',
+          timeControl: { kind: 'clock', baseMin: 3, incSec: 0 },
+          private: false,
+          teamMode: 'auto',
+        },
+        { uid: 1, username: 'host_player', rating: 1200, ready: true, host: true, joinedAt: Date.now() - 25 * 60 * 1000 },
+      );
+      // 3 bots added
+      lobby.members.set(2, { uid: 2, username: 'b1', rating: 1200, ready: true, host: false, joinedAt: Date.now(), isBot: true });
+      lobby.members.set(3, { uid: 3, username: 'b2', rating: 1200, ready: true, host: false, joinedAt: Date.now(), isBot: true });
+      lobby.members.set(4, { uid: 4, username: 'b3', rating: 1200, ready: true, host: false, joinedAt: Date.now(), isBot: true });
+
+      // Created 21 minutes ago
+      lobby.createdAt = Date.now() - 21 * 60 * 1000;
+      (mgr as any).lobbies.set(lobby.id, lobby);
+
+      const dropped = mgr.cleanupStaleLobbies();
+      expect(dropped).toContain('CUSTOM_STALE');
+      expect((mgr as any).lobbies.has('CUSTOM_STALE')).toBe(false);
+    });
+
+    it('does not drop fresh custom lobby created less than 20 minutes ago', () => {
+      const mgr = new LobbiesManager();
+      const lobby = new Lobby(
+        {
+          id: 'CUSTOM_FRESH',
+          code: 'FRESH1',
+          name: 'Свежий стол',
+          mode: 'team',
+          timeControl: { kind: 'clock', baseMin: 3, incSec: 0 },
+          private: false,
+          teamMode: 'auto',
+        },
+        { uid: 1, username: 'host_player', rating: 1200, ready: true, host: true, joinedAt: Date.now() },
+      );
+      lobby.createdAt = Date.now() - 10 * 60 * 1000; // 10 minutes ago
+      (mgr as any).lobbies.set(lobby.id, lobby);
+
+      const dropped = mgr.cleanupStaleLobbies();
+      expect(dropped).not.toContain('CUSTOM_FRESH');
+      expect((mgr as any).lobbies.has('CUSTOM_FRESH')).toBe(true);
+    });
+
+    it('does not drop started lobby even if older than 20 minutes', () => {
+      const mgr = new LobbiesManager();
+      const lobby = new Lobby(
+        {
+          id: 'STARTED_LOBBY',
+          code: 'START1',
+          name: 'Играющий стол',
+          mode: 'team',
+          timeControl: { kind: 'clock', baseMin: 3, incSec: 0 },
+          private: false,
+          teamMode: 'auto',
+        },
+        { uid: 1, username: 'host_player', rating: 1200, ready: true, host: true, joinedAt: Date.now() },
+      );
+      lobby.createdAt = Date.now() - 30 * 60 * 1000;
+      lobby.started = true;
+      (mgr as any).lobbies.set(lobby.id, lobby);
+
+      const dropped = mgr.cleanupStaleLobbies();
+      expect(dropped).not.toContain('STARTED_LOBBY');
+      expect((mgr as any).lobbies.has('STARTED_LOBBY')).toBe(true);
+    });
+
+    it('sends warning chat message at 18 minutes (2 min before drop)', () => {
+      const mgr = new LobbiesManager();
+      const emitted: { event: string; payload: any }[] = [];
+      const mockIo = {
+        to: vi.fn(() => ({
+          emit: vi.fn((event: string, payload: any) => {
+            emitted.push({ event, payload });
+          }),
+        })),
+        in: vi.fn(() => ({
+          socketsLeave: vi.fn(),
+        })),
+      };
+      (mgr as any).io = mockIo;
+
+      const lobby = new Lobby(
+        {
+          id: 'WARN_LOBBY',
+          code: 'WARN01',
+          name: 'Стол перед закрытием',
+          mode: 'team',
+          timeControl: { kind: 'clock', baseMin: 3, incSec: 0 },
+          private: false,
+          teamMode: 'auto',
+        },
+        { uid: 1, username: 'host_player', rating: 1200, ready: true, host: true, joinedAt: Date.now() },
+      );
+      // 18.5 minutes old
+      lobby.createdAt = Date.now() - (18 * 60 + 30) * 1000;
+      (mgr as any).lobbies.set(lobby.id, lobby);
+
+      mgr.cleanupStaleLobbies();
+
+      expect(lobby.staleWarned).toBe(true);
+      const chatCall = emitted.find((e) => e.event === 'lobby:chat');
+      expect(chatCall).toBeDefined();
+      expect(chatCall?.payload.system).toBe(true);
+      expect(chatCall?.payload.text).toContain('Стол будет автоматически расформирован');
+
+      // Second check should not duplicate the warning
+      emitted.length = 0;
+      mgr.cleanupStaleLobbies();
+      expect(emitted.find((e) => e.event === 'lobby:chat')).toBeUndefined();
+    });
+
+    it('preserves idle auto-lobby without humans, but drops auto-lobby stalled by human', () => {
+      const mgr = new LobbiesManager();
+      // Auto lobby with 4 bots, 0 humans
+      const idleAuto = new Lobby(
+        {
+          id: 'IDLE_AUTO',
+          code: 'AUTO01',
+          name: 'Быстрый стол 2х2',
+          mode: 'team',
+          timeControl: { kind: 'clock', baseMin: 3, incSec: 0 },
+          private: false,
+          teamMode: 'auto',
+        },
+        { uid: 101, username: 'bot1', rating: 1200, ready: true, host: true, joinedAt: Date.now(), isBot: true },
+      );
+      idleAuto.isAuto = true;
+      idleAuto.members.set(102, { uid: 102, username: 'bot2', rating: 1200, ready: true, host: false, joinedAt: Date.now(), isBot: true });
+      idleAuto.members.set(103, { uid: 103, username: 'bot3', rating: 1200, ready: true, host: false, joinedAt: Date.now(), isBot: true });
+      idleAuto.members.set(104, { uid: 104, username: 'bot4', rating: 1200, ready: true, host: false, joinedAt: Date.now(), isBot: true });
+      idleAuto.createdAt = Date.now() - 35 * 60 * 1000;
+      (mgr as any).lobbies.set(idleAuto.id, idleAuto);
+
+      // Auto lobby with human who stalled for 25 minutes
+      const stalledAuto = new Lobby(
+        {
+          id: 'STALLED_AUTO',
+          code: 'AUTO02',
+          name: 'Быстрый стол 2х2',
+          mode: 'team',
+          timeControl: { kind: 'clock', baseMin: 3, incSec: 0 },
+          private: false,
+          teamMode: 'auto',
+        },
+        { uid: 1, username: 'stalled_human', rating: 1200, ready: true, host: true, joinedAt: Date.now(), isBot: false },
+      );
+      stalledAuto.isAuto = true;
+      stalledAuto.members.set(102, { uid: 102, username: 'bot2', rating: 1200, ready: true, host: false, joinedAt: Date.now(), isBot: true });
+      stalledAuto.createdAt = Date.now() - 25 * 60 * 1000;
+      (mgr as any).lobbies.set(stalledAuto.id, stalledAuto);
+
+      const dropped = mgr.cleanupStaleLobbies();
+      expect(dropped).toContain('STALLED_AUTO');
+      expect((mgr as any).lobbies.has('STALLED_AUTO')).toBe(false);
+      expect((mgr as any).lobbies.has('IDLE_AUTO')).toBe(true);
+    });
+
+    it('closeLobby emits lobby:closed, evicts sockets and deletes lobby', () => {
+      const mgr = new LobbiesManager();
+      const emitted: { event: string; payload: any }[] = [];
+      const leftRooms: string[] = [];
+
+      const mockIo = {
+        to: vi.fn(() => ({
+          emit: vi.fn((event: string, payload: any) => {
+            emitted.push({ event, payload });
+          }),
+        })),
+        in: vi.fn((room: string) => ({
+          socketsLeave: vi.fn((r: string) => {
+            leftRooms.push(r);
+          }),
+        })),
+      };
+      (mgr as any).io = mockIo;
+
+      const lobby = new Lobby(
+        {
+          id: 'CLOSE_TEST',
+          code: 'CL001',
+          name: 'Тестовый стол',
+          mode: 'team',
+          timeControl: { kind: 'clock', baseMin: 3, incSec: 0 },
+          private: false,
+          teamMode: 'auto',
+        },
+        { uid: 1, username: 'human', rating: 1200, ready: true, host: true, joinedAt: Date.now(), isBot: false },
+      );
+      (mgr as any).lobbies.set(lobby.id, lobby);
+
+      const closed = mgr.closeLobby(lobby.id, 'Стол закрыт: игра не началась');
+      expect(closed).toBe(true);
+      expect((mgr as any).lobbies.has(lobby.id)).toBe(false);
+      expect(emitted.find((e) => e.event === 'lobby:closed')?.payload).toContain('Стол закрыт');
+      expect(leftRooms).toContain('lobby:CLOSE_TEST');
+    });
+  });
 });

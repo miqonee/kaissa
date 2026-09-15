@@ -603,14 +603,8 @@ function lobbyRosterTitle(l: LobbySummary): string {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 380px;
+  min-height: auto;
   contain: layout style;
-}
-
-.lobbies-col > .panel > .panel-body,
-.live-col > .panel > .panel-body,
-.lobbies-col > .panel > .empty {
-  flex: 1;
 }
 
 @media (max-width: 980px) {

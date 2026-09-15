@@ -22,4 +22,8 @@ export const env = {
   lobbyTtlMinutes: parseInt(process.env.LOBBY_TTL_MINUTES || '20', 10),
   /** За сколько минут до закрытия стола отправлять предупреждение в лобби */
   lobbyWarnMinutes: parseInt(process.env.LOBBY_WARN_MINUTES || '2', 10),
+  /** Публичный URL сайта для sitemap и поисковых ботов */
+  siteUrl: (process.env.SITE_URL || 'https://duochess.ru').replace(/\/+$/, ''),
+  /** Основной хост для robots.txt */
+  siteHost: process.env.SITE_HOST || 'duochess.ru',
 };

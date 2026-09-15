@@ -1,7 +1,9 @@
 User-agent: *
 Allow: /
 Disallow: /admin
+Disallow: /lobby/
+Disallow: /lobby/*
 Disallow: /api/
 
-Host: https://duochess.ru
+Host: duochess.ru
 Sitemap: https://duochess.ru/sitemap.xml

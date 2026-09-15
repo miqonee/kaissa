@@ -14,6 +14,7 @@ import { registerSocketHandlers } from './socket/router.js';
 import { gamesManager } from './state.js';
 import { seedBots } from './ai/botsSeed.js';
 import { demoShowcase, cleanupPureBotGames } from './ai/demoShowcase.js';
+import { seoRouter } from './seo/seoRouter.js';
 
 function createRateLimiter(windowMs: number, maxRequests: number, errorMsg: string) {
   const requests = new Map<string, { count: number; resetAt: number }>();
@@ -71,6 +72,9 @@ async function main(): Promise<void> {
   app.post('/api/auth/login', authLimiter, login);
   app.post('/api/auth/logout', logout);
   app.get('/api/auth/me', me);
+
+  // SEO (sitemap.xml, robots.txt)
+  app.use(seoRouter);
 
   // REST
   app.use('/api/lobbies', lobbyRouter);

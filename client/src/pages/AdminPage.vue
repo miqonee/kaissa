@@ -162,10 +162,10 @@ const durationSubtext = computed(() => {
 
 <template>
   <div class="admin-page">
-    <div class="panel">
+    <section class="panel" aria-labelledby="admin-title">
       <div class="panel-head">
         <div>
-          <h2>Панель администратора</h2>
+          <h1 id="admin-title" class="panel-title">Панель администратора</h1>
           <span class="hint">Метрики платформы, балансировка ботов и управление игроками</span>
         </div>
         <button class="small ghost" @click="loadData">
@@ -498,11 +498,15 @@ const durationSubtext = computed(() => {
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
   </div>
 </template>
 
 <style scoped>
+.panel-title {
+  font-size: 20px;
+  margin: 0;
+}
 .admin-page {
   display: flex;
   flex-direction: column;

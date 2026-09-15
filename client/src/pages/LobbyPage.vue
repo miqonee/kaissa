@@ -226,7 +226,7 @@ function modeLabel(m: string): string {
 
   <div v-else-if="lobby" class="lobby-page">
     <!-- Блок заголовка стола с КРУПНЫМ кодом для подключения -->
-    <div class="lobby-hero panel">
+    <header class="lobby-hero panel">
       <div class="hero-left">
         <div class="hero-title-row">
           <h1>{{ lobby.name }}</h1>
@@ -242,7 +242,7 @@ function modeLabel(m: string): string {
       <!-- Крупный код для входа -->
       <div class="code-box">
         <span class="code-label">Код стола для входа:</span>
-        <div class="code-display" @click="copyCode" title="Кликните, чтобы скопировать">
+        <div class="code-display" role="button" tabindex="0" @click="copyCode" @keydown.enter.space.prevent="copyCode" title="Кликните, чтобы скопировать" aria-label="Скопировать код стола">
           <span class="code-text mono">{{ lobby.code || '------' }}</span>
           <span class="copy-icon"><AppIcon name="copy" :size="16" /></span>
         </div>
@@ -252,14 +252,14 @@ function modeLabel(m: string): string {
           </button>
         </div>
       </div>
-    </div>
+    </header>
 
     <!-- Основная раскладка: Игроки слева + Чат справа -->
     <div class="lobby-layout">
       <!-- 4 слота игроков -->
-      <section class="panel players-panel">
+      <section class="panel players-panel" aria-labelledby="lobby-players-heading">
         <div class="panel-head">
-          <h2>Игроки за столом</h2>
+          <h2 id="lobby-players-heading">Игроки за столом</h2>
           <span class="hint">{{ lobby.players.length }} из 4 за столом</span>
         </div>
 

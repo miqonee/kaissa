@@ -259,7 +259,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
 <template>
   <div class="home">
     <!-- Верхний баннер с быстрыми действиями -->
-    <div class="home-banner panel">
+    <section class="home-banner panel" aria-label="Быстрый старт">
       <div class="banner-intro">
         <h1>Командный шахматный клуб</h1>
         <p class="dim">Играйте парами на одной доске или в багхаус с обменом фигурами в реальном времени.</p>
@@ -276,6 +276,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
             placeholder="КОД СТОЛА"
             maxlength="6"
             class="mono join-input"
+            aria-label="Код стола для быстрого входа"
             @input="joinError = ''"
           />
           <button type="submit" class="brass join-btn" :disabled="!joinCode.trim() || joinBusy">
@@ -284,15 +285,15 @@ function lobbyRosterTitle(l: LobbySummary): string {
         </form>
       </div>
       <p v-if="joinError" class="error-text banner-error">{{ joinError }}</p>
-    </div>
+    </section>
 
     <!-- Основная сетка -->
     <div class="home-grid">
       <!-- Текущие live-партии (Lichess TV style) -->
-      <section class="live-col">
+      <section class="live-col" aria-labelledby="live-games-heading">
         <div class="panel">
           <div class="panel-head">
-            <h2>Сейчас в игре</h2>
+            <h2 id="live-games-heading">Сейчас в игре</h2>
             <span class="badge on" v-if="sortedLiveGames.length">{{ sortedLiveGames.length }} партий</span>
             <span class="hint" v-else>нет активных</span>
           </div>
@@ -310,7 +311,11 @@ function lobbyRosterTitle(l: LobbySummary): string {
               v-for="g in sortedLiveGames"
               :key="g.gameId"
               class="live-game"
+              role="button"
+              tabindex="0"
+              :aria-label="`Смотреть партию ${modeLabel(g.mode)}`"
               @click="router.push(`/game/${g.gameId}`)"
+              @keydown.enter.space.prevent="router.push(`/game/${g.gameId}`)"
             >
               <div class="live-boards" :class="{ two: g.mode === 'bughouse' }">
                 <ChessBoard
@@ -364,10 +369,10 @@ function lobbyRosterTitle(l: LobbySummary): string {
       </section>
 
       <!-- Открытые столы -->
-      <section class="lobbies-col" id="lobbies-section">
+      <section class="lobbies-col" id="lobbies-section" aria-labelledby="open-lobbies-heading">
         <div class="panel">
           <div class="panel-head">
-            <h2>Открытые столы</h2>
+            <h2 id="open-lobbies-heading">Открытые столы</h2>
             <span class="hint">{{ lobbies.length }} открыто</span>
           </div>
 
@@ -377,10 +382,14 @@ function lobbyRosterTitle(l: LobbySummary): string {
 
           <div v-else-if="lobbies.length" class="panel-body lobby-rows">
             <!-- Быстрый стол 2х2 (ультракомпактная карточка во главе) -->
-            <div
+            <article
               v-if="autoLobby"
               class="lobby-card auto-lobby-card compact-card single-line-card"
+              role="button"
+              tabindex="0"
+              aria-label="Сесть за быстрый стол"
               @click="enterLobby(autoLobby)"
+              @keydown.enter.space.prevent="enterLobby(autoLobby)"
             >
               <div class="lobby-card-main single-line-main">
                 <span class="badges-row">
@@ -410,14 +419,18 @@ function lobbyRosterTitle(l: LobbySummary): string {
                   <AppIcon name="bolt" :size="13" /> Сесть за стол
                 </button>
               </div>
-            </div>
+            </article>
 
             <!-- Открытые пользовательские столы -->
-            <div
+            <article
               v-for="l in userLobbies"
               :key="l.id"
               class="lobby-card compact-card"
+              role="button"
+              tabindex="0"
+              :aria-label="`Стол ${l.name}`"
               @click="enterLobby(l)"
+              @keydown.enter.space.prevent="enterLobby(l)"
             >
               <div class="lobby-card-main">
                 <div class="lobby-title-row">
@@ -442,7 +455,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
                 </span>
                 <button class="primary small" @click.stop="enterLobby(l)">Войти</button>
               </div>
-            </div>
+            </article>
           </div>
 
           <div v-else class="empty">
@@ -538,6 +551,9 @@ function lobbyRosterTitle(l: LobbySummary): string {
   flex-wrap: wrap;
   background: linear-gradient(135deg, var(--surface) 0%, color-mix(in srgb, var(--felt) 12%, var(--surface)) 100%);
   border-color: color-mix(in srgb, var(--accent-2) 35%, var(--line));
+  min-height: 90px;
+  box-sizing: border-box;
+  contain: layout;
 }
 
 .banner-intro h1 {
@@ -613,7 +629,8 @@ function lobbyRosterTitle(l: LobbySummary): string {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  min-height: 380px;
+  contain: layout style;
 }
 
 .lobbies-col > .panel > .panel-body,
@@ -666,6 +683,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
   padding: 10px 12px;
   background: var(--surface-inset);
   transition: all 0.15s;
+  touch-action: manipulation;
 }
 
 .live-game:hover {
@@ -677,10 +695,13 @@ function lobbyRosterTitle(l: LobbySummary): string {
 .live-boards {
   display: grid;
   gap: 8px;
+  width: 100%;
+  aspect-ratio: 1;
 }
 
 .live-boards.two {
   grid-template-columns: 1fr 1fr;
+  aspect-ratio: 2 / 1;
 }
 
 .live-meta {
@@ -804,6 +825,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
   background: var(--surface-inset);
   cursor: pointer;
   transition: all 0.15s;
+  touch-action: manipulation;
 }
 
 .lobby-card:hover {
@@ -966,6 +988,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
   .home-banner {
     padding: 16px 14px;
     gap: 14px;
+    min-height: 160px;
   }
 
   .banner-intro h1 {

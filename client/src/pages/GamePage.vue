@@ -295,6 +295,16 @@ function onMove(b: 0 | 1, payload: { from: string; to: string; premove?: boolean
   sendMove(b, payload.from, payload.to);
 }
 
+function promoPieceName(t: string): string {
+  switch (t) {
+    case 'q': return 'Ферзь';
+    case 'r': return 'Ладья';
+    case 'b': return 'Слон';
+    case 'n': return 'Конь';
+    default: return 'Фигура';
+  }
+}
+
 function choosePromotion(t: PieceType): void {
   if (!promoDialog.value) return;
   const { board, from, to } = promoDialog.value;
@@ -539,7 +549,7 @@ function resultHeadline(): string {
 <template>
   <div v-if="state" class="game-page" :class="state.mode">
     <!-- Верхняя информационная плашка -->
-    <div class="game-topbar panel">
+    <header class="game-topbar panel">
       <div class="game-title-group">
         <router-link to="/" class="back-link" title="К столам">
           <AppIcon name="arrow-left" :size="14" /> Столы
@@ -564,12 +574,12 @@ function resultHeadline(): string {
           <AppIcon name="external" :size="13" /> Анализ на Lichess
         </button>
       </div>
-    </div>
+    </header>
 
     <!-- Основная сетка игры -->
     <div class="game-layout">
       <!-- Игровая зона (1 или 2 доски) -->
-      <div class="boards-container" :class="{ 'two-boards': state.mode === 'bughouse' }">
+      <section class="boards-container" aria-label="Шахматные доски" :class="{ 'two-boards': state.mode === 'bughouse' }">
         <!-- ================= РЕЖИМ 2х2 (ОДНА ДОСКА) ================= -->
         <div v-if="state.mode === 'team' && teamModeSides" class="team-board-wrapper">
           <!-- Верхняя команда (соперники) -->
@@ -782,7 +792,7 @@ function resultHeadline(): string {
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
       <!-- Боковая панель: Чат + Статус -->
       <aside class="game-sidebar">
@@ -1059,11 +1069,14 @@ function resultHeadline(): string {
             v-for="t in ['q', 'r', 'b', 'n']"
             :key="t"
             class="promo-piece-btn"
+            :aria-label="`Превратить в: ${promoPieceName(t)}`"
             @click="choosePromotion(t as PieceType)"
           >
             <img
               :src="`/pieces/cburnett/${myParticipant?.color ?? 'w'}${t.toUpperCase()}.svg`"
-              :alt="t"
+              :alt="promoPieceName(t)"
+              width="48"
+              height="48"
             />
           </button>
         </div>

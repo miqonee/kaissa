@@ -55,12 +55,62 @@
     </script>
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+    />
+    <link
       href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
+
+    <!-- Critical layout stability styles (zero CLS) -->
+    <style>
+      :root {
+        --bg: #1a1816;
+        --ink: #ece5d8;
+        --surface: #22201c;
+        --line: #38342c;
+      }
+      [data-theme='light'] {
+        --bg: #f2efe6;
+        --ink: #23211b;
+        --surface: #fbf9f4;
+        --line: #dcd6c4;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background-color: var(--bg);
+        color: var(--ink);
+        font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        min-height: 100%;
+        overflow-x: hidden;
+      }
+      #app {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .board-wrap, .board-frame {
+        aspect-ratio: 1;
+        width: 100%;
+        contain: layout;
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>
@@ -106,6 +156,9 @@
           <p><a href="/about">Подробнее о шахматном клубе Каисса</a></p>
         </section>
       </main>
+      <footer>
+        <p>© 2026 Каисса. Онлайн-платформа для парных шахмат 2×2 и Багхаус.</p>
+      </footer>
     </noscript>
 
     <script type="module" src="/src/main.ts"></script>

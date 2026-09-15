@@ -29,29 +29,31 @@ function findPartner(): void {
 
 <template>
   <div class="leaderboard-page">
-    <div class="panel">
+    <section class="panel leaderboard-panel" aria-labelledby="leaderboard-heading">
       <div class="panel-head">
-        <h2>Рейтинг клуба</h2>
+        <h1 id="leaderboard-heading" class="panel-title">Рейтинг клуба</h1>
         <span class="hint">Elo, старт 1200 · K=32</span>
       </div>
       <div v-if="loading" class="empty">Загрузка…</div>
       <div v-else-if="!rows.length" class="empty">Пока никто не играл.</div>
-      <table v-else class="club">
-        <thead>
-          <tr><th style="width: 50px;">#</th><th>Игрок</th><th>Рейтинг</th><th>В</th><th>П</th><th>Партий</th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="(r, i) in rows" :key="r.userId">
-            <td class="mono dim">{{ i + 1 }}</td>
-            <td><router-link :to="`/players/${r.username}`">{{ r.username }}</router-link></td>
-            <td class="mono" style="font-weight: 600;">{{ r.rating }}</td>
-            <td class="mono">{{ r.wins }}</td>
-            <td class="mono">{{ r.losses }}</td>
-            <td class="mono dim">{{ r.wins + r.losses + r.draws }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+      <div v-else class="table-wrap">
+        <table class="club">
+          <thead>
+            <tr><th style="width: 50px;">#</th><th>Игрок</th><th>Рейтинг</th><th>В</th><th>П</th><th>Партий</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="(r, i) in rows" :key="r.userId">
+              <td class="mono dim">{{ i + 1 }}</td>
+              <td><router-link :to="`/players/${r.username}`">{{ r.username }}</router-link></td>
+              <td class="mono" style="font-weight: 600;">{{ r.rating }}</td>
+              <td class="mono">{{ r.wins }}</td>
+              <td class="mono">{{ r.losses }}</td>
+              <td class="mono dim">{{ r.wins + r.losses + r.draws }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
     <!-- Блок стратегии и призыва к игре (перелинковка) -->
     <aside class="leaderboard-guide-panel panel" aria-label="Повышение рейтинга">
@@ -96,6 +98,16 @@ function findPartner(): void {
 </template>
 
 <style scoped>
+.panel-title {
+  font-size: 18px;
+  margin: 0;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .leaderboard-page {
   display: flex;
   flex-direction: column;
@@ -147,4 +159,3 @@ function findPartner(): void {
   border-top: 1px dashed var(--line);
 }
 </style>
-

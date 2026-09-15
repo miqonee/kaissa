@@ -33,6 +33,19 @@ export default defineConfig({
       shared: path.resolve(__dirname, '../shared'),
     },
   },
+  build: {
+    target: 'es2022',
+    cssCodeSplit: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['vue', 'vue-router', 'pinia'],
+          chess: ['@lichess-org/chessground', 'chess.js'],
+          socket: ['socket.io-client'],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

@@ -252,4 +252,102 @@ const connLabel = computed(() => {
     animation: none !important;
   }
 }
+
+/* ================= Подвал сайта (семантический footer) ================= */
+.site-footer {
+  margin-top: auto;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  width: 100%;
+}
+
+.footer-inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 32px var(--gap-m) 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.footer-brand {
+  max-width: 380px;
+}
+
+.footer-brand-link {
+  margin-bottom: 8px;
+}
+
+.footer-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.footer-nav {
+  display: flex;
+  gap: 48px;
+  flex-wrap: wrap;
+}
+
+.footer-nav-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.footer-heading {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.footer-nav-col a {
+  font-size: 13.5px;
+  color: var(--ink-2);
+  border-bottom: 1px solid transparent;
+  transition: color var(--t-fast), border-color var(--t-fast);
+}
+
+.footer-nav-col a:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.footer-item {
+  font-size: 13px;
+}
+
+.footer-bottom {
+  border-top: 1px solid var(--line);
+  padding: 14px var(--gap-m);
+  background: var(--surface-2);
+}
+
+.footer-bottom-inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .footer-inner {
+    padding: 24px var(--gap-s) 20px;
+    gap: 20px;
+  }
+  .footer-nav {
+    gap: 28px;
+  }
+}
 </style>

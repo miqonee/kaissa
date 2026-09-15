@@ -57,7 +57,7 @@ function gameOutcome(g: import('shared').GameSummary): string {
 <template>
   <div v-if="error" class="empty">{{ error }}</div>
   <div v-else-if="profile" class="profile">
-    <div class="profile-head panel">
+    <header class="profile-head panel">
       <div class="who">
         <h1>{{ profile.user.username }}</h1>
         <p class="dim">в клубе с {{ fmtDate(profile.user.createdAt) }}</p>
@@ -76,19 +76,20 @@ function gameOutcome(g: import('shared').GameSummary): string {
           <span class="stat-label">поражений</span>
         </div>
       </div>
-    </div>
+    </header>
 
-    <div class="panel" v-if="profile.ratingHistory.length >= 2">
-      <div class="panel-head"><h2>Динамика рейтинга</h2></div>
+    <section class="panel" aria-labelledby="rating-dyn-heading" v-if="profile.ratingHistory.length >= 2">
+      <div class="panel-head"><h2 id="rating-dyn-heading">Динамика рейтинга</h2></div>
       <div class="panel-body">
-        <svg viewBox="0 0 560 120" class="spark" preserveAspectRatio="none">
+        <svg viewBox="0 0 560 120" class="spark" preserveAspectRatio="none" role="img" aria-label="График динамики рейтинга">
+          <title>График динамики рейтинга</title>
           <path :d="sparkPath!" fill="none" stroke="var(--accent)" stroke-width="2" />
         </svg>
       </div>
-    </div>
+    </section>
 
-    <div class="panel" v-if="isMyProfile">
-      <div class="panel-head"><h2>Настройки</h2></div>
+    <section class="panel" aria-labelledby="settings-heading" v-if="isMyProfile">
+      <div class="panel-head"><h2 id="settings-heading">Настройки</h2></div>
       <div class="panel-body settings-row">
         <div class="setting-info">
           <span class="setting-title">Звуковые эффекты</span>
@@ -102,28 +103,30 @@ function gameOutcome(g: import('shared').GameSummary): string {
           {{ isMuted ? 'Звук: Выкл' : 'Звук: Вкл' }}
         </button>
       </div>
-    </div>
+    </section>
 
-    <div class="panel">
-      <div class="panel-head"><h2>Недавние партии</h2></div>
-      <table class="club" v-if="profile.recentGames.length">
-        <thead>
-          <tr><th>Дата</th><th>Режим</th><th>Участники</th><th>Итог</th><th></th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="g in profile.recentGames" :key="g.id">
-            <td class="mono dim">{{ fmtDate(g.startedAt) }}</td>
-            <td>{{ modeLabel(g.mode) }}</td>
-            <td>{{ g.participants.map((p) => p.username).join(', ') }}</td>
-            <td>{{ gameOutcome(g) }}</td>
-            <td class="actions">
-              <button v-if="g.status !== 'active'" class="button small ghost" @click="replayId = g.id">Просмотр</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <section class="panel" aria-labelledby="recent-games-heading">
+      <div class="panel-head"><h2 id="recent-games-heading">Недавние партии</h2></div>
+      <div v-if="profile.recentGames.length" class="table-wrap">
+        <table class="club">
+          <thead>
+            <tr><th>Дата</th><th>Режим</th><th>Участники</th><th>Итог</th><th>Действия</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="g in profile.recentGames" :key="g.id">
+              <td class="mono dim">{{ fmtDate(g.startedAt) }}</td>
+              <td>{{ modeLabel(g.mode) }}</td>
+              <td>{{ g.participants.map((p) => p.username).join(', ') }}</td>
+              <td>{{ gameOutcome(g) }}</td>
+              <td class="actions">
+                <button v-if="g.status !== 'active'" class="button small ghost" @click="replayId = g.id">Просмотр</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <div v-else class="empty">Партий пока нет.</div>
-    </div>
+    </section>
 
     <!-- Модальный плеер партии -->
     <GameReplayModal

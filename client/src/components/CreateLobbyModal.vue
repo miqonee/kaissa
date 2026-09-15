@@ -49,14 +49,14 @@ function submit() {
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="create-modal-title" @click.self="emit('close')">
     <div class="modal create-modal">
-      <div class="modal-head">
-        <h2>Создание лобби</h2>
+      <header class="modal-head">
+        <h2 id="create-modal-title">Создание лобби</h2>
         <button class="modal-close" @click="emit('close')" aria-label="Закрыть">
           <AppIcon name="close" :size="18" />
         </button>
-      </div>
+      </header>
 
       <div class="modal-body">
         <!-- Название -->
@@ -165,12 +165,12 @@ function submit() {
         <p v-if="error" class="error-text">{{ error }}</p>
       </div>
 
-      <div class="modal-foot">
+      <footer class="modal-foot">
         <button type="button" @click="emit('close')">Отмена</button>
         <button type="button" class="primary big" :disabled="busy" @click="submit">
           {{ busy ? 'Создаём…' : 'Создать стол' }}
         </button>
-      </div>
+      </footer>
     </div>
   </div>
 </template>

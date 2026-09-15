@@ -273,7 +273,7 @@ function pieceLabel(t: PieceType): string {
 <template>
   <div class="replayer" :class="{ compact }">
     <!-- Шапка: кто играл и чем кончилось -->
-    <div class="replayer-head">
+    <header class="replayer-head">
       <div class="rh-teams">
         <span class="color-tag w">белые</span>
         <strong class="truncate">{{ teams.t1 }}</strong>
@@ -286,11 +286,11 @@ function pieceLabel(t: PieceType): string {
         <span class="badge mono">{{ timeControlLabel(game.timeControl) }}</span>
         <span class="badge" :class="{ on: game.status === 'active' }">{{ resultText }}</span>
       </div>
-    </div>
+    </header>
 
     <div class="replayer-body">
       <!-- Доски -->
-      <div class="rp-boards" :class="{ two: boardsCount === 2 }">
+      <section class="rp-boards" aria-label="Шахматные доски" :class="{ two: boardsCount === 2 }">
         <div v-for="b in boardsCount" :key="b" class="rp-board-col">
           <div class="rp-board-head">
             <span class="rp-board-num mono">Доска {{ b }}</span>
@@ -328,7 +328,7 @@ function pieceLabel(t: PieceType): string {
             :selected="null"
           />
         </div>
-      </div>
+      </section>
 
       <!-- Список ходов -->
       <aside class="rp-side">

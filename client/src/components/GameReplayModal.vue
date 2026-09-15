@@ -66,14 +66,14 @@ watch(() => props.gameId, load);
       aria-modal="true"
       :aria-label="title ?? `Партия #${gameId}`"
     >
-      <div class="modal-head">
+      <header class="modal-head">
         <h2>{{ title ?? `Партия #${gameId}` }}</h2>
         <div class="rh-actions">
           <button class="modal-close" aria-label="Закрыть" @click="emit('close')">
             <AppIcon name="close" :size="18" />
           </button>
         </div>
-      </div>
+      </header>
 
       <div class="modal-body">
         <div v-if="loading" class="empty">Загружаем партию…</div>

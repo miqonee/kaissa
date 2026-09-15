@@ -119,12 +119,14 @@ async function analyzeOnLichess(gameId: number) {
 
 <template>
   <div class="history-page">
-    <div class="panel">
+    <section class="panel history-panel" aria-label="Архив партий">
       <div class="panel-head">
-        <div class="head-tabs">
+        <div class="head-tabs" role="tablist" aria-label="Фильтр партий">
           <button
             class="tab-btn"
             :class="{ active: tab === 'mine' }"
+            role="tab"
+            :aria-selected="tab === 'mine'"
             @click="tab = 'mine'"
           >
             Мои партии
@@ -132,6 +134,8 @@ async function analyzeOnLichess(gameId: number) {
           <button
             class="tab-btn"
             :class="{ active: tab === 'all' }"
+            role="tab"
+            :aria-selected="tab === 'all'"
             @click="tab = 'all'"
           >
             Архив клуба (все встречи)
@@ -224,7 +228,7 @@ async function analyzeOnLichess(gameId: number) {
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
 
     <GameReplayModal
       v-if="replayId !== null"

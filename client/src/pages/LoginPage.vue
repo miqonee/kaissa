@@ -37,9 +37,9 @@ async function submit() {
 
 <template>
   <div class="login-wrap">
-    <div class="login-panel panel">
+    <section class="login-panel panel" aria-labelledby="login-title">
       <div class="login-head">
-        <h1>Каисса</h1>
+        <h1 id="login-title">Каисса</h1>
         <p>Командные шахматы 2×2 и багхаус</p>
       </div>
       <form @submit.prevent="submit">
@@ -66,7 +66,7 @@ async function submit() {
           <a href="#" @click.prevent="mode = 'login'">Войти</a>
         </template>
       </p>
-    </div>
+    </section>
   </div>
 </template>
 

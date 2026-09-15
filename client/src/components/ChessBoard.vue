@@ -274,7 +274,7 @@ defineExpose({ cancelPremove });
 </script>
 
 <template>
-  <div class="board-wrap" :class="{ mini: mini }" @contextmenu.prevent="onRightClick">
+  <div class="board-wrap" :class="{ mini: mini }" role="region" aria-label="Шахматная доска" @contextmenu.prevent="onRightClick">
     <div ref="el" class="cg-wrap-item"></div>
   </div>
 </template>
@@ -282,11 +282,16 @@ defineExpose({ cancelPremove });
 <style scoped>
 .board-wrap {
   width: 100%;
+  aspect-ratio: 1;
   position: relative;
+  display: block;
+  contain: layout;
 }
 
 .cg-wrap-item {
   width: 100%;
   aspect-ratio: 1;
+  display: block;
+  touch-action: none;
 }
 </style>

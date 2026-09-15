@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import type { LobbySummary, LiveGameInfo, GameMode, TimeControl, TeamMode } from 'shared';
 import { getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
 import { getSocket, onSocketResync } from '../api/socket';
@@ -12,6 +12,7 @@ import AppIcon from '../components/AppIcon.vue';
 import BotHoverCard from '../components/BotHoverCard.vue';
 
 const router = useRouter();
+const route = useRoute();
 const auth = useAuthStore();
 const lobbies = ref<LobbySummary[]>([]);
 const liveGames = ref<LiveGameInfo[]>([]);
@@ -52,6 +53,7 @@ onMounted(async () => {
   } catch {} finally {
     loadingLobbies.value = false;
   }
+  handleCtaAction(route.query.action);
   socket.emit('live:subscribe');
   socket.emit('lobby-list:subscribe');
   // Реконнект сокета теряет комнаты live/lobby-list — подписаться заново
@@ -177,6 +179,29 @@ function enterLobby(l: LobbySummary): void {
     }
   });
 }
+
+function handleCtaAction(action: unknown): void {
+  if (action === 'quick') {
+    if (autoLobby.value) {
+      enterLobby(autoLobby.value);
+    } else {
+      openCreateModal();
+    }
+  } else if (action === 'lobbies') {
+    setTimeout(() => {
+      document.getElementById('lobbies-section')?.scrollIntoView({ behavior: 'smooth' });
+    }, 150);
+  } else if (action === 'create') {
+    openCreateModal();
+  }
+}
+
+watch(
+  () => route.query.action,
+  (act) => {
+    if (act) handleCtaAction(act);
+  },
+);
 
 function modeLabel(m: string): string {
   return m === 'bughouse' ? 'Багхаус' : '2×2 одна доска';
@@ -339,7 +364,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
       </section>
 
       <!-- Открытые столы -->
-      <section class="lobbies-col">
+      <section class="lobbies-col" id="lobbies-section">
         <div class="panel">
           <div class="panel-head">
             <h2>Открытые столы</h2>
@@ -427,6 +452,57 @@ function lobbyRosterTitle(l: LobbySummary): string {
         </div>
       </section>
     </div>
+    <!-- Блок правил и форматов игры (SEO & Cross-linking) -->
+    <section class="home-rules-section panel" aria-label="Правила и форматы игры">
+      <div class="panel-head">
+        <h2>
+          <AppIcon name="book-open" :size="18" />
+          Правила и форматы командных шахмат
+        </h2>
+        <span class="hint">База знаний и стратегии клуба</span>
+      </div>
+      <div class="panel-body home-rules-grid">
+        <router-link to="/rules/duo" class="home-rule-card">
+          <div class="home-rule-badge-row">
+            <span class="badge felt">Duo Chess</span>
+            <span class="badge">1 доска · 2х2</span>
+          </div>
+          <h3>Командные шахматы 2 на 2 на одной доске</h3>
+          <p>Два игрока управляют одной армией, делая ходы по очереди. Революционное клубное правило: пат засчитывается как поражение запатованной стороны!</p>
+          <span class="home-rule-link">
+            Читать правила чередования
+            <AppIcon name="arrow-right" :size="13" />
+          </span>
+        </router-link>
+
+        <router-link to="/rules/bughouse" class="home-rule-card">
+          <div class="home-rule-badge-row">
+            <span class="badge felt">Багхаус</span>
+            <span class="badge brass">2 доски · Дропы</span>
+          </div>
+          <h3>Шведские шахматы (Багхаус онлайн)</h3>
+          <p>Срубленные фигуры переходят в карман напарника и возвращаются на доску в виде дропов. Разжалование пешек, тактика мата дропом и командная синергия.</p>
+          <span class="home-rule-link">
+            Изучить правила и тактику дропов
+            <AppIcon name="arrow-right" :size="13" />
+          </span>
+        </router-link>
+
+        <router-link to="/about" class="home-rule-card">
+          <div class="home-rule-badge-row">
+            <span class="badge">О клубе</span>
+            <span class="badge mono">Stockfish 18 WASM</span>
+          </div>
+          <h3>О шахматном клубе Каисса</h3>
+          <p>Первая специализированная платформа для командных шахмат, 12 ИИ-ботов со стилями легендарных чемпионов и динамический рейтинг игроков Elo.</p>
+          <span class="home-rule-link">
+            Узнать о платформе и сообществе
+            <AppIcon name="arrow-right" :size="13" />
+          </span>
+        </router-link>
+      </div>
+    </section>
+
 
     <!-- Модальное окно создания стола -->
     <CreateLobbyModal
@@ -968,4 +1044,67 @@ function lobbyRosterTitle(l: LobbySummary): string {
   z-index: 2000;
   font-size: 14px;
 }
+
+/* Секция правил и обучения на главной */
+.home-rules-section {
+  margin-top: 8px;
+}
+
+.home-rules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  padding: var(--gap-m);
+}
+
+.home-rule-card {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-decoration: none;
+  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.home-rule-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-2);
+  box-shadow: var(--shadow-s);
+  background: var(--surface);
+}
+
+.home-rule-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-rule-card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+  font-family: var(--font-display);
+}
+
+.home-rule-card p {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  margin: 0;
+}
+
+.home-rule-link {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
 </style>

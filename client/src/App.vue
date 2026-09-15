@@ -6,6 +6,7 @@ import { useConnectionStore } from './stores/connection';
 import { useToast } from './stores/toast';
 import { getSocket, resetSocket } from './api/socket';
 import AppIcon from './components/AppIcon.vue';
+import AppFooter from './components/AppFooter.vue';
 
 const auth = useAuthStore();
 const theme = useThemeStore();
@@ -64,10 +65,13 @@ const connLabel = computed(() => {
           Каисса
         </router-link>
 
-        <nav>
+        <nav aria-label="Основная навигация">
           <router-link to="/">Лобби</router-link>
-          <router-link to="/history">Архив партий</router-link>
+          <router-link to="/rules/duo">Правила 2×2</router-link>
+          <router-link to="/rules/bughouse">Багхаус</router-link>
           <router-link to="/leaderboard">Рейтинг</router-link>
+          <router-link to="/history">Архив партий</router-link>
+          <router-link to="/about">О клубе</router-link>
         </nav>
 
         <div class="topbar-right">
@@ -117,6 +121,8 @@ const connLabel = computed(() => {
     <main class="page">
       <router-view :key="$route.fullPath" />
     </main>
+
+    <AppFooter />
 
     <div v-if="toast.toastText.value" class="toast" role="status">
       <span>{{ toast.toastText.value }}</span>

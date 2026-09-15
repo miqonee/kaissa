@@ -7,6 +7,21 @@
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>https://duochess.ru/rules/duo</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://duochess.ru/rules/bughouse</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://duochess.ru/about</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://duochess.ru/leaderboard</loc>
     <lastmod>2026-09-15</lastmod>
     <changefreq>hourly</changefreq>

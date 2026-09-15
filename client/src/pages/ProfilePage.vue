@@ -20,9 +20,9 @@ const pageDescription = computed(() => {
   if (profile.value?.user) {
     const u = profile.value.user;
     const total = u.wins + u.losses + (u.draws || 0);
-    return `Профиль игрока ${u.username} в шахматном клубе Каисса: рейтинг ${u.rating} Elo, побед: ${u.wins}, поражений: ${u.losses}, сыграно партий: ${total}. Статистика и история матчей.`;
+    return `Профиль игрока ${u.username} в Каиссе: рейтинг ${u.rating} Elo, побед: ${u.wins}, поражений: ${u.losses}, сыграно партий: ${total}. Статистика и история матчей.`;
   }
-  return `Профиль игрока ${username.value} — рейтинг, статистика партий и история матчей в шахматном клубе Каисса.`;
+  return `Профиль игрока ${username.value} — рейтинг, статистика партий и история матчей в Каиссе.`;
 });
 
 usePageSeo({
@@ -89,7 +89,7 @@ function gameOutcome(g: import('shared').GameSummary): string {
     <header class="profile-head panel">
       <div class="who">
         <h1>{{ profile.user.username }}</h1>
-        <p class="dim">в клубе с {{ fmtDate(profile.user.createdAt) }}</p>
+        <p class="dim">с {{ fmtDate(profile.user.createdAt) }}</p>
       </div>
       <div class="stats">
         <div class="stat">

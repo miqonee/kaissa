@@ -8,7 +8,7 @@ import { usePageSeo } from '../composables/useSeo';
 usePageSeo({
   title: 'Правила шведских шахмат (Багхаус) онлайн: дропы, тактика, особенности',
   description:
-    'Полные правила шведских шахмат (Bughouse Chess) онлайн: дропы фигур из кармана, передача сбитых фигур партнеру, разжалование пешек, тактика мата дропом и стратегии игры парами в клубе Каисса.',
+    'Правила шведских шахмат (Bughouse Chess) онлайн: дропы фигур из резерва, передача сбитых фигур партнеру, разжалование пешек и командная игра на платформе Каисса.',
   canonical: '/rules/bughouse',
   keywords: ['правила багхаус', 'шведские шахматы правила', 'дропы фигур', 'bughouse chess'],
 });
@@ -258,12 +258,12 @@ function findPartner(): void {
 
       <!-- Перелинковка на другие статьи и разделы -->
       <section class="related-section">
-        <h3>Изучите другие режимы клуба</h3>
+        <h3>Другие разделы</h3>
         <div class="related-cards">
           <router-link to="/rules/duo" class="related-card">
             <span class="related-card-badge">Режим 2х2</span>
             <h4>Командные шахматы 2 на 2 на одной доске</h4>
-            <p>Узнайте правила строгого чередования ходов, правило победы при пате и командный тайм-контроль.</p>
+            <p>Правила поочерёдных ходов в паре, командный тайм-контроль и особенности игры на одной доске.</p>
             <span class="related-card-arrow">
               Читать правила
               <AppIcon name="arrow-right" :size="13" />
@@ -272,20 +272,20 @@ function findPartner(): void {
 
           <router-link to="/about" class="related-card">
             <span class="related-card-badge">О проекте</span>
-            <h4>О шахматном клубе Каисса</h4>
-            <p>Наша миссия, ИИ-боты легендарных чемпионов, динамический Elo и история платформы.</p>
+            <h4>О платформе Каисса</h4>
+            <p>Движок Stockfish, боты разной сложности и командные режимы.</p>
             <span class="related-card-arrow">
-              Узнать больше
+              Подробнее
               <AppIcon name="arrow-right" :size="13" />
             </span>
           </router-link>
 
           <router-link to="/leaderboard" class="related-card">
             <span class="related-card-badge">Рейтинг</span>
-            <h4>Таблица лидеров клуба</h4>
-            <p>Смотрите рейтинг лучших командных игроков, анализируйте статистику побед и поднимайтесь в топ.</p>
+            <h4>Рейтинг игроков</h4>
+            <p>Рейтинг игроков, статистика побед и сыгранных партий.</p>
             <span class="related-card-arrow">
-              В таблицу лидеров
+              В рейтинг
               <AppIcon name="arrow-right" :size="13" />
             </span>
           </router-link>

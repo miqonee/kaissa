@@ -67,11 +67,8 @@ const connLabel = computed(() => {
 
         <nav aria-label="Основная навигация">
           <router-link to="/">Лобби</router-link>
-          <router-link to="/rules/duo">Правила 2×2</router-link>
-          <router-link to="/rules/bughouse">Багхаус</router-link>
           <router-link to="/leaderboard">Рейтинг</router-link>
           <router-link to="/history">Архив партий</router-link>
-          <router-link to="/about">О клубе</router-link>
         </nav>
 
         <div class="topbar-right">

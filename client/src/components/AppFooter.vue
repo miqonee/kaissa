@@ -49,23 +49,23 @@ function findPartner(): void {
             <router-link to="/rules/bughouse">Шведские шахматы (Багхаус)</router-link>
           </li>
           <li>
-            <router-link to="/about">О шахматном клубе Каисса</router-link>
+            <router-link to="/about">О платформе</router-link>
           </li>
         </ul>
       </nav>
 
-      <!-- Раздел: Навигация по клубу -->
-      <nav class="footer-nav-col" aria-label="Разделы клуба">
-        <h4 class="footer-col-title">Клуб</h4>
+      <!-- Раздел: Навигация -->
+      <nav class="footer-nav-col" aria-label="Навигация">
+        <h4 class="footer-col-title">Навигация</h4>
         <ul class="footer-links">
           <li>
-            <router-link to="/">Лобби матчей</router-link>
+            <router-link to="/">Лобби</router-link>
           </li>
           <li>
-            <router-link to="/leaderboard">Таблица лидеров клуба</router-link>
+            <router-link to="/leaderboard">Рейтинг игроков</router-link>
           </li>
           <li>
-            <router-link to="/history">Архив сыгранных партий</router-link>
+            <router-link to="/history">Архив партий</router-link>
           </li>
           <li>
             <router-link to="/login">Вход и регистрация</router-link>
@@ -93,11 +93,11 @@ function findPartner(): void {
     <!-- Нижняя полоса копирайта и условий -->
     <div class="footer-bottom">
       <div class="footer-bottom-inner">
-        <span>© 2026 Шахматный клуб «Каисса». Все права защищены.</span>
+        <span>© 2026 «Каисса». Все права защищены.</span>
         <span class="footer-bottom-links">
           <span>Принципы Fair Play</span>
           <span>·</span>
-          <span>Древняя мудрость — командный азарт</span>
+          <span>Командные шахматы онлайн</span>
         </span>
       </div>
     </div>

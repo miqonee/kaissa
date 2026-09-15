@@ -169,6 +169,25 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
       changefreq: 'daily',
       priority: 0.7,
     },
+    // Правила и информация о платформе
+    {
+      loc: `${baseUrl}/rules/duo`,
+      lastmod: today,
+      changefreq: 'monthly',
+      priority: 0.6,
+    },
+    {
+      loc: `${baseUrl}/rules/bughouse`,
+      lastmod: today,
+      changefreq: 'monthly',
+      priority: 0.6,
+    },
+    {
+      loc: `${baseUrl}/about`,
+      lastmod: today,
+      changefreq: 'monthly',
+      priority: 0.5,
+    },
     // Вход и регистрация: статичная служебная страница
     {
       loc: `${baseUrl}/login`,

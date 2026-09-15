@@ -13,7 +13,6 @@ import {
   SITE_NAME,
 } from '../src/composables/useSeo.ts';
 import { ref, computed, createApp } from 'vue';
-import { createHead } from '@unhead/vue/client';
 
 console.log('=== 1. Проверка базовых констант и домена ===');
 console.assert(BASE_CANONICAL_DOMAIN === 'https://duochess.ru', `BASE_CANONICAL_DOMAIN must be https://duochess.ru`);
@@ -60,8 +59,6 @@ console.assert(toAbsoluteUrl('/custom.png') === 'https://duochess.ru/custom.png'
 
 console.log('=== 4. Проверка реактивной работы composable usePageSeo ===');
 const app = createApp({});
-const head = createHead();
-app.use(head);
 
 app.runWithContext(() => {
   // 4.1. Профиль игрока: динамический title и персональное description
@@ -73,9 +70,9 @@ app.runWithContext(() => {
     if (profileData.value?.user) {
       const u = profileData.value.user;
       const total = u.wins + u.losses + (u.draws || 0);
-      return `Профиль игрока ${u.username} в шахматном клубе Каисса: рейтинг ${u.rating} Elo, побед: ${u.wins}, поражений: ${u.losses}, сыграно партий: ${total}. Статистика и история матчей.`;
+      return `Профиль игрока ${u.username} в Каиссе: рейтинг ${u.rating} Elo, побед: ${u.wins}, поражений: ${u.losses}, сыграно партий: ${total}. Статистика и история матчей.`;
     }
-    return `Профиль игрока ${username.value} — рейтинг, статистика партий и история матчей в шахматном клубе Каисса.`;
+    return `Профиль игрока ${username.value} — рейтинг, статистика партий и история матчей в Каиссе.`;
   });
 
   const profileSeo = usePageSeo({

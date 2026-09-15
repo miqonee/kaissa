@@ -286,7 +286,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
     <!-- Верхний баннер с быстрыми действиями -->
     <section class="home-banner panel" aria-label="Быстрый старт">
       <div class="banner-intro">
-        <h1>Командный шахматный клуб</h1>
+        <h1>Командные шахматы онлайн</h1>
         <p class="dim">Играйте парами на одной доске или в багхаус с обменом фигурами в реальном времени.</p>
       </div>
       <div class="banner-actions">
@@ -490,57 +490,6 @@ function lobbyRosterTitle(l: LobbySummary): string {
         </div>
       </section>
     </div>
-    <!-- Блок правил и форматов игры (SEO & Cross-linking) -->
-    <section class="home-rules-section panel" aria-label="Правила и форматы игры">
-      <div class="panel-head">
-        <h2>
-          <AppIcon name="book-open" :size="18" />
-          Правила и форматы командных шахмат
-        </h2>
-        <span class="hint">База знаний и стратегии клуба</span>
-      </div>
-      <div class="panel-body home-rules-grid">
-        <router-link to="/rules/duo" class="home-rule-card">
-          <div class="home-rule-badge-row">
-            <span class="badge felt">Duo Chess</span>
-            <span class="badge">1 доска · 2х2</span>
-          </div>
-          <h3>Командные шахматы 2 на 2 на одной доске</h3>
-          <p>Два игрока управляют одной армией, делая ходы по очереди. Революционное клубное правило: пат засчитывается как поражение запатованной стороны!</p>
-          <span class="home-rule-link">
-            Читать правила чередования
-            <AppIcon name="arrow-right" :size="13" />
-          </span>
-        </router-link>
-
-        <router-link to="/rules/bughouse" class="home-rule-card">
-          <div class="home-rule-badge-row">
-            <span class="badge felt">Багхаус</span>
-            <span class="badge brass">2 доски · Дропы</span>
-          </div>
-          <h3>Шведские шахматы (Багхаус онлайн)</h3>
-          <p>Срубленные фигуры переходят в карман напарника и возвращаются на доску в виде дропов. Разжалование пешек, тактика мата дропом и командная синергия.</p>
-          <span class="home-rule-link">
-            Изучить правила и тактику дропов
-            <AppIcon name="arrow-right" :size="13" />
-          </span>
-        </router-link>
-
-        <router-link to="/about" class="home-rule-card">
-          <div class="home-rule-badge-row">
-            <span class="badge">О клубе</span>
-            <span class="badge mono">Stockfish 18 WASM</span>
-          </div>
-          <h3>О шахматном клубе Каисса</h3>
-          <p>Первая специализированная платформа для командных шахмат, 12 ИИ-ботов со стилями легендарных чемпионов и динамический рейтинг игроков Elo.</p>
-          <span class="home-rule-link">
-            Узнать о платформе и сообществе
-            <AppIcon name="arrow-right" :size="13" />
-          </span>
-        </router-link>
-      </div>
-    </section>
-
 
     <!-- Модальное окно создания стола -->
     <CreateLobbyModal
@@ -1092,67 +1041,4 @@ function lobbyRosterTitle(l: LobbySummary): string {
   z-index: 2000;
   font-size: 14px;
 }
-
-/* Секция правил и обучения на главной */
-.home-rules-section {
-  margin-top: 8px;
-}
-
-.home-rules-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
-  padding: var(--gap-m);
-}
-
-.home-rule-card {
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-s);
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  text-decoration: none;
-  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
-}
-
-.home-rule-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent-2);
-  box-shadow: var(--shadow-s);
-  background: var(--surface);
-}
-
-.home-rule-badge-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.home-rule-card h3 {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--ink);
-  margin: 0;
-  font-family: var(--font-display);
-}
-
-.home-rule-card p {
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--ink-2);
-  margin: 0;
-}
-
-.home-rule-link {
-  margin-top: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--accent);
-}
-
 </style>

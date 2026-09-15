@@ -1,6 +1,5 @@
-import { computed, toValue, type ComputedRef, type MaybeRefOrGetter } from 'vue';
+import { computed, toValue, watchEffect, type ComputedRef, type MaybeRefOrGetter } from 'vue';
 import { useRoute } from 'vue-router';
-import { useHead, useSeoMeta } from '@unhead/vue';
 
 export const SITE_NAME = 'Каисса';
 export const BASE_CANONICAL_DOMAIN = 'https://duochess.ru';
@@ -9,7 +8,7 @@ export const DEFAULT_TITLE = 'Каисса — командные шахматы
 export const DEFAULT_DESCRIPTION =
   'Каисса — онлайн-платформа для командных шахмат в реальном времени. Играйте парами 2х2 на одной доске или в шведские шахматы (багхаус) с обменом фигурами и ИИ-ботами.';
 export const DEFAULT_KEYWORDS =
-  'шахматы, командные шахматы, 2х2 шахматы, багхаус, шведские шахматы, шведки, bughouse chess, онлайн шахматы, шахматный клуб, каисса';
+  'шахматы, командные шахматы, 2х2 шахматы, багхаус, шведские шахматы, шведки, bughouse chess, онлайн шахматы, каисса';
 
 /**
  * Нормализует путь или URL к абсолютному каноническому URL с доменом https://duochess.ru/.
@@ -182,38 +181,58 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
     return toValue(options.noindex) ? 'noindex, nofollow' : undefined;
   });
 
-  useSeoMeta({
-    title: () => resolvedTitle.value,
-    description: () => resolvedDescription.value,
-    ogTitle: () => resolvedOgTitle.value,
-    ogDescription: () => resolvedOgDescription.value,
-    ogImage: () => resolvedOgImage.value,
-    ogUrl: () => resolvedOgUrl.value,
-    ogSiteName: SITE_NAME,
-    ogType: 'website',
-    ogLocale: 'ru_RU',
-    twitterCard: () => resolvedTwitterCard.value,
-    twitterTitle: () => resolvedTwitterTitle.value,
-    twitterDescription: () => resolvedTwitterDescription.value,
-    twitterImage: () => resolvedTwitterImage.value,
-    robots: () => resolvedRobots.value,
-  });
+  function setMetaTag(attrName: 'name' | 'property', attrValue: string, content?: string | null) {
+    if (typeof document === 'undefined') return;
+    let el = document.querySelector(`meta[${attrName}="${attrValue}"]`);
+    if (!content) {
+      if (el) el.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement('meta');
+      el.setAttribute(attrName, attrValue);
+      document.head.appendChild(el);
+    }
+    el.setAttribute('content', content);
+  }
 
-  useHead({
-    meta: [
-      {
-        name: 'keywords',
-        content: () => resolvedKeywords.value,
-      },
-    ],
-    link: [
-      {
-        rel: 'canonical',
-        href: () => resolvedCanonical.value,
-        key: 'canonical',
-      },
-    ],
-  });
+  function setCanonicalTag(href?: string | null) {
+    if (typeof document === 'undefined') return;
+    let el = document.querySelector('link[rel="canonical"]');
+    if (!href) {
+      if (el) el.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement('link');
+      el.setAttribute('rel', 'canonical');
+      document.head.appendChild(el);
+    }
+    el.setAttribute('href', href);
+  }
+
+  if (typeof window !== 'undefined') {
+    watchEffect(() => {
+      document.title = resolvedTitle.value;
+      setMetaTag('name', 'description', resolvedDescription.value);
+      setMetaTag('name', 'keywords', resolvedKeywords.value);
+      setCanonicalTag(resolvedCanonical.value);
+
+      setMetaTag('property', 'og:title', resolvedOgTitle.value);
+      setMetaTag('property', 'og:description', resolvedOgDescription.value);
+      setMetaTag('property', 'og:image', resolvedOgImage.value);
+      setMetaTag('property', 'og:url', resolvedOgUrl.value);
+      setMetaTag('property', 'og:site_name', SITE_NAME);
+      setMetaTag('property', 'og:type', 'website');
+      setMetaTag('property', 'og:locale', 'ru_RU');
+
+      setMetaTag('name', 'twitter:card', resolvedTwitterCard.value);
+      setMetaTag('name', 'twitter:title', resolvedTwitterTitle.value);
+      setMetaTag('name', 'twitter:description', resolvedTwitterDescription.value);
+      setMetaTag('name', 'twitter:image', resolvedTwitterImage.value);
+      setMetaTag('name', 'robots', resolvedRobots.value);
+    });
+  }
 
   return {
     title: resolvedTitle,

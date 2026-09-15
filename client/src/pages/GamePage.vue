@@ -48,7 +48,7 @@ const pageTitle = computed(() => {
 const pageOgDescription = computed(() => {
   const id = route.params.id;
   if (!state.value) {
-    return `Онлайн-просмотр партии #${id} в шахматном клубе Каисса.`;
+    return `Онлайн-просмотр партии #${id} на платформе Каисса.`;
   }
   const mode = state.value.mode === 'bughouse' ? 'Багхаус (шведские шахматы)' : 'Командные шахматы 2х2';
   const tc = timeControlLabel(state.value.timeControl);
@@ -60,7 +60,7 @@ const pageOgDescription = computed(() => {
       : state.value.status === 'finished'
         ? `Завершена со счетом ${state.value.result}`
         : 'Партия завершена';
-  return `Партия #${id} [${mode}, ${tc}]: ${t1} против ${t2}. ${statusText}. Смотрите онлайн в шахматном клубе Каисса!`;
+  return `Партия #${id} [${mode}, ${tc}]: ${t1} против ${t2}. ${statusText}. Смотрите онлайн на платформе Каисса.`;
 });
 
 usePageSeo({

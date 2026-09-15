@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router';
 import AppIcon from '../components/AppIcon.vue';
 import ChessDiagram from '../components/ChessDiagram.vue';
 import CtaBanner from '../components/CtaBanner.vue';
@@ -12,16 +11,6 @@ usePageSeo({
   canonical: '/rules/bughouse',
   keywords: ['правила багхаус', 'шведские шахматы правила', 'дропы фигур', 'bughouse chess'],
 });
-
-const router = useRouter();
-
-function playBughouse(): void {
-  router.push({ path: '/', query: { action: 'quick' } });
-}
-
-function findPartner(): void {
-  router.push({ path: '/', query: { action: 'lobbies' } });
-}
 </script>
 
 <template>

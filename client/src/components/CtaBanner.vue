@@ -21,10 +21,6 @@ const router = useRouter();
 function play2x2(): void {
   router.push({ path: '/', query: { action: 'quick' } });
 }
-
-function findPartner(): void {
-  router.push({ path: '/', query: { action: 'lobbies' } });
-}
 </script>
 
 <template>
@@ -35,10 +31,6 @@ function findPartner(): void {
       <button type="button" class="primary big" @click="play2x2">
         <AppIcon name="bolt" :size="16" />
         Сыграть партию 2х2
-      </button>
-      <button type="button" class="brass big" @click="findPartner">
-        <AppIcon name="plus" :size="16" />
-        Найти напарника
       </button>
       <router-link to="/leaderboard" class="button ghost">
         <AppIcon name="crown" :size="14" />

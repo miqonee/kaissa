@@ -3,6 +3,15 @@ import { useRouter } from 'vue-router';
 import AppIcon from '../components/AppIcon.vue';
 import ChessDiagram from '../components/ChessDiagram.vue';
 import CtaBanner from '../components/CtaBanner.vue';
+import { usePageSeo } from '../composables/useSeo';
+
+usePageSeo({
+  title: 'Правила шведских шахмат (Багхаус) онлайн: дропы, тактика, особенности',
+  description:
+    'Полные правила шведских шахмат (Bughouse Chess) онлайн: дропы фигур из кармана, передача сбитых фигур партнеру, разжалование пешек, тактика мата дропом и стратегии игры парами в клубе Каисса.',
+  canonical: '/rules/bughouse',
+  keywords: ['правила багхаус', 'шведские шахматы правила', 'дропы фигур', 'bughouse chess'],
+});
 
 const router = useRouter();
 

@@ -23,6 +23,7 @@ import PocketBar from '../components/PocketBar.vue';
 import AppIcon from '../components/AppIcon.vue';
 import GameReplayModal from '../components/GameReplayModal.vue';
 import BotHoverCard from '../components/BotHoverCard.vue';
+import { usePageSeo } from '../composables/useSeo';
 
 const route = useRoute();
 const router = useRouter();
@@ -31,6 +32,46 @@ const socket = getSocket();
 const gameId = Number(route.params.id);
 
 const state = ref<GameState | null>(null);
+
+const pageTitle = computed(() => {
+  const id = route.params.id;
+  if (!state.value) return `Партия #${id} — Каисса`;
+  const mode = state.value.mode === 'bughouse' ? 'Багхаус' : '2×2';
+  const t1 = state.value.participants.filter((p) => p.team === 1).map((p) => p.username).join(' / ');
+  const t2 = state.value.participants.filter((p) => p.team === 2).map((p) => p.username).join(' / ');
+  if (t1 && t2) {
+    return `Партия #${id} (${mode}) — ${t1} vs ${t2} — Каисса`;
+  }
+  return `Партия #${id} (${mode}) — Каисса`;
+});
+
+const pageOgDescription = computed(() => {
+  const id = route.params.id;
+  if (!state.value) {
+    return `Онлайн-просмотр партии #${id} в шахматном клубе Каисса.`;
+  }
+  const mode = state.value.mode === 'bughouse' ? 'Багхаус (шведские шахматы)' : 'Командные шахматы 2х2';
+  const tc = timeControlLabel(state.value.timeControl);
+  const t1 = state.value.participants.filter((p) => p.team === 1).map((p) => p.username).join(' / ') || 'Команда 1';
+  const t2 = state.value.participants.filter((p) => p.team === 2).map((p) => p.username).join(' / ') || 'Команда 2';
+  const statusText =
+    state.value.status === 'active'
+      ? 'Партия в игре'
+      : state.value.status === 'finished'
+        ? `Завершена со счетом ${state.value.result}`
+        : 'Партия завершена';
+  return `Партия #${id} [${mode}, ${tc}]: ${t1} против ${t2}. ${statusText}. Смотрите онлайн в шахматном клубе Каисса!`;
+});
+
+usePageSeo({
+  title: pageTitle,
+  description: pageOgDescription,
+  ogTitle: pageTitle,
+  ogDescription: pageOgDescription,
+  canonical: computed(() => `/game/${route.params.id}`),
+  ogImage: 'https://duochess.ru/og-image.png',
+  twitterCard: 'summary_large_image',
+});
 const error = ref('');
 const chat = ref<ChatMessage[]>([]);
 const chatText = ref('');

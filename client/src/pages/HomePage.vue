@@ -10,6 +10,31 @@ import ChessBoard from '../components/ChessBoard.vue';
 import CreateLobbyModal from '../components/CreateLobbyModal.vue';
 import AppIcon from '../components/AppIcon.vue';
 import BotHoverCard from '../components/BotHoverCard.vue';
+import { usePageSeo } from '../composables/useSeo';
+
+usePageSeo({
+  title: 'Каисса — командные шахматы 2×2 и Багхаус онлайн',
+  description:
+    'Каисса — онлайн-платформа для командных шахмат в реальном времени. Играйте парами 2х2 на одной доске или в шведские шахматы (багхаус) с обменом фигурами и ИИ-ботами.',
+  keywords: [
+    'шахматы',
+    'командные шахматы',
+    '2х2 шахматы',
+    'багхаус',
+    'шведские шахматы',
+    'шведки',
+    'bughouse chess',
+    'онлайн шахматы',
+    'шахматный клуб',
+    'каисса',
+  ],
+  canonical: '/',
+  ogTitle: 'Каисса — командные шахматы 2×2 и Багхаус онлайн',
+  ogDescription:
+    'Платформа для командных шахмат в реальном времени. Играйте 2х2 на одной доске или в багхаус с обменом фигурами и ИИ-ботами.',
+  ogImage: 'https://duochess.ru/og-image.png',
+  twitterCard: 'summary_large_image',
+});
 
 const router = useRouter();
 const route = useRoute();

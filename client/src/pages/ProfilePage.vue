@@ -6,12 +6,41 @@ import { useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { isMuted, toggleSound } from '../audio/sounds';
 import GameReplayModal from '../components/GameReplayModal.vue';
+import { usePageSeo } from '../composables/useSeo';
 
 const route = useRoute();
 const auth = useAuthStore();
 const profile = ref<ProfilePayload | null>(null);
 const error = ref('');
 const replayId = ref<number | null>(null);
+
+const username = computed(() => (route.params.username as string) || '');
+const pageTitle = computed(() => `Профиль игрока ${username.value} — рейтинг, статистика в Каиссе`);
+const pageDescription = computed(() => {
+  if (profile.value?.user) {
+    const u = profile.value.user;
+    const total = u.wins + u.losses + (u.draws || 0);
+    return `Профиль игрока ${u.username} в шахматном клубе Каисса: рейтинг ${u.rating} Elo, побед: ${u.wins}, поражений: ${u.losses}, сыграно партий: ${total}. Статистика и история матчей.`;
+  }
+  return `Профиль игрока ${username.value} — рейтинг, статистика партий и история матчей в шахматном клубе Каисса.`;
+});
+
+usePageSeo({
+  title: pageTitle,
+  description: pageDescription,
+  keywords: computed(() => [
+    `игрок ${username.value}`,
+    `профиль ${username.value}`,
+    'рейтинг elo',
+    'статистика шахмат',
+    'каисса',
+  ]),
+  canonical: computed(() => `/players/${username.value}`),
+  ogTitle: pageTitle,
+  ogDescription: pageDescription,
+  ogImage: 'https://duochess.ru/og-image.png',
+  twitterCard: 'summary_large_image',
+});
 
 const isMyProfile = computed(() => auth.user?.username === profile.value?.user.username);
 

@@ -4,6 +4,28 @@ import { useRouter } from 'vue-router';
 import type { LeaderboardRow } from 'shared';
 import { api } from '../api/rest';
 import AppIcon from '../components/AppIcon.vue';
+import { usePageSeo } from '../composables/useSeo';
+
+usePageSeo({
+  title: 'Таблица лидеров — рейтинг игроков клуба — Каисса',
+  description:
+    'Таблица лидеров и рейтинг сильнейших игроков шахматного клуба Каисса. Актуальный рейтинг Elo, статистика побед, поражений и партий в командных шахматах 2х2 и багхаусе.',
+  keywords: [
+    'таблица лидеров',
+    'рейтинг игроков',
+    'топ шахматистов',
+    'elo рейтинг шахматы',
+    'сильнейшие игроки',
+    'каисса рейтинг',
+    'командные шахматы',
+  ],
+  canonical: '/leaderboard',
+  ogTitle: 'Таблица лидеров — рейтинг игроков клуба — Каисса',
+  ogDescription:
+    'Таблица лидеров и рейтинг сильнейших игроков шахматного клуба Каисса. Актуальный рейтинг Elo, статистика побед, поражений и партий в командных шахматах 2х2 и багхаусе.',
+  ogImage: 'https://duochess.ru/og-image.png',
+  twitterCard: 'summary_large_image',
+});
 
 const router = useRouter();
 const rows = ref<LeaderboardRow[]>([]);

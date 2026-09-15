@@ -32,14 +32,17 @@ export const router = createRouter({
       path: '/history',
       name: 'history',
       component: () => import('./pages/HistoryPage.vue'),
-      meta: { title: 'Архив партий' },
+      meta: {
+        title: 'Архив партий — база сыгранных матчей — Каисса',
+        description: 'Архив и база сыгранных партий шахматного клуба Каисса. Просмотр реплеев игр 2х2 на одной доске и багхауса, разбор ходов и экспорт в PGN.',
+      },
     },
     { path: '/replay/:id', redirect: '/history' },
     {
       path: '/players/:username',
       name: 'profile',
       component: () => import('./pages/ProfilePage.vue'),
-      meta: { title: (to: any) => `Профиль ${to.params.username}` },
+      meta: { title: (to: any) => `Профиль игрока ${to.params.username} — рейтинг, статистика в Каиссе` },
     },
     {
       path: '/rules/bughouse',
@@ -77,8 +80,8 @@ export const router = createRouter({
       name: 'leaderboard',
       component: () => import('./pages/LeaderboardPage.vue'),
       meta: {
-        title: 'Таблица лидеров',
-        description: 'Таблица лидеров шахматного клуба Каисса: рейтинг игроков Elo, статистика побед, поражений и партий в командных шахматах 2х2 и багхаусе.',
+        title: 'Таблица лидеров — рейтинг игроков клуба — Каисса',
+        description: 'Таблица лидеров и актуальный рейтинг игроков шахматного клуба Каисса: рейтинг Elo, статистика побед, поражений и партий в командных шахматах 2х2 и багхаусе.',
       },
     },
     {
@@ -103,56 +106,10 @@ router.beforeEach(async (to) => {
   }
 });
 
-router.afterEach((to) => {
-  const baseTitle = 'Каисса — командные шахматы 2×2 и Багхаус онлайн';
-  if (to.meta?.title) {
-    if (typeof to.meta.title === 'function') {
-      document.title = `${to.meta.title(to)} — Каисса`;
-    } else if (to.path === '/') {
-      document.title = to.meta.title as string;
-    } else {
-      document.title = `${to.meta.title} — Каисса`;
-    }
-  } else {
-    document.title = baseTitle;
-  }
-
-  // Обновление SEO-тегов в DOM
-  const desc = to.meta?.description as string | undefined;
-  if (desc) {
-    let metaDesc = document.querySelector('meta[name="description"]');
-    if (!metaDesc) {
-      metaDesc = document.createElement('meta');
-      metaDesc.setAttribute('name', 'description');
-      document.head.appendChild(metaDesc);
-    }
-    metaDesc.setAttribute('content', desc);
-
-    const ogDesc = document.querySelector('meta[property="og:description"]');
-    if (ogDesc) ogDesc.setAttribute('content', desc);
-
-    const twDesc = document.querySelector('meta[name="twitter:description"]');
-    if (twDesc) twDesc.setAttribute('content', desc);
-  }
-
-  const ogTitle = document.querySelector('meta[property="og:title"]');
-  if (ogTitle) ogTitle.setAttribute('content', document.title);
-
-  const twTitle = document.querySelector('meta[name="twitter:title"]');
-  if (twTitle) twTitle.setAttribute('content', document.title);
-
-  const canonical = document.querySelector('link[rel="canonical"]');
-  if (canonical) {
-    canonical.setAttribute('href', `https://duochess.ru${to.path}`);
-  }
-
-  const ogUrl = document.querySelector('meta[property="og:url"]');
-  if (ogUrl) {
-    ogUrl.setAttribute('content', `https://duochess.ru${to.path}`);
-  }
-
+router.afterEach(() => {
   // Скролл вверх при переходах между страницами
   if (typeof window !== 'undefined') {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }
 });
+

@@ -1,5 +1,6 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
+import { createHead } from '@unhead/vue/client';
 import App from './App.vue';
 import { router } from './router';
 
@@ -9,4 +10,8 @@ import '@lichess-org/chessground/assets/chessground.base.css';
 import '@lichess-org/chessground/assets/chessground.cburnett.css';
 import './styles/main.css';
 
-createApp(App).use(createPinia()).use(router).mount('#app');
+const app = createApp(App);
+const head = createHead();
+
+app.use(createPinia()).use(router).use(head).mount('#app');
+

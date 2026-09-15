@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import AppIcon from '../components/AppIcon.vue';
 import CtaBanner from '../components/CtaBanner.vue';
+import { usePageSeo } from '../composables/useSeo';
+
+usePageSeo({
+  title: 'О шахматном клубе Каисса',
+  description:
+    'О шахматном клубе Каисса: первая платформа для командных шахмат 2х2 на одной доске и шведских шахмат (Багхаус) онлайн. Stockfish WASM боты, адаптивный рейтинг Elo и живое сообщество.',
+  canonical: '/about',
+  keywords: ['о клубе каисса', 'командные шахматы', 'багхаус онлайн', 'stockfish wasm'],
+});
 </script>
 
 <template>

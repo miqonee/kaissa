@@ -9,6 +9,28 @@ import GameReplayModal from '../components/GameReplayModal.vue';
 import AppIcon from '../components/AppIcon.vue';
 
 import { openLichessAnalysis } from '../api/lichess';
+import { usePageSeo } from '../composables/useSeo';
+
+usePageSeo({
+  title: 'Архив партий — база сыгранных матчей — Каисса',
+  description:
+    'База и архив сыгранных партий шахматного клуба Каисса. Просмотр реплеев командных шахмат 2х2 и багхауса, разбор партий, ходы и экспорт в PGN.',
+  keywords: [
+    'архив партий',
+    'база партий',
+    'история шахматных игр',
+    'реплеи шахмат',
+    'pgn шахматы',
+    'каисса архив',
+    'командные шахматы история',
+  ],
+  canonical: '/history',
+  ogTitle: 'Архив партий — база сыгранных матчей — Каисса',
+  ogDescription:
+    'База и архив сыгранных партий шахматного клуба Каисса. Просмотр реплеев командных шахмат 2х2 и багхауса, разбор партий и скачивание PGN.',
+  ogImage: 'https://duochess.ru/og-image.png',
+  twitterCard: 'summary_large_image',
+});
 
 const auth = useAuthStore();
 const router = useRouter();

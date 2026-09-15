@@ -3,6 +3,14 @@ import { ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { resetSocket } from '../api/socket';
+import { usePageSeo } from '../composables/useSeo';
+
+usePageSeo({
+  title: 'Вход и регистрация — Каисса',
+  description:
+    'Вход и регистрация в шахматном клубе Каисса. Создайте аккаунт для игры в командные шахматы 2х2 и багхаус, сохранения статистики и участия в рейтинге.',
+  canonical: '/login',
+});
 
 const auth = useAuthStore();
 const router = useRouter();

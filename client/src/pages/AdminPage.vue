@@ -4,6 +4,13 @@ import { fmtDuration, type AdminUserRow, type PlatformMetrics } from 'shared';
 import { api } from '../api/rest';
 import { useAuthStore } from '../stores/auth';
 import AppIcon from '../components/AppIcon.vue';
+import { usePageSeo } from '../composables/useSeo';
+
+usePageSeo({
+  title: 'Панель администратора — Каисса',
+  canonical: '/admin',
+  noindex: true,
+});
 
 const auth = useAuthStore();
 const users = ref<AdminUserRow[]>([]);

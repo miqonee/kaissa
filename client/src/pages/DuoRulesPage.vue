@@ -2,6 +2,15 @@
 import AppIcon from '../components/AppIcon.vue';
 import ChessDiagram from '../components/ChessDiagram.vue';
 import CtaBanner from '../components/CtaBanner.vue';
+import { usePageSeo } from '../composables/useSeo';
+
+usePageSeo({
+  title: 'Командные шахматы 2 на 2 на одной доске: правила чередования ходов',
+  description:
+    'Правила игры в командные шахматы 2 на 2 (Duo Chess) на одной доске: регламент чередования ходов, правило победы при пате, командный тайм-контроль и тактика взаимодействия с напарником в клубе Каисса.',
+  canonical: '/rules/duo',
+  keywords: ['командные шахматы 2х2', 'правила 2 на 2', 'duo chess', 'чередование ходов'],
+});
 </script>
 
 <template>

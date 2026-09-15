@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import type { AdminUserRow, PlatformMetrics } from 'shared';
+import { fmtDuration, type AdminUserRow, type PlatformMetrics } from 'shared';
 import { api } from '../api/rest';
 import { useAuthStore } from '../stores/auth';
 import AppIcon from '../components/AppIcon.vue';
@@ -128,13 +128,36 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
 }
 
-function fmtDuration(sec: number): string {
-  if (!sec) return '0с';
-  const m = Math.floor(sec / 60);
-  const s = Math.round(sec % 60);
-  if (!m) return `${s}с`;
-  return `${m}м ${s}с`;
-}
+const durationTooltip = computed(() => {
+  if (!metrics.value?.durationStats) return '';
+  const ds = metrics.value.durationStats;
+  const lines: string[] = [];
+  if (ds.timedCount > 0) {
+    lines.push(`С контролем времени: ${fmtDuration(ds.timedAvgSec)} (${ds.timedCount} партий)`);
+  }
+  if (ds.noClockCount > 0) {
+    lines.push(`Без часов: ${fmtDuration(ds.noClockAvgSec)} (${ds.noClockCount} партий)`);
+  }
+  if (ds.byTimeControl?.length) {
+    lines.push('По контролям: ' + ds.byTimeControl.map((t) => `${t.label}: ${fmtDuration(t.avgSec)} (${t.count})`).join(', '));
+  }
+  if (ds.byMode?.teamSec || ds.byMode?.bughouseSec) {
+    const parts: string[] = [];
+    if (ds.byMode.teamSec) parts.push(`2×2: ${fmtDuration(ds.byMode.teamSec)}`);
+    if (ds.byMode.bughouseSec) parts.push(`Багхаус: ${fmtDuration(ds.byMode.bughouseSec)}`);
+    lines.push('По режимам: ' + parts.join(', '));
+  }
+  return lines.join('\n');
+});
+
+const durationSubtext = computed(() => {
+  if (!metrics.value?.durationStats?.byTimeControl?.length) return '';
+  const topControls = metrics.value.durationStats.byTimeControl
+    .filter((t) => t.label !== 'Без часов')
+    .slice(0, 2);
+  if (!topControls.length) return '';
+  return topControls.map((t) => `${t.label}: ${fmtDuration(t.avgSec)}`).join(' · ');
+});
 </script>
 
 <template>
@@ -168,9 +191,10 @@ function fmtDuration(sec: number): string {
           <span class="dim tiny">Всего ходов</span>
           <span class="metric-val mono">{{ metrics.totalMoves }}</span>
         </div>
-        <div class="metric-card">
+        <div class="metric-card" :title="durationTooltip">
           <span class="dim tiny">Ср. длительность</span>
           <span class="metric-val mono">{{ fmtDuration(metrics.avgGameDurationSec) }}</span>
+          <span v-if="durationSubtext" class="metric-sub-hint mono tiny dim">{{ durationSubtext }}</span>
         </div>
       </div>
 
@@ -508,6 +532,14 @@ function fmtDuration(sec: number): string {
   font-size: 20px;
   font-weight: 700;
   color: var(--ink);
+}
+
+.metric-sub-hint {
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .bot-metrics-panel {

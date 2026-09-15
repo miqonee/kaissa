@@ -315,6 +315,30 @@ export function timeControlLabel(tc: TimeControl): string {
   return tc.kind === 'none' ? '∞' : `${tc.baseMin}+${tc.incSec}`;
 }
 
+/**
+ * Форматирование длительности (в секундах) в человекочитаемый вид: "8м 56с", "45с", "1ч 15м".
+ */
+export function fmtDuration(sec: number): string {
+  if (!sec || isNaN(sec) || sec <= 0) return '0с';
+  const totalSec = Math.round(sec);
+  if (totalSec === 0) return '0с';
+
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+
+  if (h > 0) {
+    if (m === 0 && s === 0) return `${h}ч`;
+    if (s === 0) return `${h}ч ${m}м`;
+    return `${h}ч ${m}м ${s}с`;
+  }
+  if (m > 0) {
+    if (s === 0) return `${m}м`;
+    return `${m}м ${s}с`;
+  }
+  return `${s}с`;
+}
+
 
 // ---------- Описание режимов (для UI создания лобби) ----------
 
@@ -608,12 +632,32 @@ export interface BotPairMetric {
   winRate: number;
 }
 
+export interface DurationByTimeControl {
+  label: string;
+  avgSec: number;
+  count: number;
+}
+
+export interface GameDurationStats {
+  avgSec: number;
+  timedAvgSec: number;
+  timedCount: number;
+  noClockAvgSec: number;
+  noClockCount: number;
+  byMode: {
+    teamSec: number;
+    bughouseSec: number;
+  };
+  byTimeControl: DurationByTimeControl[];
+}
+
 export interface PlatformMetrics {
   onlineUsers: number;
   totalUsers: number;
   totalGames: number;
   totalMoves: number;
   avgGameDurationSec: number;
+  durationStats?: GameDurationStats;
   botMetrics: BotLevelMetric[];
   botMetricsVsHuman: BotLevelMetric[];
   botMetricsVsBot: BotLevelMetric[];

@@ -10,6 +10,7 @@ import { currentUser, requireAdmin } from '../auth/auth.js';
 import { prisma } from '../prisma.js';
 import { presence } from '../socket/presence.js';
 import { botStatsTracker } from '../ai/botStats.js';
+import { calculatePlatformDurationMetrics } from './durationStats.js';
 
 // ============================================================
 // Админка: список игроков, удаление аккаунтов, сброс рейтинга.
@@ -28,7 +29,17 @@ adminRouter.get('/metrics', async (_req, res) => {
     prisma.gameMove.count(),
     prisma.game.findMany({
       where: { status: 'finished', endedAt: { not: null } },
-      select: { startedAt: true, endedAt: true },
+      orderBy: { endedAt: 'desc' },
+      select: {
+        id: true,
+        mode: true,
+        baseMin: true,
+        incSec: true,
+        noClock: true,
+        startedAt: true,
+        endedAt: true,
+        _count: { select: { moves: true } },
+      },
       take: 200,
     }),
     prisma.user.findMany({ select: { id: true } }),
@@ -46,13 +57,7 @@ adminRouter.get('/metrics', async (_req, res) => {
     }),
   ]);
 
-  let totalDurationSec = 0;
-  for (const g of finishedGames) {
-    if (g.endedAt) {
-      totalDurationSec += Math.max(0, (g.endedAt.getTime() - g.startedAt.getTime()) / 1000);
-    }
-  }
-  const avgGameDurationSec = finishedGames.length ? Math.round(totalDurationSec / finishedGames.length) : 0;
+  const { avgGameDurationSec, durationStats } = calculatePlatformDurationMetrics(finishedGames);
   const onlineUsers = users.filter((u) => presence.isOnline(u.id)).length;
 
   const createAcc = () => ({
@@ -250,6 +255,7 @@ adminRouter.get('/metrics', async (_req, res) => {
     totalGames,
     totalMoves,
     avgGameDurationSec,
+    durationStats,
     botMetrics: botMetricsVsHuman,
     botMetricsVsHuman,
     botMetricsVsBot,

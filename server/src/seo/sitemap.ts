@@ -173,20 +173,20 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
     {
       loc: `${baseUrl}/rules/duo`,
       lastmod: today,
-      changefreq: 'monthly',
-      priority: 0.6,
+      changefreq: 'weekly',
+      priority: 0.9,
     },
     {
       loc: `${baseUrl}/rules/bughouse`,
       lastmod: today,
-      changefreq: 'monthly',
-      priority: 0.6,
+      changefreq: 'weekly',
+      priority: 0.9,
     },
     {
       loc: `${baseUrl}/about`,
       lastmod: today,
       changefreq: 'monthly',
-      priority: 0.5,
+      priority: 0.8,
     },
     // Вход и регистрация: статичная служебная страница
     {
@@ -233,6 +233,9 @@ export function generateRobotsTxt(options: { baseUrl?: string; host?: string } =
     'Disallow: /lobby/',
     'Disallow: /lobby/*',
     'Disallow: /api/',
+    '',
+    '# Clean-param for Yandex search engine',
+    'Clean-param: utm_source&utm_medium&utm_campaign&utm_content&utm_term&action&ref /',
     '',
     `Host: ${host}`,
     `Sitemap: ${baseUrl}/sitemap.xml`,

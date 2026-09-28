@@ -19,7 +19,7 @@ const auth = useAuthStore();
           <span>Каисса</span>
         </router-link>
         <p class="footer-desc">
-          Онлайн-платформа для командных шахмат 2×2 на одной доске и шведских шахмат (Багхаус).
+          Онлайн-платформа для командных шахмат на двоих: 2х2 на одной доске и шведские шахматы (Багхаус).
         </p>
       </div>
 
@@ -36,11 +36,11 @@ const auth = useAuthStore();
         <div class="footer-left">
           <span class="footer-copy">© 2026 «Каисса»</span>
           <span class="footer-sep">·</span>
-          <span class="footer-tagline">Командные шахматы онлайн</span>
+          <span class="footer-tagline">Шахматы на двоих онлайн</span>
         </div>
 
         <nav class="footer-bottom-nav" aria-label="Правила и о платформе">
-          <router-link to="/rules/duo" class="footer-link">Правила 2×2</router-link>
+          <router-link to="/rules/duo" class="footer-link">Правила 2 на 2</router-link>
           <span class="footer-sep">·</span>
           <router-link to="/rules/bughouse" class="footer-link">Багхаус</router-link>
           <span class="footer-sep">·</span>

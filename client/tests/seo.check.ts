@@ -65,14 +65,14 @@ app.runWithContext(() => {
   const username = ref('alisa');
   const profileData = ref<{ user?: { username: string; rating: number; wins: number; losses: number; draws: number } } | null>(null);
 
-  const profileTitle = computed(() => `Профиль игрока ${username.value} — рейтинг, статистика в Каиссе`);
+  const profileTitle = computed(() => `Профиль игрока ${username.value}: рейтинг и статистика | Каисса`);
   const profileDescription = computed(() => {
     if (profileData.value?.user) {
       const u = profileData.value.user;
       const total = u.wins + u.losses + (u.draws || 0);
       return `Профиль игрока ${u.username} в Каиссе: рейтинг ${u.rating} Elo, побед: ${u.wins}, поражений: ${u.losses}, сыграно партий: ${total}. Статистика и история матчей.`;
     }
-    return `Профиль игрока ${username.value} — рейтинг, статистика партий и история матчей в Каиссе.`;
+    return `Профиль игрока ${username.value}: рейтинг, статистика партий и история матчей в Каиссе.`;
   });
 
   const profileSeo = usePageSeo({
@@ -83,7 +83,7 @@ app.runWithContext(() => {
   });
 
   console.assert(
-    profileSeo.title.value === 'Профиль игрока alisa — рейтинг, статистика в Каиссе',
+    profileSeo.title.value === 'Профиль игрока alisa: рейтинг и статистика | Каисса',
     `Initial profile title incorrect: ${profileSeo.title.value}`,
   );
   console.assert(
@@ -110,7 +110,7 @@ app.runWithContext(() => {
   profileData.value = null;
 
   console.assert(
-    profileSeo.title.value === 'Профиль игрока bob — рейтинг, статистика в Каиссе',
+    profileSeo.title.value === 'Профиль игрока bob: рейтинг и статистика | Каисса',
     `Profile title must react to username change: ${profileSeo.title.value}`,
   );
   console.assert(
@@ -130,21 +130,21 @@ app.runWithContext(() => {
 
   const gameTitle = computed(() => {
     const id = gameId.value;
-    if (!gameState.value) return `Партия #${id} — Каисса`;
-    const mode = gameState.value.mode === 'bughouse' ? 'Багхаус' : '2×2';
+    if (!gameState.value) return `Партия #${id} | Каисса`;
+    const mode = gameState.value.mode === 'bughouse' ? 'Багхаус' : '2х2';
     const t1 = gameState.value.participants.filter((p) => p.team === 1).map((p) => p.username).join(' / ');
     const t2 = gameState.value.participants.filter((p) => p.team === 2).map((p) => p.username).join(' / ');
-    if (t1 && t2) return `Партия #${id} (${mode}) — ${t1} vs ${t2} — Каисса`;
-    return `Партия #${id} (${mode}) — Каисса`;
+    if (t1 && t2) return `Партия #${id} (${mode}): ${t1} vs ${t2} | Каисса`;
+    return `Партия #${id} (${mode}) | Каисса`;
   });
 
   const gameOgDescription = computed(() => {
     const id = gameId.value;
-    if (!gameState.value) return `Онлайн-просмотр партии #${id} в шахматном клубе Каисса.`;
+    if (!gameState.value) return `Онлайн-просмотр партии #${id} на платформе Каисса.`;
     const mode = gameState.value.mode === 'bughouse' ? 'Багхаус (шведские шахматы)' : 'Командные шахматы 2х2';
     const t1 = gameState.value.participants.filter((p) => p.team === 1).map((p) => p.username).join(' / ');
     const t2 = gameState.value.participants.filter((p) => p.team === 2).map((p) => p.username).join(' / ');
-    return `Партия #${id} [${mode}]: ${t1} против ${t2}. Смотрите онлайн в шахматном клубе Каисса!`;
+    return `Партия #${id} [${mode}]: ${t1} против ${t2}. Смотрите онлайн на платформе Каисса!`;
   });
 
   const gameSeo = usePageSeo({
@@ -153,7 +153,7 @@ app.runWithContext(() => {
     canonical: computed(() => `/game/${gameId.value}`),
   });
 
-  console.assert(gameSeo.title.value === 'Партия #101 — Каисса', `Initial game title: ${gameSeo.title.value}`);
+  console.assert(gameSeo.title.value === 'Партия #101 | Каисса', `Initial game title: ${gameSeo.title.value}`);
   console.assert(gameSeo.canonical.value === 'https://duochess.ru/game/101', `Game canonical: ${gameSeo.canonical.value}`);
 
   gameState.value = {
@@ -169,7 +169,7 @@ app.runWithContext(() => {
   };
 
   console.assert(
-    gameSeo.title.value === 'Партия #101 (Багхаус) — Алиса / Боб vs Чарли / Дима — Каисса',
+    gameSeo.title.value === 'Партия #101 (Багхаус): Алиса / Боб vs Чарли / Дима | Каисса',
     `Dynamic game title incorrect: ${gameSeo.title.value}`,
   );
   console.assert(

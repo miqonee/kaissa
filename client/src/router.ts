@@ -8,33 +8,33 @@ export const router = createRouter({
       path: '/',
       name: 'home',
       component: () => import('./pages/HomePage.vue'),
-      meta: { title: 'Каисса — командные шахматы 2×2 и Багхаус онлайн' },
+      meta: { title: 'Шахматы на двоих онлайн: играть 2 на 2 и в Багхаус | Каисса' },
     },
     {
       path: '/login',
       name: 'login',
       component: () => import('./pages/LoginPage.vue'),
-      meta: { title: 'Вход и регистрация' },
+      meta: { title: 'Вход и регистрация в шахматном клубе | Каисса' },
     },
     {
       path: '/lobby/:id',
       name: 'lobby',
       component: () => import('./pages/LobbyPage.vue'),
-      meta: { title: 'Лобби матча' },
+      meta: { title: 'Лобби матча | Каисса' },
     },
     {
       path: '/game/:id',
       name: 'game',
       component: () => import('./pages/GamePage.vue'),
-      meta: { title: (to: any) => `Партия #${to.params.id}` },
+      meta: { title: (to: any) => `Партия #${to.params.id} | Каисса` },
     },
     {
       path: '/history',
       name: 'history',
       component: () => import('./pages/HistoryPage.vue'),
       meta: {
-        title: 'Архив партий — база сыгранных матчей — Каисса',
-        description: 'Архив партий платформы Каисса. Просмотр реплеев игр 2х2 на одной доске и багхауса, разбор ходов и экспорт в PGN.',
+        title: 'Архив партий: реплеи командных шахмат 2 на 2 и Багхауса | Каисса',
+        description: 'Архив сыгранных матчей на платформе Каисса. Интерактивный просмотр реплеев игр 2х2 и шведских шахмат, история ходов и анализ партий.',
       },
     },
     { path: '/replay/:id', redirect: '/history' },
@@ -42,16 +42,16 @@ export const router = createRouter({
       path: '/players/:username',
       name: 'profile',
       component: () => import('./pages/ProfilePage.vue'),
-      meta: { title: (to: any) => `Профиль игрока ${to.params.username} — рейтинг, статистика в Каиссе` },
+      meta: { title: (to: any) => `Профиль игрока ${to.params.username}: рейтинг и статистика | Каисса` },
     },
     {
       path: '/rules/bughouse',
       name: 'rules-bughouse',
       component: () => import('./pages/BughouseRulesPage.vue'),
       meta: {
-        title: 'Правила шведских шахмат (Багхаус) онлайн: дропы, тактика, особенности',
+        title: 'Правила шведских шахмат (Багхаус) онлайн: тактика и дропы | Каисса',
         description:
-          'Правила шведских шахмат (Bughouse Chess) онлайн: дропы фигур из резерва, передача сбитых фигур партнеру, разжалование пешек и командная игра на платформе Каисса.',
+          'Подробные правила шведских шахмат (багхаус) онлайн. Как передавать сбитые фигуры партнёру, правила дропа на доску, разжалование пешек и тактика победы в паре.',
       },
     },
     {
@@ -59,9 +59,9 @@ export const router = createRouter({
       name: 'rules-duo',
       component: () => import('./pages/DuoRulesPage.vue'),
       meta: {
-        title: 'Командные шахматы 2 на 2 на одной доске: правила игры',
+        title: 'Командные шахматы 2 на 2 на одной доске: правила игры | Каисса',
         description:
-          'Правила игры в командные шахматы 2 на 2 на одной доске: поочередность ходов, командные часы и основы игры в паре на платформе Каисса.',
+          'Официальные правила командных шахмат 2 на 2 на одной доске. Поочерёдные ходы напарников, командные часы, тактика игры в паре на платформе Каисса.',
       },
     },
     { path: '/rules', redirect: '/rules/duo' },
@@ -70,9 +70,9 @@ export const router = createRouter({
       name: 'about',
       component: () => import('./pages/AboutPage.vue'),
       meta: {
-        title: 'О платформе Каисса',
+        title: 'О платформе Каисса: командные шахматы 2 на 2 и Багхаус онлайн',
         description:
-          'О платформе Каисса: площадка для командных шахмат 2х2 на одной доске и шведских шахмат (Багхаус) онлайн. Боты разного уровня и игра в реальном времени.',
+          'Платформа Каисса — современный шахматный клуб для командных шахмат 2х2 и багхауса в реальном времени. Рейтинг Elo, боты на базе Stockfish WASM, открытый код.',
       },
     },
     {
@@ -80,15 +80,15 @@ export const router = createRouter({
       name: 'leaderboard',
       component: () => import('./pages/LeaderboardPage.vue'),
       meta: {
-        title: 'Таблица лидеров — рейтинг игроков — Каисса',
-        description: 'Таблица лидеров и актуальный рейтинг игроков платформы Каисса: рейтинг Elo, статистика побед, поражений и партий.',
+        title: 'Таблица лидеров: рейтинг игроков в шахматы 2 на 2 и Багхаус | Каисса',
+        description: 'Рейтинг игроков и таблица лидеров шахматной платформы Каисса. Рейтинг Elo, статистика побед и поражений в командных шахматах 2х2 и шведских шахматах.',
       },
     },
     {
       path: '/admin',
       name: 'admin',
       component: () => import('./pages/AdminPage.vue'),
-      meta: { title: 'Панель администратора' },
+      meta: { title: 'Панель администратора | Каисса' },
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],

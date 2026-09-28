@@ -7,7 +7,7 @@ import AppIcon from '../components/AppIcon.vue';
 import { usePageSeo } from '../composables/useSeo';
 
 usePageSeo({
-  title: 'Панель администратора — Каисса',
+  title: 'Панель администратора | Каисса',
   canonical: '/admin',
   noindex: true,
 });

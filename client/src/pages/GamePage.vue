@@ -35,14 +35,14 @@ const state = ref<GameState | null>(null);
 
 const pageTitle = computed(() => {
   const id = route.params.id;
-  if (!state.value) return `Партия #${id} — Каисса`;
-  const mode = state.value.mode === 'bughouse' ? 'Багхаус' : '2×2';
+  if (!state.value) return `Партия #${id} | Каисса`;
+  const mode = state.value.mode === 'bughouse' ? 'Багхаус' : '2х2';
   const t1 = state.value.participants.filter((p) => p.team === 1).map((p) => p.username).join(' / ');
   const t2 = state.value.participants.filter((p) => p.team === 2).map((p) => p.username).join(' / ');
   if (t1 && t2) {
-    return `Партия #${id} (${mode}) — ${t1} vs ${t2} — Каисса`;
+    return `Партия #${id} (${mode}): ${t1} vs ${t2} | Каисса`;
   }
-  return `Партия #${id} (${mode}) — Каисса`;
+  return `Партия #${id} (${mode}) | Каисса`;
 });
 
 const pageOgDescription = computed(() => {

@@ -15,14 +15,14 @@ const error = ref('');
 const replayId = ref<number | null>(null);
 
 const username = computed(() => (route.params.username as string) || '');
-const pageTitle = computed(() => `Профиль игрока ${username.value} — рейтинг, статистика в Каиссе`);
+const pageTitle = computed(() => `Профиль игрока ${username.value}: рейтинг и статистика | Каисса`);
 const pageDescription = computed(() => {
   if (profile.value?.user) {
     const u = profile.value.user;
     const total = u.wins + u.losses + (u.draws || 0);
     return `Профиль игрока ${u.username} в Каиссе: рейтинг ${u.rating} Elo, побед: ${u.wins}, поражений: ${u.losses}, сыграно партий: ${total}. Статистика и история матчей.`;
   }
-  return `Профиль игрока ${username.value} — рейтинг, статистика партий и история матчей в Каиссе.`;
+  return `Профиль игрока ${username.value}: рейтинг, статистика партий и история матчей в Каиссе.`;
 });
 
 usePageSeo({

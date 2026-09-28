@@ -5,5 +5,8 @@ Disallow: /lobby/
 Disallow: /lobby/*
 Disallow: /api/
 
+# Clean-param for Yandex search engine
+Clean-param: utm_source&utm_medium&utm_campaign&utm_content&utm_term&action&ref /
+
 Host: duochess.ru
 Sitemap: https://duochess.ru/sitemap.xml

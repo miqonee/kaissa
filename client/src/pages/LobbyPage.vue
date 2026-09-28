@@ -17,7 +17,7 @@ const socket = getSocket();
 const lobby = ref<LobbySummary | null>(null);
 
 usePageSeo({
-  title: computed(() => (lobby.value ? `Стол «${lobby.value.name}» — Каисса` : 'Лобби — Каисса')),
+  title: computed(() => (lobby.value ? `Стол «${lobby.value.name}» | Каисса` : 'Лобби матча | Каисса')),
   description: 'Ожидание игроков и подготовка к командной шахматной партии на платформе Каисса.',
   canonical: computed(() => `/lobby/${route.params.id}`),
 });

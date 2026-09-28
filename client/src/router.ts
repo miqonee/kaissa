@@ -1,3 +1,4 @@
+import { nextTick } from 'vue';
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from './stores/auth';
 
@@ -106,10 +107,25 @@ router.beforeEach(async (to) => {
   }
 });
 
-router.afterEach(() => {
+export const YANDEX_METRIKA_ID = 113120948;
+
+router.afterEach((to, from) => {
   // Скролл вверх при переходах между страницами
   if (typeof window !== 'undefined') {
     window.scrollTo({ top: 0, behavior: 'instant' });
+
+    // SPA-трекинг переходов для Яндекс.Метрики (только при клиентских переходах после инициализации)
+    if (from.matched.length > 0) {
+      nextTick(() => {
+        const ym = (window as any).ym;
+        if (typeof ym === 'function') {
+          ym(YANDEX_METRIKA_ID, 'hit', to.fullPath, {
+            title: document.title,
+            referer: from.fullPath,
+          });
+        }
+      });
+    }
   }
 });
 

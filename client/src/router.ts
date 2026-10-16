@@ -93,7 +93,12 @@ export const router = createRouter({
       component: () => import('./pages/AdminPage.vue'),
       meta: { title: 'Панель администратора | Каисса' },
     },
-    { path: '/:pathMatch(.*)*', redirect: '/' },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('./pages/NotFoundPage.vue'),
+      meta: { title: '404 — Страница не найдена | Каисса' },
+    },
   ],
 });
 

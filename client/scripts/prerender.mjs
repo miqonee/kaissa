@@ -553,20 +553,33 @@ console.log('[prerender] Generating static HTML pages for SEO...');
 
 for (const page of pages) {
   const rendered = generateHtmlForPage(page);
-  let targetPath;
 
   if (page.path === '/') {
-    targetPath = indexHtmlPath;
+    fs.writeFileSync(indexHtmlPath, rendered, 'utf8');
+    console.log(`[prerender] Rendered: / -> index.html`);
   } else {
-    const pageSubDir = path.join(distDir, page.path.replace(/^\/+/, ''));
+    const cleanPath = page.path.replace(/^\/+/, '');
+
+    // 1. Создаем dist/<path>.html для прямой отдачи Nginx без слеша и без редиректов
+    const flatHtmlPath = path.join(distDir, `${cleanPath}.html`);
+    const flatHtmlDir = path.dirname(flatHtmlPath);
+    if (!fs.existsSync(flatHtmlDir)) {
+      fs.mkdirSync(flatHtmlDir, { recursive: true });
+    }
+    fs.writeFileSync(flatHtmlPath, rendered, 'utf8');
+
+    // 2. Создаем dist/<path>/index.html для обратной совместимости
+    const pageSubDir = path.join(distDir, cleanPath);
     if (!fs.existsSync(pageSubDir)) {
       fs.mkdirSync(pageSubDir, { recursive: true });
     }
-    targetPath = path.join(pageSubDir, 'index.html');
-  }
+    const nestedHtmlPath = path.join(pageSubDir, 'index.html');
+    fs.writeFileSync(nestedHtmlPath, rendered, 'utf8');
 
-  fs.writeFileSync(targetPath, rendered, 'utf8');
-  console.log(`[prerender] Rendered: ${page.path} -> ${path.relative(distDir, targetPath)}`);
+    console.log(
+      `[prerender] Rendered: ${page.path} -> ${path.relative(distDir, flatHtmlPath)} & ${path.relative(distDir, nestedHtmlPath)}`,
+    );
+  }
 }
 
 console.log('[prerender] Successfully prerendered all 7 public pages!');

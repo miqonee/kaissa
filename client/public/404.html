@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>404 — Страница не найдена | Каисса</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#1a1816" />
+
+    <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16" type="image/x-icon" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
+
+    <style>
+      :root {
+        --bg: #1a1816;
+        --ink: #ece5d8;
+        --muted: #a89f91;
+        --surface: #22201c;
+        --line: #38342c;
+        --primary: #c9a86a;
+        --primary-hover: #dfbc7a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        min-height: 100%;
+        background-color: var(--bg);
+        color: var(--ink);
+        font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      .container {
+        max-width: 520px;
+        padding: 40px 24px;
+        text-align: center;
+      }
+      .logo {
+        width: 64px;
+        height: 64px;
+        margin-bottom: 24px;
+        border-radius: 14px;
+      }
+      .error-code {
+        font-size: 72px;
+        font-weight: 700;
+        line-height: 1;
+        margin: 0 0 16px 0;
+        color: var(--primary);
+        letter-spacing: -2px;
+      }
+      h1 {
+        font-size: 24px;
+        font-weight: 600;
+        margin: 0 0 12px 0;
+      }
+      p {
+        font-size: 16px;
+        line-height: 1.5;
+        color: var(--muted);
+        margin: 0 0 32px 0;
+      }
+      .btn {
+        display: inline-block;
+        background-color: var(--primary);
+        color: #1a1816;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 15px;
+        padding: 12px 28px;
+        border-radius: 8px;
+        transition: background-color 0.15s ease, transform 0.15s ease;
+      }
+      .btn:hover {
+        background-color: var(--primary-hover);
+        transform: translateY(-1px);
+      }
+      .links {
+        margin-top: 32px;
+        font-size: 14px;
+      }
+      .links a {
+        color: var(--muted);
+        text-decoration: none;
+        margin: 0 8px;
+      }
+      .links a:hover {
+        color: var(--ink);
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <img src="/favicon.svg" alt="Каисса" class="logo" width="64" height="64" />
+      <div class="error-code">404</div>
+      <h1>Страница не найдена</h1>
+      <p>Запрашиваемая страница была перемещена, удалена или никогда не существовала.</p>
+      <a href="/" class="btn">Вернуться на главную</a>
+      <div class="links">
+        <a href="/rules/duo">Правила 2х2</a>
+        <a href="/rules/bughouse">Багхаус</a>
+        <a href="/leaderboard">Рейтинг</a>
+        <a href="/about">О платформе</a>
+      </div>
+    </div>
+  </body>
+</html>

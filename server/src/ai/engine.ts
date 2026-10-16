@@ -167,14 +167,17 @@ export async function chooseBotMove(
   }
 
   // 2. Расчет ходов через Stockfish WASM
-  const levelCfg = BOT_LEVELS[level - 1] || BOT_LEVELS[3]; // default level 4
+  // Снижаем эффективную сложность на 1 уровень вниз, чтобы игра была комфортнее и боты допускали человеческие ошибки
+  const effectiveLevel = Math.max(1, level - 1);
+  const effectiveElo = Math.max(500, elo - 150);
+  const levelCfg = BOT_LEVELS[effectiveLevel - 1] || BOT_LEVELS[0];
   const depth = levelCfg.depth;
   const skillLevel = levelCfg.skillLevel;
   const multiPv = 3;
 
   try {
     const searchRes = await stockfish.search(fen, {
-      elo,
+      elo: effectiveElo,
       skillLevel,
       depth,
       multiPv,

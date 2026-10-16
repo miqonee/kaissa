@@ -1,29 +1,25 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import type { LeaderboardRow } from 'shared';
 import { api } from '../api/rest';
 import { usePageSeo } from '../composables/useSeo';
+import { useI18n } from '../stores/i18n';
+
+const i18n = useI18n();
 
 usePageSeo({
-  title: 'Таблица лидеров: рейтинг игроков в шахматы 2 на 2 и Багхаус | Каисса',
-  description:
-    'Рейтинг игроков и таблица лидеров шахматной платформы Каисса. Рейтинг Elo, статистика побед и поражений в командных шахматах 2х2 и шведских шахматах.',
+  title: computed(() => (i18n.locale === 'en' ? `Leaderboard: Player Ratings | ${i18n.t.nav.brand}` : 'Таблица лидеров: рейтинг игроков в шахматы 2 на 2 и Багхаус | Каисса')),
+  description: computed(() => (i18n.locale === 'en' ? 'Player rankings and club leaderboard on Kaissa. Elo ratings, win/loss stats in 2v2 chess and Bughouse.' : 'Рейтинг игроков и таблица лидеров шахматной платформы Каисса. Рейтинг Elo, статистика побед и поражений в командных шахматах 2х2 и шведских шахматах.')),
   keywords: [
     'таблица лидеров',
     'рейтинг игроков',
     'топ шахматистов',
     'elo рейтинг шахматы',
-    'сильнейшие игроки',
-    'каисса рейтинг',
-    'командные шахматы',
-    'шахматы на двоих',
+    'leaderboard',
+    'chess rating',
+    'kaissa',
   ],
   canonical: '/leaderboard',
-  ogTitle: 'Таблица лидеров: рейтинг игроков в шахматы 2 на 2 и Багхаус | Каисса',
-  ogDescription:
-    'Рейтинг игроков и таблица лидеров шахматной платформы Каисса. Рейтинг Elo, статистика побед и поражений в командных шахматах 2х2 и шведских шахматах.',
-  ogImage: 'https://duochess.ru/og-image.png',
-  twitterCard: 'summary_large_image',
 });
 
 const rows = ref<LeaderboardRow[]>([]);
@@ -43,15 +39,22 @@ onMounted(async () => {
   <div class="leaderboard-page">
     <section class="panel leaderboard-panel" aria-labelledby="leaderboard-heading">
       <div class="panel-head">
-        <h1 id="leaderboard-heading" class="panel-title">Рейтинг игроков</h1>
-        <span class="hint">Elo, старт 1200 · K=32</span>
+        <h1 id="leaderboard-heading" class="panel-title">{{ i18n.t.leaderboard.title }}</h1>
+        <span class="hint">Elo, start 1200 · K=32</span>
       </div>
-      <div v-if="loading" class="empty">Загрузка…</div>
-      <div v-else-if="!rows.length" class="empty">Пока никто не играл.</div>
+      <div v-if="loading" class="empty">{{ i18n.locale === 'en' ? 'Loading…' : 'Загрузка…' }}</div>
+      <div v-else-if="!rows.length" class="empty">{{ i18n.t.leaderboard.emptyText }}</div>
       <div v-else class="table-wrap">
         <table class="club">
           <thead>
-            <tr><th style="width: 50px;">#</th><th>Игрок</th><th>Рейтинг</th><th>В</th><th>П</th><th>Партий</th></tr>
+            <tr>
+              <th style="width: 50px;">#</th>
+              <th>{{ i18n.t.leaderboard.colPlayer }}</th>
+              <th>{{ i18n.t.leaderboard.colRating }}</th>
+              <th>{{ i18n.locale === 'en' ? 'W' : 'В' }}</th>
+              <th>{{ i18n.locale === 'en' ? 'L' : 'П' }}</th>
+              <th>{{ i18n.t.leaderboard.colGames }}</th>
+            </tr>
           </thead>
           <tbody>
             <tr v-for="(r, i) in rows" :key="r.userId">

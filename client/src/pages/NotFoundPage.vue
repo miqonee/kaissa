@@ -1,9 +1,13 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { usePageSeo } from '../composables/useSeo';
+import { useI18n } from '../stores/i18n';
+
+const i18n = useI18n();
 
 usePageSeo({
-  title: '404 — Страница не найдена | Каисса',
-  description: 'Запрашиваемая страница не существует или была перемещена.',
+  title: computed(() => (i18n.locale === 'en' ? `404 — Page Not Found | ${i18n.t.nav.brand}` : '404 — Страница не найдена | Каисса')),
+  description: computed(() => (i18n.locale === 'en' ? 'The requested page does not exist or has been moved.' : 'Запрашиваемая страница не существует или была перемещена.')),
   canonical: '/',
 });
 </script>
@@ -12,21 +16,23 @@ usePageSeo({
   <div class="not-found-page">
     <div class="not-found-card panel">
       <div class="error-code">404</div>
-      <h1>Страница не найдена</h1>
+      <h1>{{ i18n.locale === 'en' ? 'Page Not Found' : 'Страница не найдена' }}</h1>
       <p class="description">
-        Запрашиваемая страница была перемещена, удалена или никогда не существовала.
+        {{ i18n.locale === 'en'
+          ? 'The page you are looking for has been moved, removed, or never existed.'
+          : 'Запрашиваемая страница была перемещена, удалена или никогда не существовала.' }}
       </p>
       <div class="actions">
-        <router-link to="/" class="button primary">Вернуться на главную</router-link>
+        <router-link to="/" class="button primary">{{ i18n.locale === 'en' ? 'Back to Home' : 'Вернуться на главную' }}</router-link>
       </div>
       <div class="quick-links">
-        <router-link to="/rules/duo">Правила 2х2</router-link>
+        <router-link to="/rules/duo">{{ i18n.t.footer.rulesDuo }}</router-link>
         <span class="sep">•</span>
-        <router-link to="/rules/bughouse">Багхаус</router-link>
+        <router-link to="/rules/bughouse">{{ i18n.t.footer.rulesBughouse }}</router-link>
         <span class="sep">•</span>
-        <router-link to="/leaderboard">Рейтинг</router-link>
+        <router-link to="/leaderboard">{{ i18n.t.nav.leaderboard }}</router-link>
         <span class="sep">•</span>
-        <router-link to="/about">О платформе</router-link>
+        <router-link to="/about">{{ i18n.t.footer.about }}</router-link>
       </div>
     </div>
   </div>

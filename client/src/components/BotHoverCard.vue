@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, onBeforeUnmount } from 'vue';
 import { getBotPersonality, eloToLevel, BOT_LEVELS } from 'shared';
+import { useI18n } from '../stores/i18n';
 
 const props = defineProps<{
   username?: string | null;
   rating?: number | null;
 }>();
 
+const i18n = useI18n();
 const isVisible = ref(false);
 const triggerRef = ref<HTMLElement | null>(null);
 const pos = ref({ top: 0, left: 0, placement: 'top' as 'top' | 'bottom' });
@@ -15,6 +17,12 @@ const personality = computed(() => getBotPersonality(props.username));
 const currentElo = computed(() => props.rating ?? personality.value?.defaultElo ?? 1200);
 const level = computed(() => eloToLevel(currentElo.value));
 const levelConfig = computed(() => BOT_LEVELS[level.value - 1] || BOT_LEVELS[3]);
+
+const isEn = computed(() => i18n.locale === 'en');
+const botName = computed(() => (isEn.value && personality.value?.nameEn) || personality.value?.name || '');
+const botTitle = computed(() => (isEn.value && personality.value?.titleEn) || personality.value?.title || '');
+const botBadge = computed(() => (isEn.value && personality.value?.badgeEn) || personality.value?.badge || '');
+const botDesc = computed(() => (isEn.value && personality.value?.descriptionEn) || personality.value?.description || '');
 
 let hideTimeout: number | null = null;
 
@@ -75,25 +83,25 @@ onBeforeUnmount(() => {
           <!-- Шапка: персона, уровень и Elo -->
           <div class="card-head">
             <div class="bot-identity">
-              <strong class="bot-name">{{ personality.name }}</strong>
+              <strong class="bot-name">{{ botName }}</strong>
             </div>
             <span class="bot-level-chip mono">
-              Ур.{{ level }} · {{ currentElo }} Elo
+              {{ isEn ? `Lvl.${level}` : `Ур.${level}` }} · {{ currentElo }} Elo
             </span>
           </div>
 
           <!-- Стиль и титул -->
           <div class="card-meta">
-            <span class="bot-badge-tag">{{ personality.badge }}</span>
-            <span class="bot-title">{{ personality.title }}</span>
+            <span class="bot-badge-tag">{{ botBadge }}</span>
+            <span class="bot-title">{{ botTitle }}</span>
           </div>
 
           <!-- Описание характера игры -->
-          <p class="bot-desc">{{ personality.description }}</p>
+          <p class="bot-desc">{{ botDesc }}</p>
 
           <!-- Дебютные предпочтения -->
           <div v-if="personality.openingsPreference?.length" class="bot-openings">
-            <span class="openings-label">Дебюты:</span>
+            <span class="openings-label">{{ isEn ? 'Openings:' : 'Дебюты:' }}</span>
             <span
               v-for="op in personality.openingsPreference"
               :key="op"

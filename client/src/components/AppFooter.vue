@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { useAuthStore } from '../stores/auth';
+import { useI18n } from '../stores/i18n';
 
 const auth = useAuthStore();
+const i18n = useI18n();
 </script>
 
 <template>
@@ -16,10 +18,10 @@ const auth = useAuthStore();
             <rect class="logo-gold" x="24" y="98" width="46" height="46" rx="12" />
             <rect class="logo-felt" x="80" y="98" width="46" height="46" rx="12" />
           </svg>
-          <span>Каисса</span>
+          <span>{{ i18n.t.nav.brand }}</span>
         </router-link>
         <p class="footer-desc">
-          Онлайн-платформа для командных шахмат на двоих: 2х2 на одной доске и шведские шахматы (Багхаус).
+          {{ i18n.t.footer.brandDesc }}
         </p>
       </div>
 
@@ -34,17 +36,17 @@ const auth = useAuthStore();
     <div class="footer-bottom">
       <div class="footer-bottom-inner">
         <div class="footer-left">
-          <span class="footer-copy">© 2026 «Каисса»</span>
+          <span class="footer-copy">© 2026 {{ i18n.t.nav.brand }}</span>
           <span class="footer-sep">·</span>
-          <span class="footer-tagline">Шахматы на двоих онлайн</span>
+          <span class="footer-tagline">{{ i18n.locale === 'ru' ? 'Шахматы на двоих онлайн' : 'Team Chess Online' }}</span>
         </div>
 
         <nav class="footer-bottom-nav" aria-label="Правила и о платформе">
-          <router-link to="/rules/duo" class="footer-link">Правила 2 на 2</router-link>
+          <router-link to="/rules/duo" class="footer-link">{{ i18n.t.footer.rulesDuo }}</router-link>
           <span class="footer-sep">·</span>
-          <router-link to="/rules/bughouse" class="footer-link">Багхаус</router-link>
+          <router-link to="/rules/bughouse" class="footer-link">{{ i18n.t.footer.rulesBughouse }}</router-link>
           <span class="footer-sep">·</span>
-          <router-link to="/about" class="footer-link">О платформе</router-link>
+          <router-link to="/about" class="footer-link">{{ i18n.t.footer.about }}</router-link>
         </nav>
       </div>
     </div>

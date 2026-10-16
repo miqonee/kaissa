@@ -2,13 +2,34 @@ import { computed, toValue, watchEffect, type ComputedRef, type MaybeRefOrGetter
 import { useRoute } from 'vue-router';
 
 export const SITE_NAME = 'Каисса';
+export const SITE_NAME_EN = 'Kaissa';
 export const BASE_CANONICAL_DOMAIN = 'https://duochess.ru';
 export const DEFAULT_OG_IMAGE = `${BASE_CANONICAL_DOMAIN}/og-image.png`;
 export const DEFAULT_TITLE = 'Шахматы на двоих онлайн: играть 2 на 2 и в Багхаус | Каисса';
+export const DEFAULT_TITLE_EN = 'Team Chess Online: 2v2 and Bughouse | Kaissa';
 export const DEFAULT_DESCRIPTION =
   'Играйте в шахматы на двоих онлайн бесплатно. Командные шахматы 2х2 на одной доске и шведские шахматы (багхаус) с фигурами из резерва. Игра с друзьями и ботами.';
+export const DEFAULT_DESCRIPTION_EN =
+  'Play team chess online in pairs on one board or Bughouse with live piece drops and Stockfish AI bots.';
 export const DEFAULT_KEYWORDS =
   'шахматы на двоих, шахматы на двоих онлайн, играть в шахматы на двоих, шахматы 2 на 2, командные шахматы, шахматы 2х2, багхаус, шведские шахматы, шахматы вдвоем, каисса';
+export const DEFAULT_KEYWORDS_EN =
+  'team chess, 2v2 chess, bughouse, duo chess, play chess in pairs, chess online, kaissa';
+
+function getCurrentLocale(): 'ru' | 'en' {
+  if (typeof window !== 'undefined') {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const urlLang = searchParams.get('lang')?.toLowerCase();
+      if (urlLang === 'en' || urlLang === 'ru') return urlLang;
+      const docLang = document.documentElement.getAttribute('lang')?.toLowerCase();
+      if (docLang === 'en' || docLang === 'ru') return docLang;
+      const saved = localStorage.getItem('kaissa_lang');
+      if (saved === 'en' || saved === 'ru') return saved;
+    } catch {}
+  }
+  return 'ru';
+}
 
 /**
  * Нормализует путь или URL к абсолютному каноническому URL с доменом https://duochess.ru/.
@@ -100,12 +121,14 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
 
   const resolvedTitle = computed(() => {
     const val = toValue(options.title);
-    return val?.trim() || DEFAULT_TITLE;
+    if (val?.trim()) return val.trim();
+    return getCurrentLocale() === 'en' ? DEFAULT_TITLE_EN : DEFAULT_TITLE;
   });
 
   const resolvedDescription = computed(() => {
     const val = toValue(options.description);
-    return val?.trim() || DEFAULT_DESCRIPTION;
+    if (val?.trim()) return val.trim();
+    return getCurrentLocale() === 'en' ? DEFAULT_DESCRIPTION_EN : DEFAULT_DESCRIPTION;
   });
 
   const resolvedKeywords = computed(() => {
@@ -113,7 +136,8 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
     if (Array.isArray(val)) {
       return val.filter(Boolean).join(', ');
     }
-    return val?.trim() || DEFAULT_KEYWORDS;
+    if (val?.trim()) return val.trim();
+    return getCurrentLocale() === 'en' ? DEFAULT_KEYWORDS_EN : DEFAULT_KEYWORDS;
   });
 
   const resolvedCanonical = computed(() => {
@@ -211,20 +235,48 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
     el.setAttribute('href', href);
   }
 
+  function setHreflangTag(hreflang: string, href?: string | null) {
+    if (typeof document === 'undefined') return;
+    let el = document.querySelector(`link[rel="alternate"][hreflang="${hreflang}"]`);
+    if (!href) {
+      if (el) el.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement('link');
+      el.setAttribute('rel', 'alternate');
+      el.setAttribute('hreflang', hreflang);
+      document.head.appendChild(el);
+    }
+    el.setAttribute('href', href);
+  }
+
   if (typeof window !== 'undefined') {
     watchEffect(() => {
       document.title = resolvedTitle.value;
       setMetaTag('name', 'description', resolvedDescription.value);
       setMetaTag('name', 'keywords', resolvedKeywords.value);
-      setCanonicalTag(resolvedCanonical.value);
+      const canonicalUrl = resolvedCanonical.value;
+      setCanonicalTag(canonicalUrl);
+
+      // Мультиязычные теги hreflang согласно стандарту Google & Yandex
+      const ruHref = canonicalUrl;
+      const enHref = canonicalUrl.includes('?') ? `${canonicalUrl}&lang=en` : `${canonicalUrl}?lang=en`;
+      setHreflangTag('ru', ruHref);
+      setHreflangTag('en', enHref);
+      setHreflangTag('x-default', ruHref);
+
+      const locale = getCurrentLocale();
+      const isEn = locale === 'en';
 
       setMetaTag('property', 'og:title', resolvedOgTitle.value);
       setMetaTag('property', 'og:description', resolvedOgDescription.value);
       setMetaTag('property', 'og:image', resolvedOgImage.value);
       setMetaTag('property', 'og:url', resolvedOgUrl.value);
-      setMetaTag('property', 'og:site_name', SITE_NAME);
+      setMetaTag('property', 'og:site_name', isEn ? SITE_NAME_EN : SITE_NAME);
       setMetaTag('property', 'og:type', 'website');
-      setMetaTag('property', 'og:locale', 'ru_RU');
+      setMetaTag('property', 'og:locale', isEn ? 'en_US' : 'ru_RU');
+      setMetaTag('property', 'og:locale:alternate', isEn ? 'ru_RU' : 'en_US');
 
       setMetaTag('name', 'twitter:card', resolvedTwitterCard.value);
       setMetaTag('name', 'twitter:title', resolvedTwitterTitle.value);

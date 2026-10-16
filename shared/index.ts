@@ -387,6 +387,10 @@ export interface BotPersonality {
   title: string;
   badge: string;
   description: string;
+  nameEn?: string;
+  titleEn?: string;
+  badgeEn?: string;
+  descriptionEn?: string;
   defaultElo: number;
   openingsPreference: string[];
 }
@@ -399,6 +403,10 @@ export const BOT_PERSONALITIES: Record<string, BotPersonality> = {
     title: 'Атакующий романтик',
     badge: 'Романтик',
     description: 'жертвы за инициативу, шахи, вскрытие короля',
+    nameEn: 'Mikhail Tal',
+    titleEn: 'Attacking Romantic',
+    badgeEn: 'Romantic',
+    descriptionEn: 'sacrifices for initiative, checks, king hunts',
     defaultElo: 1550,
     openingsPreference: ['e4', 'c5', 'f4', 'd4'],
   },
@@ -409,6 +417,10 @@ export const BOT_PERSONALITIES: Record<string, BotPersonality> = {
     title: 'Позиционный стратег',
     badge: 'Стратег',
     description: 'позиционное удушение, профилактика, захват линий',
+    nameEn: 'Anatoly Karpov',
+    titleEn: 'Positional Strategist',
+    badgeEn: 'Strategist',
+    descriptionEn: 'positional squeeze, prophylaxis, open file control',
     defaultElo: 1450,
     openingsPreference: ['d4', 'c6', 'e6', 'c4'],
   },
@@ -419,6 +431,10 @@ export const BOT_PERSONALITIES: Record<string, BotPersonality> = {
     title: 'Динамический напор',
     badge: 'Динамика',
     description: 'темповая игра, захват центра, агрессивное давление',
+    nameEn: 'Garry Kasparov',
+    titleEn: 'Dynamic Force',
+    badgeEn: 'Dynamic',
+    descriptionEn: 'tempo play, center domination, aggressive pressure',
     defaultElo: 1600,
     openingsPreference: ['e4', 'd4', 'c5', 'Nf6'],
   },
@@ -429,6 +445,10 @@ export const BOT_PERSONALITIES: Record<string, BotPersonality> = {
     title: 'Железная крепость',
     badge: 'Крепость',
     description: 'глубокая профилактика, плотная защита, выжидание ошибки',
+    nameEn: 'Tigran Petrosian',
+    titleEn: 'Iron Fortress',
+    badgeEn: 'Fortress',
+    descriptionEn: 'deep prophylaxis, solid defense, patient maneuvering',
     defaultElo: 1300,
     openingsPreference: ['d4', 'c6', 'e6', 'Nf3'],
   },
@@ -439,6 +459,10 @@ export const BOT_PERSONALITIES: Record<string, BotPersonality> = {
     title: 'Чистый классик',
     badge: 'Классик',
     description: 'кристально чистые размены, образцовый переход в эндшпиль',
+    nameEn: 'José Capablanca',
+    titleEn: 'Pure Classic',
+    badgeEn: 'Classic',
+    descriptionEn: 'crystal-clear trades, exemplary endgame technique',
     defaultElo: 1200,
     openingsPreference: ['d4', 'e4', 'e5', 'd5'],
   },
@@ -449,6 +473,10 @@ export const BOT_PERSONALITIES: Record<string, BotPersonality> = {
     title: 'Гамбитный гений',
     badge: 'Гамбит',
     description: 'быстрейшее развитие фигур, жертвы пешек, открытые диагонали',
+    nameEn: 'Paul Morphy',
+    titleEn: 'Gambit Genius',
+    badgeEn: 'Gambit',
+    descriptionEn: 'rapid piece development, pawn sacrifices, open diagonals',
     defaultElo: 750,
     openingsPreference: ['e4', 'e5', 'Bc4', 'f4'],
   },
@@ -459,6 +487,10 @@ export const BOT_PERSONALITIES: Record<string, BotPersonality> = {
     title: 'Бескомпромиссная точность',
     badge: 'Точность',
     description: 'классические ветки, острейшая тактика и безупречная техника',
+    nameEn: 'Bobby Fischer',
+    titleEn: 'Uncompromising Precision',
+    badgeEn: 'Precision',
+    descriptionEn: 'classical lines, razor-sharp tactics, flawless technique',
     defaultElo: 1650,
     openingsPreference: ['e4', 'c5', 'Nf6', 'e5'],
   },
@@ -469,6 +501,10 @@ export const BOT_PERSONALITIES: Record<string, BotPersonality> = {
     title: 'Универсал',
     badge: 'Универсал',
     description: 'гибкий баланс атаки и позиционной игры',
+    nameEn: 'Boris Spassky',
+    titleEn: 'Universalist',
+    badgeEn: 'Universal',
+    descriptionEn: 'flexible balance of attack and positional play',
     defaultElo: 1000,
     openingsPreference: ['e4', 'd4', 'c5', 'e5'],
   },
@@ -479,6 +515,10 @@ export const BOT_PERSONALITIES: Record<string, BotPersonality> = {
     title: 'Комбинационный вихрь',
     badge: 'Вихрь',
     description: 'глубокие многоходовые комбинации, атака на двух флангах',
+    nameEn: 'Alexander Alekhine',
+    titleEn: 'Combinational Storm',
+    badgeEn: 'Storm',
+    descriptionEn: 'deep multi-move combinations, flank attacks',
     defaultElo: 1500,
     openingsPreference: ['d4', 'e4', 'Nf6', 'c4'],
   },
@@ -489,6 +529,10 @@ export const BOT_PERSONALITIES: Record<string, BotPersonality> = {
     title: 'Эндшпильный эвапоратор',
     badge: 'Эндшпиль',
     description: 'игра на микро-плюсы, позиционное выжимание в равных позициях',
+    nameEn: 'Magnus Carlsen',
+    titleEn: 'Endgame Grinder',
+    badgeEn: 'Endgame',
+    descriptionEn: 'micro-advantages, squeezing wins in equal positions',
     defaultElo: 1750,
     openingsPreference: ['d4', 'Nf3', 'c5', 'e4'],
   },
@@ -499,6 +543,10 @@ export const BOT_PERSONALITIES: Record<string, BotPersonality> = {
     title: 'Железная логика',
     badge: 'Логика',
     description: 'фундаментальный пешечный центр, методичный расчёт',
+    nameEn: 'Mikhail Botvinnik',
+    titleEn: 'Iron Logic',
+    badgeEn: 'Logic',
+    descriptionEn: 'fundamental pawn center, methodical calculation',
     defaultElo: 1400,
     openingsPreference: ['d4', 'c4', 'd5', 'e6'],
   },
@@ -509,6 +557,10 @@ export const BOT_PERSONALITIES: Record<string, BotPersonality> = {
     title: 'Блиц-провокатор',
     badge: 'Провокатор',
     description: 'острые провокационные выпады, нестандартные ловушки',
+    nameEn: 'Hikaru Nakamura',
+    titleEn: 'Blitz Provocateur',
+    badgeEn: 'Provocateur',
+    descriptionEn: 'sharp provocations, unconventional tricks',
     defaultElo: 1580,
     openingsPreference: ['e4', 'c5', 'b3', 'Nf3'],
   },
@@ -555,12 +607,21 @@ export function getBotPersonality(usernameOrId?: string | null): BotPersonality 
   return BOT_PERSONALITIES[key] || Object.values(BOT_PERSONALITIES).find((p) => p.id === key || p.username.toLowerCase() === key);
 }
 
-export function getBotTooltip(usernameOrId?: string | null, elo?: number | null): string {
+export function getBotTooltip(usernameOrId?: string | null, elo?: number | null, lang: 'ru' | 'en' = 'ru'): string {
   const p = getBotPersonality(usernameOrId);
   const currentElo = elo ?? (p ? p.defaultElo : 1150);
   const level = eloToLevel(currentElo);
-  if (!p) return `Шахматный бот (Ур.${level} · ${currentElo} Elo)`;
-  return `${p.username}: ${p.name} · ${p.title} — ${p.description} (Ур.${level} · ${currentElo} Elo)`;
+  const isEn = lang === 'en';
+  if (!p) {
+    return isEn
+      ? `Chess Bot (Lvl.${level} · ${currentElo} Elo)`
+      : `Шахматный бот (Ур.${level} · ${currentElo} Elo)`;
+  }
+  const name = isEn && p.nameEn ? p.nameEn : p.name;
+  const title = isEn && p.titleEn ? p.titleEn : p.title;
+  const desc = isEn && p.descriptionEn ? p.descriptionEn : p.description;
+  const lvlPrefix = isEn ? 'Lvl.' : 'Ур.';
+  return `${p.username}: ${name} · ${title} — ${desc} (${lvlPrefix}${level} · ${currentElo} Elo)`;
 }
 
 export interface BotConfig {

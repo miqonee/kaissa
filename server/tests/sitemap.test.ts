@@ -92,6 +92,12 @@ describe('SEO & Sitemap Specification', () => {
       expect(xml).toContain('<changefreq>hourly</changefreq>');
       expect(xml).toContain('<changefreq>monthly</changefreq>');
 
+      // Check multilingual xhtml:link hreflang alternates
+      expect(xml).toContain('xmlns:xhtml="http://www.w3.org/1999/xhtml"');
+      expect(xml).toContain('<xhtml:link rel="alternate" hreflang="ru" href="https://duochess.ru/" />');
+      expect(xml).toContain('<xhtml:link rel="alternate" hreflang="en" href="https://duochess.ru/?lang=en" />');
+      expect(xml).toContain('<xhtml:link rel="alternate" hreflang="x-default" href="https://duochess.ru/" />');
+
       const validation = validateSitemapXml(xml);
       expect(validation.valid).toBe(true);
       expect(validation.errors).toEqual([]);

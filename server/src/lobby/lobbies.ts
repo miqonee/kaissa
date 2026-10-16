@@ -294,13 +294,14 @@ export class LobbiesManager {
 
     if (humans.length === 1) {
       const hElo = humans[0].rating;
-      // 3 бота: напарник и 2 соперника с естественным разбросом +-50..150 Elo
-      const delta1 = Math.floor(Math.random() * 200 - 120); // partner
-      const delta2 = Math.floor(Math.random() * 210 - 80);  // opp1
+      // 3 бота: напарник и 2 соперника со сдвигом на 1 уровень вниз (~80-100 Elo)
+      // для комфортной игры человека и естественных зевков/неточностей ботов
+      const baseOppElo = Math.max(500, hElo - 90);
+      const delta1 = Math.floor(Math.random() * 140 - 70); // partner
+      const delta2 = Math.floor(Math.random() * 140 - 70); // opp1
       const rPartner = Math.max(500, Math.min(2550, hElo + delta1));
-      const rOpp1 = Math.max(500, Math.min(2550, hElo + delta2));
-      // opp2 balances teams: (hElo + rPartner) - rOpp1
-      const rOpp2 = Math.max(500, Math.min(2550, hElo + rPartner - rOpp1));
+      const rOpp1 = Math.max(500, Math.min(2550, baseOppElo + delta2));
+      const rOpp2 = Math.max(500, Math.min(2550, baseOppElo + Math.floor(Math.random() * 140 - 70)));
 
       if (bots.length >= 3) {
         bots[0].rating = rPartner;
@@ -313,8 +314,8 @@ export class LobbiesManager {
         bots[2].botLevel = eloToLevel(rOpp2);
       } else {
         for (const b of bots) {
-          const spread = Math.floor(Math.random() * 200 - 100);
-          b.rating = Math.max(500, Math.min(2550, hElo + spread));
+          const spread = Math.floor(Math.random() * 160 - 100);
+          b.rating = Math.max(500, Math.min(2550, baseOppElo + spread));
           b.botLevel = eloToLevel(b.rating);
         }
       }

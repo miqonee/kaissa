@@ -24,10 +24,12 @@ import AppIcon from '../components/AppIcon.vue';
 import GameReplayModal from '../components/GameReplayModal.vue';
 import BotHoverCard from '../components/BotHoverCard.vue';
 import { usePageSeo } from '../composables/useSeo';
+import { useI18n } from '../stores/i18n';
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const i18n = useI18n();
 const socket = getSocket();
 const gameId = Number(route.params.id);
 
@@ -35,32 +37,36 @@ const state = ref<GameState | null>(null);
 
 const pageTitle = computed(() => {
   const id = route.params.id;
-  if (!state.value) return `Партия #${id} | Каисса`;
-  const mode = state.value.mode === 'bughouse' ? 'Багхаус' : '2х2';
+  const isEn = i18n.locale === 'en';
+  if (!state.value) return `${isEn ? 'Match' : 'Партия'} #${id} | ${i18n.t.nav.brand}`;
+  const mode = state.value.mode === 'bughouse' ? (isEn ? 'Bughouse' : 'Багхаус') : '2v2';
   const t1 = state.value.participants.filter((p) => p.team === 1).map((p) => p.username).join(' / ');
   const t2 = state.value.participants.filter((p) => p.team === 2).map((p) => p.username).join(' / ');
   if (t1 && t2) {
-    return `Партия #${id} (${mode}): ${t1} vs ${t2} | Каисса`;
+    return `${isEn ? 'Match' : 'Партия'} #${id} (${mode}): ${t1} vs ${t2} | ${i18n.t.nav.brand}`;
   }
-  return `Партия #${id} (${mode}) | Каисса`;
+  return `${isEn ? 'Match' : 'Партия'} #${id} (${mode}) | ${i18n.t.nav.brand}`;
 });
 
 const pageOgDescription = computed(() => {
   const id = route.params.id;
+  const isEn = i18n.locale === 'en';
   if (!state.value) {
-    return `Онлайн-просмотр партии #${id} на платформе Каисса.`;
+    return isEn ? `Online match #${id} view on Kaissa chess club.` : `Онлайн-просмотр партии #${id} на платформе Каисса.`;
   }
-  const mode = state.value.mode === 'bughouse' ? 'Багхаус (шведские шахматы)' : 'Командные шахматы 2х2';
+  const mode = state.value.mode === 'bughouse' ? (isEn ? 'Bughouse chess' : 'Багхаус (шведские шахматы)') : (isEn ? '2v2 Team chess' : 'Командные шахматы 2х2');
   const tc = timeControlLabel(state.value.timeControl);
-  const t1 = state.value.participants.filter((p) => p.team === 1).map((p) => p.username).join(' / ') || 'Команда 1';
-  const t2 = state.value.participants.filter((p) => p.team === 2).map((p) => p.username).join(' / ') || 'Команда 2';
+  const t1 = state.value.participants.filter((p) => p.team === 1).map((p) => p.username).join(' / ') || (isEn ? 'Team 1' : 'Команда 1');
+  const t2 = state.value.participants.filter((p) => p.team === 2).map((p) => p.username).join(' / ') || (isEn ? 'Team 2' : 'Команда 2');
   const statusText =
     state.value.status === 'active'
-      ? 'Партия в игре'
+      ? (isEn ? 'Game in progress' : 'Партия в игре')
       : state.value.status === 'finished'
-        ? `Завершена со счетом ${state.value.result}`
-        : 'Партия завершена';
-  return `Партия #${id} [${mode}, ${tc}]: ${t1} против ${t2}. ${statusText}. Смотрите онлайн на платформе Каисса.`;
+        ? (isEn ? `Finished with score ${state.value.result}` : `Завершена со счетом ${state.value.result}`)
+        : (isEn ? 'Game ended' : 'Партия завершена');
+  return isEn
+    ? `Match #${id} [${mode}, ${tc}]: ${t1} vs ${t2}. ${statusText}. Watch online on Kaissa.`
+    : `Партия #${id} [${mode}, ${tc}]: ${t1} против ${t2}. ${statusText}. Смотрите онлайн на платформе Каисса.`;
 });
 
 usePageSeo({
@@ -298,8 +304,10 @@ function roleOf(p: GameParticipantInfo): PlayerRole {
 // только «Бот · badge», полный стиль виден при наведении на бейдж.
 function displayName(p: GameParticipantInfo): string {
   if (!p.isBot) return p.username;
-  const badge = getBotPersonality(p.username)?.badge;
-  return badge ? `Бот · ${badge}` : 'Бот';
+  const perso = getBotPersonality(p.username);
+  const badge = (i18n.locale === 'en' && perso?.badgeEn) || perso?.badge;
+  const botWord = i18n.locale === 'en' ? 'Bot' : 'Бот';
+  return badge ? `${botWord} · ${badge}` : botWord;
 }
 
 const orderedTurnParticipants = computed(() => {
@@ -561,7 +569,7 @@ async function analyzeOnLichess(boardIdx: number = 0) {
   }
 }
 
-const REASONS: Record<string, string> = {
+const REASONS_RU: Record<string, string> = {
   checkmate: 'Мат',
   resign: 'Сдача',
   timeout: 'Время вышло',
@@ -572,18 +580,37 @@ const REASONS: Record<string, string> = {
   abandoned: 'Партия брошена',
 };
 
+const REASONS_EN: Record<string, string> = {
+  checkmate: 'Checkmate',
+  resign: 'Resignation',
+  timeout: 'Time out',
+  stalemate: 'Stalemate',
+  material: 'Insufficient material',
+  repetition: 'Threefold repetition',
+  fifty: '50-move rule',
+  abandoned: 'Abandoned',
+};
+
+function getReasonText(reasonKey?: string | null): string {
+  if (!reasonKey) return '';
+  const dict = i18n.locale === 'en' ? REASONS_EN : REASONS_RU;
+  return dict[reasonKey] ?? reasonKey;
+}
+
 function resultHeadline(): string {
   if (!state.value || state.value.status === 'active') return '';
   const s = state.value;
-  const reason = REASONS[s.reason ?? ''] ?? s.reason ?? '';
-  if (s.status === 'abandoned') return `Партия брошена (${reason || 'выход игроков'})`;
-  if (s.result === '*' || s.result === '1/2-1/2') return `Ничья (${reason || 'по правилам'})`;
+  const isEn = i18n.locale === 'en';
+  const reason = getReasonText(s.reason);
+  if (s.status === 'abandoned') return isEn ? `Game abandoned (${reason || 'players left'})` : `Партия брошена (${reason || 'выход игроков'})`;
+  if (s.result === '*' || s.result === '1/2-1/2') return isEn ? `Draw (${reason || 'by rules'})` : `Ничья (${reason || 'по правилам'})`;
   const winnerTeam = s.result === '1-0' ? 1 : (s.result === '0-1' ? 2 : null);
-  if (!winnerTeam) return reason ? `Партия завершена (${reason})` : 'Партия завершена';
+  if (!winnerTeam) return reason ? (isEn ? `Game over (${reason})` : `Партия завершена (${reason})`) : (isEn ? 'Game over' : 'Партия завершена');
   const winners = s.participants.filter((p) => p.team === winnerTeam).map((p) => p.username);
-  const sideColor = winnerTeam === 1 ? 'Белые' : 'Чёрные';
+  const sideColor = winnerTeam === 1 ? (isEn ? 'White' : 'Белые') : (isEn ? 'Black' : 'Чёрные');
   const reasonSuffix = reason ? ` (${reason})` : '';
-  return `Победа (${sideColor}): ${winners.join(' / ')}${reasonSuffix}`;
+  const prefix = isEn ? 'Victory' : 'Победа';
+  return `${prefix} (${sideColor}): ${winners.join(' / ')}${reasonSuffix}`;
 }
 </script>
 
@@ -592,27 +619,27 @@ function resultHeadline(): string {
     <!-- Верхняя информационная плашка -->
     <header class="game-topbar panel">
       <div class="game-title-group">
-        <router-link to="/" class="back-link" title="К столам">
-          <AppIcon name="arrow-left" :size="14" /> Столы
+        <router-link to="/" class="back-link" :title="i18n.locale === 'en' ? 'Back to tables' : 'К столам'">
+          <AppIcon name="arrow-left" :size="14" /> {{ i18n.locale === 'en' ? 'Tables' : 'Столы' }}
         </router-link>
         <h1>
-          {{ state.mode === 'bughouse' ? 'Багхаус' : 'Матч 2×2 (одна доска)' }}
+          {{ state.mode === 'bughouse' ? (i18n.locale === 'en' ? 'Bughouse' : 'Багхаус') : (i18n.locale === 'en' ? '2v2 Match (Single Board)' : 'Матч 2×2 (одна доска)') }}
         </h1>
         <span class="badge mono">{{ timeControlLabel(state.timeControl) }}</span>
-        <span v-if="state.status === 'active'" class="badge on">В игре</span>
+        <span v-if="state.status === 'active'" class="badge on">{{ i18n.locale === 'en' ? 'Live' : 'В игре' }}</span>
         <span v-else class="badge">{{ state.result }}</span>
-        <span v-if="!isParticipant" class="badge dim">Режим зрителя</span>
+        <span v-if="!isParticipant" class="badge dim">{{ i18n.locale === 'en' ? 'Spectating' : 'Режим зрителя' }}</span>
       </div>
 
       <div class="game-topbar-actions">
         <button v-if="state.status !== 'active'" class="small" @click="showReplay = true">
-          <AppIcon name="play" :size="13" /> Смотреть партию
+          <AppIcon name="play" :size="13" /> {{ i18n.locale === 'en' ? 'Replay Game' : 'Смотреть партию' }}
         </button>
         <button v-if="isParticipant && state.status === 'active'" class="danger small" @click="resign">
-          Сдаться
+          {{ i18n.t.game.resignBtn }}
         </button>
         <button v-if="state.status !== 'active'" class="small brass" @click="analyzeOnLichess(0)">
-          <AppIcon name="external" :size="13" /> Анализ на Lichess
+          <AppIcon name="external" :size="13" /> {{ i18n.t.game.lichessAnalysis }}
         </button>
       </div>
     </header>
@@ -640,14 +667,14 @@ function resultHeadline(): string {
                   :rating="teamModeSides.top.players[0].ratingBefore"
                 >
                   <span class="bot-badge tiny">
-                    {{ getBotPersonality(teamModeSides.top.players[0].username)?.badge ? 'Бот · ' + getBotPersonality(teamModeSides.top.players[0].username)?.badge : 'Бот' }}
+                    {{ displayName(teamModeSides.top.players[0]) }}
                   </span>
                 </BotHoverCard>
                 <span class="member-rating mono">({{ teamModeSides.top.players[0].ratingBefore }})</span>
-                <span v-if="roleOf(teamModeSides.top.players[0]) === 'me'" class="member-role me">Вы</span>
-                <span v-else-if="roleOf(teamModeSides.top.players[0]) === 'partner'" class="member-role partner">Напарник</span>
+                <span v-if="roleOf(teamModeSides.top.players[0]) === 'me'" class="member-role me">{{ i18n.locale === 'en' ? 'You' : 'Вы' }}</span>
+                <span v-else-if="roleOf(teamModeSides.top.players[0]) === 'partner'" class="member-role partner">{{ i18n.locale === 'en' ? 'Partner' : 'Напарник' }}</span>
                 <span v-if="isPlayerTurn(teamModeSides.top.players[0].userId)" class="turn-chip">
-                  <span class="turn-dot"></span> Ходит
+                  <span class="turn-dot"></span> {{ i18n.locale === 'en' ? 'Turn' : 'Ходит' }}
                 </span>
               </div>
             </div>
@@ -672,14 +699,14 @@ function resultHeadline(): string {
                   :rating="teamModeSides.top.players[1].ratingBefore"
                 >
                   <span class="bot-badge tiny">
-                    {{ getBotPersonality(teamModeSides.top.players[1].username)?.badge ? 'Бот · ' + getBotPersonality(teamModeSides.top.players[1].username)?.badge : 'Бот' }}
+                    {{ displayName(teamModeSides.top.players[1]) }}
                   </span>
                 </BotHoverCard>
                 <span class="member-rating mono">({{ teamModeSides.top.players[1].ratingBefore }})</span>
-                <span v-if="roleOf(teamModeSides.top.players[1]) === 'me'" class="member-role me">Вы</span>
-                <span v-else-if="roleOf(teamModeSides.top.players[1]) === 'partner'" class="member-role partner">Напарник</span>
+                <span v-if="roleOf(teamModeSides.top.players[1]) === 'me'" class="member-role me">{{ i18n.locale === 'en' ? 'You' : 'Вы' }}</span>
+                <span v-else-if="roleOf(teamModeSides.top.players[1]) === 'partner'" class="member-role partner">{{ i18n.locale === 'en' ? 'Partner' : 'Напарник' }}</span>
                 <span v-if="isPlayerTurn(teamModeSides.top.players[1].userId)" class="turn-chip">
-                  <span class="turn-dot"></span> Ходит
+                  <span class="turn-dot"></span> {{ i18n.locale === 'en' ? 'Turn' : 'Ходит' }}
                 </span>
               </div>
             </div>
@@ -718,14 +745,14 @@ function resultHeadline(): string {
                   :rating="teamModeSides.bottom.players[0].ratingBefore"
                 >
                   <span class="bot-badge tiny">
-                    {{ getBotPersonality(teamModeSides.bottom.players[0].username)?.badge ? 'Бот · ' + getBotPersonality(teamModeSides.bottom.players[0].username)?.badge : 'Бот' }}
+                    {{ displayName(teamModeSides.bottom.players[0]) }}
                   </span>
                 </BotHoverCard>
                 <span class="member-rating mono">({{ teamModeSides.bottom.players[0].ratingBefore }})</span>
-                <span v-if="roleOf(teamModeSides.bottom.players[0]) === 'me'" class="member-role me">Вы</span>
-                <span v-else-if="roleOf(teamModeSides.bottom.players[0]) === 'partner'" class="member-role partner">Напарник</span>
+                <span v-if="roleOf(teamModeSides.bottom.players[0]) === 'me'" class="member-role me">{{ i18n.locale === 'en' ? 'You' : 'Вы' }}</span>
+                <span v-else-if="roleOf(teamModeSides.bottom.players[0]) === 'partner'" class="member-role partner">{{ i18n.locale === 'en' ? 'Partner' : 'Напарник' }}</span>
                 <span v-if="isPlayerTurn(teamModeSides.bottom.players[0].userId)" class="turn-chip">
-                  <span class="turn-dot"></span> Ходит
+                  <span class="turn-dot"></span> {{ i18n.locale === 'en' ? 'Turn' : 'Ходит' }}
                 </span>
               </div>
             </div>
@@ -750,14 +777,14 @@ function resultHeadline(): string {
                   :rating="teamModeSides.bottom.players[1].ratingBefore"
                 >
                   <span class="bot-badge tiny">
-                    {{ getBotPersonality(teamModeSides.bottom.players[1].username)?.badge ? 'Бот · ' + getBotPersonality(teamModeSides.bottom.players[1].username)?.badge : 'Бот' }}
+                    {{ displayName(teamModeSides.bottom.players[1]) }}
                   </span>
                 </BotHoverCard>
                 <span class="member-rating mono">({{ teamModeSides.bottom.players[1].ratingBefore }})</span>
-                <span v-if="roleOf(teamModeSides.bottom.players[1]) === 'me'" class="member-role me">Вы</span>
-                <span v-else-if="roleOf(teamModeSides.bottom.players[1]) === 'partner'" class="member-role partner">Напарник</span>
+                <span v-if="roleOf(teamModeSides.bottom.players[1]) === 'me'" class="member-role me">{{ i18n.locale === 'en' ? 'You' : 'Вы' }}</span>
+                <span v-else-if="roleOf(teamModeSides.bottom.players[1]) === 'partner'" class="member-role partner">{{ i18n.locale === 'en' ? 'Partner' : 'Напарник' }}</span>
                 <span v-if="isPlayerTurn(teamModeSides.bottom.players[1].userId)" class="turn-chip">
-                  <span class="turn-dot"></span> Ходит
+                  <span class="turn-dot"></span> {{ i18n.locale === 'en' ? 'Turn' : 'Ходит' }}
                 </span>
               </div>
             </div>
@@ -854,15 +881,15 @@ function resultHeadline(): string {
                   <span class="queue-dot" :class="{ on: isPlayerTurn(p.userId) }"></span>
                   <span class="queue-order mono dim">{{ idx + 1 }}</span>
                   <span class="color-tag" :class="p.color">
-                    {{ p.color === 'w' ? 'Белые' : 'Черные' }}
+                    {{ p.color === 'w' ? (i18n.locale === 'en' ? 'White' : 'Белые') : (i18n.locale === 'en' ? 'Black' : 'Черные') }}
                   </span>
                   <BotHoverCard v-if="p.isBot" :username="p.username" :rating="p.ratingBefore">
                     <span class="queue-name">{{ displayName(p) }}</span>
                   </BotHoverCard>
                   <span v-else class="queue-name">{{ displayName(p) }}</span>
-                  <span v-if="roleOf(p) === 'me'" class="member-role me">Вы</span>
-                  <span v-else-if="roleOf(p) === 'partner'" class="member-role partner">Напарник</span>
-                  <span v-if="isPlayerTurn(p.userId)" class="turn-now-chip">ХОД</span>
+                  <span v-if="roleOf(p) === 'me'" class="member-role me">{{ i18n.locale === 'en' ? 'You' : 'Вы' }}</span>
+                  <span v-else-if="roleOf(p) === 'partner'" class="member-role partner">{{ i18n.locale === 'en' ? 'Partner' : 'Напарник' }}</span>
+                  <span v-if="isPlayerTurn(p.userId)" class="turn-now-chip">{{ i18n.locale === 'en' ? 'TURN' : 'ХОД' }}</span>
                 </div>
               </div>
             </div>
@@ -919,7 +946,7 @@ function resultHeadline(): string {
             <div class="panel-head">
               <div class="opening-head-title">
                 <AppIcon name="book-open" :size="15" />
-                <h3>Дебют и анализ</h3>
+                <h3>{{ i18n.locale === 'en' ? 'Opening & Analysis' : 'Дебют и анализ' }}</h3>
               </div>
               <div class="opening-badges">
                 <span v-if="state.mode === 'team'" class="eco-badge mono">{{ recognizedOpening.eco }}</span>
@@ -930,8 +957,8 @@ function resultHeadline(): string {
                 >
                   {{
                     currentAnalysis.isEndgame
-                      ? currentAnalysis.positionPlan.structureNameRu
-                      : (recognizedOpening.stage === 'theory' ? recognizedOpening.stageLabelRu : currentAnalysis.positionPlan.structureNameRu)
+                      ? (i18n.locale === 'en' ? 'Endgame' : currentAnalysis.positionPlan.structureNameRu)
+                      : (recognizedOpening.stage === 'theory' ? (i18n.locale === 'en' ? (recognizedOpening.stageLabelEn || 'Theory') : recognizedOpening.stageLabelRu) : (i18n.locale === 'en' ? 'Middlegame' : currentAnalysis.positionPlan.structureNameRu))
                   }}
                 </span>
                 <span
@@ -942,7 +969,7 @@ function resultHeadline(): string {
                     'eval-b': currentAnalysis.scoreCp < -35,
                     'eval-eq': Math.abs(currentAnalysis.scoreCp) <= 35
                   }"
-                  :title="`Оценка: ${currentAnalysis.evalText} (${currentAnalysis.verdictRu})`"
+                  :title="`Eval: ${currentAnalysis.evalText} (${currentAnalysis.verdictRu})`"
                 >
                   {{ currentAnalysis.evalText }}
                 </span>
@@ -964,7 +991,7 @@ function resultHeadline(): string {
                       class="material-badge mono"
                       :class="{ 'mat-w': currentAnalysis.materialDiff > 0, 'mat-b': currentAnalysis.materialDiff < 0 }"
                     >
-                      {{ currentAnalysis.materialDiff > 0 ? `Белые +${currentAnalysis.materialDiff}` : `Чёрные +${Math.abs(currentAnalysis.materialDiff)}` }}
+                      {{ currentAnalysis.materialDiff > 0 ? (i18n.locale === 'en' ? `White +${currentAnalysis.materialDiff}` : `Белые +${currentAnalysis.materialDiff}`) : (i18n.locale === 'en' ? `Black +${Math.abs(currentAnalysis.materialDiff)}` : `Чёрные +${Math.abs(currentAnalysis.materialDiff)}`) }}
                     </span>
                   </div>
                 </div>
@@ -975,7 +1002,7 @@ function resultHeadline(): string {
                   class="development-row"
                   :title="currentAnalysis.development.complete ? 'Фигуры развиты, короли в безопасности — дальше план по структуре' : `Не выведены: ${[...currentAnalysis.development.whiteUndeveloped, ...currentAnalysis.development.blackUndeveloped].join(', ')}`"
                 >
-                  <span class="dim small-label">Развитие:</span>
+                  <span class="dim small-label">{{ i18n.locale === 'en' ? 'Development:' : 'Развитие:' }}</span>
                   <span class="mono dev-score">{{ currentAnalysis.development.whiteDeveloped }}/{{ currentAnalysis.development.whiteTotal }} — {{ currentAnalysis.development.blackDeveloped }}/{{ currentAnalysis.development.blackTotal }}</span>
                   <span class="dim tiny dev-summary">{{ currentAnalysis.development.summaryRu }}</span>
                 </div>
@@ -986,14 +1013,14 @@ function resultHeadline(): string {
                   :open="recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame"
                 >
                   <summary class="dim small-label opening-summary">
-                    {{ (recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame) ? 'Дебют:' : `Дебют (${recognizedOpening.nameRu} — свернут, идёт ${currentAnalysis.positionPlan.structureNameRu})` }}
+                    {{ (recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame) ? (i18n.locale === 'en' ? 'Opening:' : 'Дебют:') : (i18n.locale === 'en' ? `Opening (${recognizedOpening.nameEn})` : `Дебют (${recognizedOpening.nameRu} — свернут)`) }}
                   </summary>
                   <div class="opening-name-block">
-                    <h4 class="opening-title">{{ recognizedOpening.nameRu }}</h4>
+                    <h4 class="opening-title">{{ i18n.locale === 'en' && recognizedOpening.nameEn ? recognizedOpening.nameEn : recognizedOpening.nameRu }}</h4>
                     <p v-if="recognizedOpening.variationRu" class="opening-variation">
                       {{ recognizedOpening.variationRu }}
                     </p>
-                    <span class="opening-name-en dim mono">{{ recognizedOpening.nameEn }}</span>
+                    <span v-if="i18n.locale === 'ru'" class="opening-name-en dim mono">{{ recognizedOpening.nameEn }}</span>
                   </div>
 
                   <!-- Теоретические продолжения -->
@@ -1137,29 +1164,29 @@ function resultHeadline(): string {
         <div class="modal-body">
           <div class="headline-box">
             <h3>{{ resultHeadline() }}</h3>
-            <p v-if="!isParticipant" class="dim next-game-hint">Следующая автопартия начнётся автоматически…</p>
+            <p v-if="!isParticipant" class="dim next-game-hint">{{ i18n.locale === 'en' ? 'Next auto-game starts automatically…' : 'Следующая автопартия начнётся автоматически…' }}</p>
           </div>
 
           <!-- Таблица изменений рейтинга -->
           <table class="club result-table">
             <thead>
               <tr>
-                <th>Игрок</th>
-                <th>Команда</th>
-                <th class="num">Было</th>
+                <th>{{ i18n.locale === 'en' ? 'Player' : 'Игрок' }}</th>
+                <th>{{ i18n.locale === 'en' ? 'Team' : 'Команда' }}</th>
+                <th class="num">{{ i18n.locale === 'en' ? 'Before' : 'Было' }}</th>
                 <th class="num">±</th>
-                <th class="num">Итог</th>
+                <th class="num">{{ i18n.locale === 'en' ? 'Result' : 'Итог' }}</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="p in state.participants" :key="p.userId">
                 <td>
-                  <strong class="player-name" :title="p.isBot ? getBotTooltip(p.username, p.ratingBefore) : undefined">{{ p.username }}</strong>
-                  <span v-if="p.isBot" class="bot-badge tiny" style="margin-left: 6px;" :title="getBotTooltip(p.username, p.ratingBefore)">
-                    {{ getBotPersonality(p.username)?.badge ? 'Бот · ' + getBotPersonality(p.username)?.badge : 'Бот' }}
+                  <strong class="player-name" :title="p.isBot ? getBotTooltip(p.username, p.ratingBefore, i18n.locale) : undefined">{{ p.username }}</strong>
+                  <span v-if="p.isBot" class="bot-badge tiny" style="margin-left: 6px;" :title="getBotTooltip(p.username, p.ratingBefore, i18n.locale)">
+                    {{ displayName(p) }}
                   </span>
                 </td>
-                <td class="dim">Команда {{ p.team }} ({{ p.color === 'w' ? 'белые' : 'черные' }})</td>
+                <td class="dim">{{ i18n.locale === 'en' ? `Team ${p.team} (${p.color === 'w' ? 'white' : 'black'})` : `Команда ${p.team} (${p.color === 'w' ? 'белые' : 'черные'})` }}</td>
                 <td class="mono dim num">{{ p.ratingBefore }}</td>
                 <td class="num">
                   <span
@@ -1179,17 +1206,17 @@ function resultHeadline(): string {
           <!-- Блок анализа партии -->
           <div class="analysis-box">
             <div class="analysis-text">
-              <h4>Анализ партии</h4>
+              <h4>{{ i18n.locale === 'en' ? 'Game Analysis' : 'Анализ партии' }}</h4>
               <p class="dim small-hint">
-                Пересмотрите партию в плеере, скачайте PGN или откройте разбор в движке на Lichess.
+                {{ i18n.locale === 'en' ? 'Review the game in player, download PGN or open Stockfish analysis on Lichess.' : 'Пересмотрите партию в плеере, скачайте PGN или откройте разбор в движке на Lichess.' }}
               </p>
             </div>
             <div class="analysis-buttons">
               <button class="primary" @click="showReplay = true">
-                <AppIcon name="play" :size="15" /> Смотреть партию
+                <AppIcon name="play" :size="15" /> {{ i18n.locale === 'en' ? 'Watch Game' : 'Смотреть партию' }}
               </button>
               <a :href="`/api/games/${gameId}/pgn?download=1`" class="button" download>
-                <AppIcon name="download" :size="15" /> Скачать PGN
+                <AppIcon name="download" :size="15" /> {{ i18n.t.game.downloadPgn }}
               </a>
               <button
                 class="brass"
@@ -1197,14 +1224,14 @@ function resultHeadline(): string {
                 @click="analyzeOnLichess(0)"
               >
                 <AppIcon name="external" :size="14" />
-                {{ lichessBusy ? 'Открываем…' : (state.mode === 'bughouse' ? 'Lichess · доска 1' : 'Анализ на Lichess') }}
+                {{ lichessBusy ? (i18n.locale === 'en' ? 'Opening…' : 'Открываем…') : (state.mode === 'bughouse' ? 'Lichess · Board 1' : i18n.t.game.lichessAnalysis) }}
               </button>
               <button
                 v-if="state.mode === 'bughouse'"
                 class="small ghost"
                 @click="analyzeOnLichess(1)"
               >
-                <AppIcon name="external" :size="13" /> Lichess · доска 2
+                <AppIcon name="external" :size="13" /> Lichess · {{ i18n.locale === 'en' ? 'Board 2' : 'доска 2' }}
               </button>
             </div>
           </div>
@@ -1213,10 +1240,10 @@ function resultHeadline(): string {
         <div class="modal-foot">
           <button v-if="isParticipant" class="primary big" :disabled="rematchBusy" @click="rematch">
             <AppIcon name="rematch" :size="16" />
-            {{ rematchBusy ? 'Создаём…' : 'Реванш' }}
+            {{ rematchBusy ? (i18n.locale === 'en' ? 'Creating…' : 'Создаём…') : i18n.t.game.rematchBtn }}
           </button>
           <router-link to="/" class="button ghost">
-            В лобби
+            {{ i18n.t.game.backToLobby }}
           </router-link>
         </div>
       </div>

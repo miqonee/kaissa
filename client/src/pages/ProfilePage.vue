@@ -4,42 +4,37 @@ import type { ProfilePayload } from 'shared';
 import { api } from '../api/rest';
 import { useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { useI18n } from '../stores/i18n';
 import { isMuted, toggleSound } from '../audio/sounds';
 import GameReplayModal from '../components/GameReplayModal.vue';
 import { usePageSeo } from '../composables/useSeo';
 
 const route = useRoute();
 const auth = useAuthStore();
+const i18n = useI18n();
 const profile = ref<ProfilePayload | null>(null);
 const error = ref('');
 const replayId = ref<number | null>(null);
 
 const username = computed(() => (route.params.username as string) || '');
-const pageTitle = computed(() => `Профиль игрока ${username.value}: рейтинг и статистика | Каисса`);
+const pageTitle = computed(() => (i18n.locale === 'en' ? `Player Profile: ${username.value} | ${i18n.t.nav.brand}` : `Профиль игрока ${username.value}: рейтинг и статистика | Каисса`));
 const pageDescription = computed(() => {
   if (profile.value?.user) {
     const u = profile.value.user;
     const total = u.wins + u.losses + (u.draws || 0);
-    return `Профиль игрока ${u.username} в Каиссе: рейтинг ${u.rating} Elo, побед: ${u.wins}, поражений: ${u.losses}, сыграно партий: ${total}. Статистика и история матчей.`;
+    return i18n.locale === 'en'
+      ? `Player profile ${u.username} on Kaissa: ${u.rating} Elo, wins: ${u.wins}, losses: ${u.losses}, games played: ${total}.`
+      : `Профиль игрока ${u.username} в Каиссе: рейтинг ${u.rating} Elo, побед: ${u.wins}, поражений: ${u.losses}, сыграно партий: ${total}. Статистика и история матчей.`;
   }
-  return `Профиль игрока ${username.value}: рейтинг, статистика партий и история матчей в Каиссе.`;
+  return i18n.locale === 'en'
+    ? `Player profile ${username.value}: rating, game statistics and match history on Kaissa.`
+    : `Профиль игрока ${username.value}: рейтинг, статистика партий и история матчей в Каиссе.`;
 });
 
 usePageSeo({
   title: pageTitle,
   description: pageDescription,
-  keywords: computed(() => [
-    `игрок ${username.value}`,
-    `профиль ${username.value}`,
-    'рейтинг elo',
-    'статистика шахмат',
-    'каисса',
-  ]),
   canonical: computed(() => `/players/${username.value}`),
-  ogTitle: pageTitle,
-  ogDescription: pageDescription,
-  ogImage: 'https://duochess.ru/og-image.png',
-  twitterCard: 'summary_large_image',
 });
 
 const isMyProfile = computed(() => auth.user?.username === profile.value?.user.username);
@@ -68,18 +63,19 @@ const sparkPath = computed(() => {
 });
 
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString(i18n.locale === 'en' ? 'en-US' : 'ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function modeLabel(m: string): string {
-  return m === 'bughouse' ? 'Багхаус' : '2×2';
+  return m === 'bughouse' ? i18n.t.home.modeBughouse : i18n.t.home.modeTeam;
 }
 
 function gameOutcome(g: import('shared').GameSummary): string {
-  if (g.status === 'abandoned' || g.result === '*') return 'брошена';
+  const isEn = i18n.locale === 'en';
+  if (g.status === 'abandoned' || g.result === '*') return isEn ? 'abandoned' : 'брошена';
   const winner = g.result === '1-0' ? 1 : 2;
   const winners = g.participants.filter((p) => p.team === winner).map((p) => p.username);
-  return `победа: ${winners.join(' и ')}`;
+  return isEn ? `victory: ${winners.join(' & ')}` : `победа: ${winners.join(' и ')}`;
 }
 </script>
 
@@ -89,57 +85,63 @@ function gameOutcome(g: import('shared').GameSummary): string {
     <header class="profile-head panel">
       <div class="who">
         <h1>{{ profile.user.username }}</h1>
-        <p class="dim">с {{ fmtDate(profile.user.createdAt) }}</p>
+        <p class="dim">{{ i18n.locale === 'en' ? 'since' : 'с' }} {{ fmtDate(profile.user.createdAt) }}</p>
       </div>
       <div class="stats">
         <div class="stat">
           <span class="stat-num mono">{{ profile.user.rating }}</span>
-          <span class="stat-label">рейтинг</span>
+          <span class="stat-label">{{ i18n.t.profile.ratingElo }}</span>
         </div>
         <div class="stat">
           <span class="stat-num mono">{{ profile.user.wins }}</span>
-          <span class="stat-label">побед</span>
+          <span class="stat-label">{{ i18n.t.profile.statWins }}</span>
         </div>
         <div class="stat">
           <span class="stat-num mono">{{ profile.user.losses }}</span>
-          <span class="stat-label">поражений</span>
+          <span class="stat-label">{{ i18n.t.profile.statLosses }}</span>
         </div>
       </div>
     </header>
 
     <section class="panel" aria-labelledby="rating-dyn-heading" v-if="profile.ratingHistory.length >= 2">
-      <div class="panel-head"><h2 id="rating-dyn-heading">Динамика рейтинга</h2></div>
+      <div class="panel-head"><h2 id="rating-dyn-heading">{{ i18n.t.profile.chartTitle }}</h2></div>
       <div class="panel-body">
-        <svg viewBox="0 0 560 120" class="spark" preserveAspectRatio="none" role="img" aria-label="График динамики рейтинга">
-          <title>График динамики рейтинга</title>
+        <svg viewBox="0 0 560 120" class="spark" preserveAspectRatio="none" role="img" aria-label="Rating Chart">
+          <title>Rating Chart</title>
           <path :d="sparkPath!" fill="none" stroke="var(--accent)" stroke-width="2" />
         </svg>
       </div>
     </section>
 
     <section class="panel" aria-labelledby="settings-heading" v-if="isMyProfile">
-      <div class="panel-head"><h2 id="settings-heading">Настройки</h2></div>
+      <div class="panel-head"><h2 id="settings-heading">{{ i18n.locale === 'en' ? 'Settings' : 'Настройки' }}</h2></div>
       <div class="panel-body settings-row">
         <div class="setting-info">
-          <span class="setting-title">Звуковые эффекты</span>
-          <span class="setting-desc dim">Звуки ходов, взятий, шахов и окончания партии</span>
+          <span class="setting-title">{{ i18n.locale === 'en' ? 'Sound Effects' : 'Звуковые эффекты' }}</span>
+          <span class="setting-desc dim">{{ i18n.locale === 'en' ? 'Move sounds, captures, checks, and game end' : 'Звуки ходов, взятий, шахов и окончания партии' }}</span>
         </div>
         <button
           class="button"
           :class="isMuted ? 'ghost' : 'primary'"
           @click="toggleSound"
         >
-          {{ isMuted ? 'Звук: Выкл' : 'Звук: Вкл' }}
+          {{ isMuted ? (i18n.locale === 'en' ? 'Sound: Muted' : 'Звук: Выкл') : (i18n.locale === 'en' ? 'Sound: On' : 'Звук: Вкл') }}
         </button>
       </div>
     </section>
 
     <section class="panel" aria-labelledby="recent-games-heading">
-      <div class="panel-head"><h2 id="recent-games-heading">Недавние партии</h2></div>
+      <div class="panel-head"><h2 id="recent-games-heading">{{ i18n.t.profile.recentMatches }}</h2></div>
       <div v-if="profile.recentGames.length" class="table-wrap">
         <table class="club">
           <thead>
-            <tr><th>Дата</th><th>Режим</th><th>Участники</th><th>Итог</th><th>Действия</th></tr>
+            <tr>
+              <th>{{ i18n.t.history.colDate }}</th>
+              <th>{{ i18n.t.history.colMode }}</th>
+              <th>{{ i18n.t.history.colPlayers }}</th>
+              <th>{{ i18n.t.history.colResult }}</th>
+              <th>{{ i18n.locale === 'en' ? 'Actions' : 'Действия' }}</th>
+            </tr>
           </thead>
           <tbody>
             <tr v-for="g in profile.recentGames" :key="g.id">
@@ -148,24 +150,24 @@ function gameOutcome(g: import('shared').GameSummary): string {
               <td>{{ g.participants.map((p) => p.username).join(', ') }}</td>
               <td>{{ gameOutcome(g) }}</td>
               <td class="actions">
-                <button v-if="g.status !== 'active'" class="button small ghost" @click="replayId = g.id">Просмотр</button>
+                <button v-if="g.status !== 'active'" class="button small ghost" @click="replayId = g.id">{{ i18n.t.history.actionReplay }}</button>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
-      <div v-else class="empty">Партий пока нет.</div>
+      <div v-else class="empty">{{ i18n.t.profile.noGamesYet }}</div>
     </section>
 
     <!-- Модальный плеер партии -->
     <GameReplayModal
       v-if="replayId !== null"
       :game-id="replayId"
-      :title="`Партия #${replayId}`"
+      :title="i18n.locale === 'en' ? `Match #${replayId}` : `Партия #${replayId}`"
       @close="replayId = null"
     />
   </div>
-  <div v-else class="empty">Загрузка…</div>
+  <div v-else class="empty">{{ i18n.locale === 'en' ? 'Loading…' : 'Загрузка…' }}</div>
 </template>
 
 <style scoped>

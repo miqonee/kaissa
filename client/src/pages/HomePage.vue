@@ -6,16 +6,26 @@ import { getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
 import { getSocket, onSocketResync } from '../api/socket';
 import { api } from '../api/rest';
 import { useAuthStore } from '../stores/auth';
+import { useI18n } from '../stores/i18n';
 import ChessBoard from '../components/ChessBoard.vue';
 import CreateLobbyModal from '../components/CreateLobbyModal.vue';
 import AppIcon from '../components/AppIcon.vue';
 import BotHoverCard from '../components/BotHoverCard.vue';
 import { usePageSeo } from '../composables/useSeo';
 
+const i18n = useI18n();
+
 usePageSeo({
-  title: 'Шахматы на двоих онлайн: играть 2 на 2 и в Багхаус | Каисса',
-  description:
-    'Играйте в шахматы на двоих онлайн бесплатно. Командные шахматы 2х2 на одной доске и шведские шахматы (багхаус) с фигурами из резерва. Игра с друзьями и ботами.',
+  title: computed(() =>
+    i18n.locale === 'en'
+      ? 'Online Team Chess: 2v2 and Bughouse | Kaissa'
+      : 'Шахматы на двоих онлайн: играть 2 на 2 и в Багхаус | Каисса',
+  ),
+  description: computed(() =>
+    i18n.locale === 'en'
+      ? 'Play team chess online in pairs on one board or Bughouse with live piece drops and Stockfish AI bots.'
+      : 'Играйте в шахматы на двоих онлайн бесплатно. Командные шахматы 2х2 на одной доске и шведские шахматы (багхаус) с фигурами из резерва. Игра с друзьями и ботами.',
+  ),
   keywords: [
     'шахматы на двоих',
     'шахматы на двоих онлайн',
@@ -25,15 +35,11 @@ usePageSeo({
     'шахматы 2х2',
     'багхаус',
     'шведские шахматы',
-    'шахматы вдвоем',
-    'каисса',
+    'team chess',
+    'bughouse chess',
+    'kaissa',
   ],
   canonical: '/',
-  ogTitle: 'Шахматы на двоих онлайн: играть 2 на 2 и в Багхаус | Каисса',
-  ogDescription:
-    'Играйте в шахматы на двоих онлайн бесплатно: командные шахматы 2х2 на одной доске и багхаус с фигурами из резерва.',
-  ogImage: 'https://duochess.ru/og-image.png',
-  twitterCard: 'summary_large_image',
 });
 
 const router = useRouter();
@@ -229,7 +235,7 @@ watch(
 );
 
 function modeLabel(m: string): string {
-  return m === 'bughouse' ? 'Багхаус' : '2×2 одна доска';
+  return m === 'bughouse' ? i18n.t.home.modeBughouse : i18n.t.home.modeTeam;
 }
 
 function teamAvgRating(players: { team: number; rating: number }[], team: number): number {
@@ -242,25 +248,25 @@ function teamPlayers(g: LiveGameInfo, team: number): LiveGameInfo['players'] {
   return g.players.filter((p) => p.team === team);
 }
 
-// Подпись игрока в live-ленте: боты — только бейдж стиля (личный Elo не пишем,
-// достаточно командного среднего в скобках), люди — ник. Полное инфо — в тултипе.
 function livePlayerLabel(p: LiveGameInfo['players'][number]): string {
   if (!p.isBot) return p.username;
   const perso = getBotPersonality(p.username);
-  return perso ? perso.badge : 'Бот';
+  if (!perso) return i18n.locale === 'en' ? 'Bot' : 'Бот';
+  return (i18n.locale === 'en' && perso.badgeEn) || perso.badge;
 }
 
 function botDisplayName(p: LiveGameInfo['players'][number]): string {
   if (!p.isBot) return p.username;
   const perso = getBotPersonality(p.username);
-  if (!perso) return 'Бот';
-  const parts = perso.name.split(' ');
-  return parts.length > 1 ? parts[parts.length - 1] : perso.name;
+  if (!perso) return i18n.locale === 'en' ? 'Bot' : 'Бот';
+  const name = (i18n.locale === 'en' && perso.nameEn) || perso.name;
+  const parts = name.split(' ');
+  return parts.length > 1 ? parts[parts.length - 1] : name;
 }
 
 function livePlayerTitle(p: LiveGameInfo['players'][number]): string {
   if (!p.isBot) return `${p.username} · ${p.rating}`;
-  return getBotTooltip(p.username, p.rating);
+  return getBotTooltip(p.username, p.rating, i18n.locale);
 }
 
 // Краткая сводка игроков лобби: боты — бейджем, люди — ником.
@@ -269,14 +275,15 @@ function lobbyRosterLabel(l: LobbySummary): string {
     .map((p) => {
       if (!p.isBot) return p.username;
       const perso = getBotPersonality(p.username);
-      return perso ? perso.badge : 'Бот';
+      if (!perso) return i18n.locale === 'en' ? 'Bot' : 'Бот';
+      return (i18n.locale === 'en' && perso.badgeEn) || perso.badge;
     })
     .join(', ');
 }
 
 function lobbyRosterTitle(l: LobbySummary): string {
   return l.players
-    .map((p) => (p.isBot ? getBotTooltip(p.username, p.rating) : `${p.username} · ${p.rating}`))
+    .map((p) => (p.isBot ? getBotTooltip(p.username, p.rating, i18n.locale) : `${p.username} · ${p.rating}`))
     .join('\n');
 }
 </script>
@@ -284,28 +291,28 @@ function lobbyRosterTitle(l: LobbySummary): string {
 <template>
   <div class="home">
     <!-- Верхний баннер с быстрыми действиями -->
-    <section class="home-banner panel" aria-label="Быстрый старт">
+    <section class="home-banner panel" :aria-label="i18n.t.home.quickStartChip">
       <div class="banner-intro">
-        <h1>Шахматы на двоих онлайн: 2 на 2 и Багхаус</h1>
-        <p class="dim">Играйте в шахматы на двоих парами на одной доске или в шведские шахматы (багхаус) с обменом фигурами в реальном времени.</p>
+        <h1>{{ i18n.t.home.bannerTitle }}</h1>
+        <p class="dim">{{ i18n.t.home.bannerSubtitle }}</p>
       </div>
       <div class="banner-actions">
         <button class="primary banner-create-btn" @click="openCreateModal">
           <AppIcon name="plus" :size="18" :stroke-width="2.4" />
-          Создать стол
+          {{ i18n.t.home.createTable }}
         </button>
 
         <form class="quick-join" @submit.prevent="joinByCode">
           <input
             v-model="joinCode"
-            placeholder="КОД СТОЛА"
+            :placeholder="i18n.t.home.tableCodePlaceholder"
             maxlength="6"
             class="mono join-input"
-            aria-label="Код стола для быстрого входа"
+            :aria-label="i18n.t.home.tableCodePlaceholder"
             @input="joinError = ''"
           />
           <button type="submit" class="brass join-btn" :disabled="!joinCode.trim() || joinBusy">
-            Войти
+            {{ i18n.t.home.joinTable }}
           </button>
         </form>
       </div>
@@ -318,9 +325,9 @@ function lobbyRosterTitle(l: LobbySummary): string {
       <section class="live-col" aria-labelledby="live-games-heading">
         <div class="panel">
           <div class="panel-head">
-            <h2 id="live-games-heading">Сейчас в игре</h2>
-            <span class="badge on" v-if="sortedLiveGames.length">{{ sortedLiveGames.length }} партий</span>
-            <span class="hint" v-else>нет активных</span>
+            <h2 id="live-games-heading">{{ i18n.t.home.liveHeading }}</h2>
+            <span class="badge on" v-if="sortedLiveGames.length">{{ sortedLiveGames.length }} {{ i18n.t.home.liveCount }}</span>
+            <span class="hint" v-else>{{ i18n.t.home.noLiveGames }}</span>
           </div>
 
           <div
@@ -338,7 +345,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
               class="live-game"
               role="button"
               tabindex="0"
-              :aria-label="`Смотреть партию ${modeLabel(g.mode)}`"
+              :aria-label="`${i18n.t.home.spectateHint} ${modeLabel(g.mode)}`"
               @click="router.push(`/game/${g.gameId}`)"
               @keydown.enter.space.prevent="router.push(`/game/${g.gameId}`)"
             >
@@ -378,7 +385,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
                       <small class="mono team-elo">({{ teamAvgRating(g.players, 2) }})</small>
                     </span>
                   </div>
-                  <span class="spectate-hint" title="Смотреть партию">
+                  <span class="spectate-hint" :title="i18n.t.home.spectateHint">
                     <AppIcon name="eye" :size="15" />
                   </span>
                 </div>
@@ -387,8 +394,8 @@ function lobbyRosterTitle(l: LobbySummary): string {
           </div>
 
           <div v-else class="empty">
-            <p>Сейчас партий нет.</p>
-            <span class="dim">Создайте лобби и начните первую встречу!</span>
+            <p>{{ i18n.t.home.noTables }}</p>
+            <span class="dim">{{ i18n.t.home.createFirstPrompt }}</span>
           </div>
         </div>
       </section>
@@ -397,12 +404,12 @@ function lobbyRosterTitle(l: LobbySummary): string {
       <section class="lobbies-col" id="lobbies-section" aria-labelledby="open-lobbies-heading">
         <div class="panel">
           <div class="panel-head">
-            <h2 id="open-lobbies-heading">Открытые столы</h2>
-            <span class="hint">{{ lobbies.length }} открыто</span>
+            <h2 id="open-lobbies-heading">{{ i18n.t.home.openTablesHeading }}</h2>
+            <span class="hint">{{ lobbies.length }} {{ i18n.t.home.tablesCount }}</span>
           </div>
 
           <div v-if="loadingLobbies" class="empty dim" style="padding: 32px 16px;">
-            Загрузка столов…
+            {{ i18n.t.home.loadingTables }}
           </div>
 
           <div v-else-if="lobbies.length" class="panel-body lobby-rows">
@@ -412,7 +419,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
               class="lobby-card auto-lobby-card compact-card single-line-card"
               role="button"
               tabindex="0"
-              aria-label="Сесть за быстрый стол"
+              :aria-label="i18n.t.home.sitAtTable"
               @click="enterLobby(autoLobby)"
               @keydown.enter.space.prevent="enterLobby(autoLobby)"
             >
@@ -420,28 +427,28 @@ function lobbyRosterTitle(l: LobbySummary): string {
                 <span class="badges-row">
                   <span class="badge auto-chip">
                     <AppIcon name="bolt" :size="12" />
-                    Быстрый старт {{ autoLobby.timeControl.kind === 'clock' ? `${autoLobby.timeControl.baseMin}+${autoLobby.timeControl.incSec}` : '' }}
+                    {{ i18n.t.home.quickStartChip }} {{ autoLobby.timeControl.kind === 'clock' ? `${autoLobby.timeControl.baseMin}+${autoLobby.timeControl.incSec}` : '' }}
                   </span>
                   <span class="badge">{{ modeLabel(autoLobby.mode) }}</span>
                 </span>
                 <span
                   class="auto-hint-text dim tiny"
-                  title="Когда заходит человек — первый бот выходит и уступает место"
-                >Боты замещаются игроками</span>
+                  :title="i18n.t.home.quickStartHint"
+                >{{ i18n.t.home.quickStartHint }}</span>
               </div>
 
               <div class="lobby-card-meta">
-                <span class="seats-indicator" :title="`${autoLobbyHumanCount} чел., ${4 - autoLobbyHumanCount} ботов`">
+                <span class="seats-indicator" :title="`${autoLobbyHumanCount} ${i18n.locale === 'en' ? 'humans' : 'чел.'}, ${4 - autoLobbyHumanCount} ${i18n.locale === 'en' ? 'bots' : 'ботов'}`">
                   <span
                     v-for="s in 4"
                     :key="s"
                     class="seat-pip"
                     :class="{ filled: s <= autoLobbyHumanCount, bot: s > autoLobbyHumanCount }"
                   ></span>
-                  <span class="seats mono">{{ autoLobbyHumanCount }}/4 игроков</span>
+                  <span class="seats mono">{{ autoLobbyHumanCount }}/4 {{ i18n.t.home.playersCount }}</span>
                 </span>
                 <button class="brass small" @click.stop="enterLobby(autoLobby)">
-                  <AppIcon name="bolt" :size="13" /> Сесть за стол
+                  <AppIcon name="bolt" :size="13" /> {{ i18n.t.home.sitAtTable }}
                 </button>
               </div>
             </article>

@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { GameSummary, MoveRecord, PieceType, Pocket } from 'shared';
 import { detectOpening, timeControlLabel } from 'shared';
+import { useI18n } from '../stores/i18n';
 import ChessBoard from './ChessBoard.vue';
 import PocketBar from './PocketBar.vue';
 import AppIcon from './AppIcon.vue';
@@ -14,6 +15,8 @@ import {
   playCastleSound,
   playDropSound,
 } from '../audio/sounds';
+
+const i18n = useI18n();
 
 const props = withDefaults(
   defineProps<{
@@ -173,7 +176,7 @@ onBeforeUnmount(() => {
 // ---------- Отображение ----------
 
 function modeLabel(m: string): string {
-  return m === 'bughouse' ? 'Багхаус' : 'Матч 2×2';
+  return m === 'bughouse' ? (i18n.locale === 'en' ? 'Bughouse' : 'Багхаус') : (i18n.locale === 'en' ? '2v2 Match' : 'Матч 2×2');
 }
 
 function orientationOf(b: number): 'white' | 'black' {
@@ -437,20 +440,20 @@ function pieceLabel(t: PieceType): string {
     <!-- Транспорт -->
     <div class="rp-transport">
       <div class="rp-buttons">
-        <button class="small ghost icon-only" :disabled="!canPrev" title="В начало (Home)" @click="first">
+        <button class="small ghost icon-only" :disabled="!canPrev" :title="i18n.locale === 'en' ? 'First (Home)' : 'В начало (Home)'" @click="first">
           <AppIcon name="skip-back" :size="14" />
         </button>
-        <button class="small icon-only" :disabled="!canPrev" title="Назад (←)" @click="prev">
+        <button class="small icon-only" :disabled="!canPrev" :title="i18n.locale === 'en' ? 'Previous (←)' : 'Назад (←)'" @click="prev">
           <AppIcon name="chevron-left" :size="16" />
         </button>
         <button class="brass rp-play" :disabled="!total" @click="togglePlay">
           <AppIcon :name="playing ? 'pause' : 'play'" :size="15" />
-          {{ playing ? 'Пауза' : 'Смотреть' }}
+          {{ playing ? (i18n.locale === 'en' ? 'Pause' : 'Пауза') : (i18n.locale === 'en' ? 'Play' : 'Смотреть') }}
         </button>
-        <button class="small icon-only" :disabled="!canNext" title="Вперёд (→)" @click="next">
+        <button class="small icon-only" :disabled="!canNext" :title="i18n.locale === 'en' ? 'Next (→)' : 'Вперёд (→)'" @click="next">
           <AppIcon name="chevron-right" :size="16" />
         </button>
-        <button class="small ghost icon-only" :disabled="!canNext" title="В конец (End)" @click="last">
+        <button class="small ghost icon-only" :disabled="!canNext" :title="i18n.locale === 'en' ? 'Last (End)' : 'В конец (End)'" @click="last">
           <AppIcon name="skip-forward" :size="14" />
         </button>
       </div>

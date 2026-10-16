@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { MODE_INFO, type GameMode, type TeamMode, type TimeControl } from 'shared';
+import { useI18n } from '../stores/i18n';
 import AppIcon from './AppIcon.vue';
+
+const i18n = useI18n();
 
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -26,18 +29,19 @@ function toggleRules(mode: GameMode) {
   expandedRules.value[mode] = !expandedRules.value[mode];
 }
 
-const TC_PRESETS: { label: string; tc: TimeControl }[] = [
-  { label: '3+2 блиц', tc: { kind: 'clock', baseMin: 3, incSec: 2 } },
-  { label: '5+0 блиц', tc: { kind: 'clock', baseMin: 5, incSec: 0 } },
-  { label: '5+3 блиц', tc: { kind: 'clock', baseMin: 5, incSec: 3 } },
-  { label: '10+5 рапид', tc: { kind: 'clock', baseMin: 10, incSec: 5 } },
-  { label: 'Без часов', tc: { kind: 'none', baseMin: 0, incSec: 0 } },
-];
+const tcPresets = computed<{ label: string; tc: TimeControl }[]>(() => [
+  { label: i18n.t.createModal.tc3plus2, tc: { kind: 'clock', baseMin: 3, incSec: 2 } },
+  { label: i18n.t.createModal.tc5plus0, tc: { kind: 'clock', baseMin: 5, incSec: 0 } },
+  { label: i18n.t.createModal.tc5plus3, tc: { kind: 'clock', baseMin: 5, incSec: 3 } },
+  { label: i18n.t.createModal.tc10plus5, tc: { kind: 'clock', baseMin: 10, incSec: 5 } },
+  { label: i18n.t.createModal.tcNoClock, tc: { kind: 'none', baseMin: 0, incSec: 0 } },
+]);
 const selectedTcIdx = ref(2); // 5+3 по умолчанию
 
 function submit() {
-  const tc = TC_PRESETS[selectedTcIdx.value].tc;
-  const name = lobbyName.value.trim() || (selectedMode.value === 'bughouse' ? 'Багхаус' : 'Матч 2×2');
+  const tc = tcPresets.value[selectedTcIdx.value].tc;
+  const defaultName = selectedMode.value === 'bughouse' ? i18n.t.home.modeBughouse : i18n.t.home.modeTeam;
+  const name = lobbyName.value.trim() || defaultName;
   emit('create', {
     name,
     mode: selectedMode.value,
@@ -52,8 +56,8 @@ function submit() {
   <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="create-modal-title" @click.self="emit('close')">
     <div class="modal create-modal">
       <header class="modal-head">
-        <h2 id="create-modal-title">Создание лобби</h2>
-        <button class="modal-close" @click="emit('close')" aria-label="Закрыть">
+        <h2 id="create-modal-title">{{ i18n.t.createModal.title }}</h2>
+        <button class="modal-close" @click="emit('close')" :aria-label="i18n.t.createModal.cancelBtn">
           <AppIcon name="close" :size="18" />
         </button>
       </header>
@@ -61,17 +65,17 @@ function submit() {
       <div class="modal-body">
         <!-- Название -->
         <div class="form-row">
-          <label class="field-label">Название стола</label>
+          <label class="field-label">{{ i18n.t.createModal.nameLabel }}</label>
           <input
             v-model="lobbyName"
-            placeholder="Например: Пятничный багхаус, Партия мастеров…"
+            :placeholder="i18n.t.createModal.namePlaceholder"
             maxlength="40"
           />
         </div>
 
         <!-- Выбор режима с подробными правилами -->
         <div class="form-row">
-          <label class="field-label">Выберите режим</label>
+          <label class="field-label">{{ i18n.t.createModal.modeLabel }}</label>
           <div class="mode-cards">
             <div
               v-for="info in MODE_INFO"
@@ -81,7 +85,7 @@ function submit() {
               @click="selectedMode = info.mode"
             >
               <div class="mode-card-head">
-                <span class="mode-title">{{ info.title }}</span>
+                <span class="mode-title">{{ i18n.locale === 'en' ? (info.mode === 'bughouse' ? i18n.t.createModal.modeBughouse : i18n.t.createModal.modeTeam) : info.title }}</span>
                 <span v-if="selectedMode === info.mode" class="mode-check">
                   <AppIcon name="check" :size="13" :stroke-width="2.6" />
                 </span>
@@ -92,12 +96,12 @@ function submit() {
                 class="mode-rules-toggle"
                 @click.stop="toggleRules(info.mode)"
               >
-                <span>{{ expandedRules[info.mode] ? 'Скрыть правила' : 'Правила режима' }}</span>
+                <span>{{ expandedRules[info.mode] ? (i18n.locale === 'en' ? 'Hide rules' : 'Скрыть правила') : (i18n.locale === 'en' ? 'Game rules' : 'Правила режима') }}</span>
                 <AppIcon :name="expandedRules[info.mode] ? 'chevron-up' : 'chevron-down'" :size="13" />
               </button>
               <ul v-if="expandedRules[info.mode]" class="mode-rules">
                 <li v-for="(r, i) in info.rules" :key="i">{{ r }}</li>
-                <li v-if="info.mode === 'bughouse'">Только живые игроки — боты отключены</li>
+                <li v-if="info.mode === 'bughouse'">{{ i18n.locale === 'en' ? 'Humans only — bots disabled' : 'Только живые игроки — боты отключены' }}</li>
               </ul>
             </div>
           </div>
@@ -105,10 +109,10 @@ function submit() {
 
         <!-- Контроль времени -->
         <div class="form-row">
-          <label class="field-label">Контроль времени</label>
+          <label class="field-label">{{ i18n.t.createModal.timeControlLabel }}</label>
           <div class="tc-grid">
             <button
-              v-for="(p, i) in TC_PRESETS"
+              v-for="(p, i) in tcPresets"
               :key="p.label"
               type="button"
               class="tc-btn"
@@ -122,7 +126,7 @@ function submit() {
 
         <!-- Режим распределения команд -->
         <div class="form-row">
-          <label class="field-label">Распределение команд</label>
+          <label class="field-label">{{ i18n.t.createModal.teamBalanceLabel }}</label>
           <div class="tc-grid">
             <button
               type="button"
@@ -130,7 +134,7 @@ function submit() {
               :class="{ active: selectedTeamMode === 'auto' }"
               @click="selectedTeamMode = 'auto'"
             >
-              Авто (по Elo)
+              {{ i18n.t.createModal.teamBalanceAuto }}
             </button>
             <button
               type="button"
@@ -138,7 +142,7 @@ function submit() {
               :class="{ active: selectedTeamMode === 'random' }"
               @click="selectedTeamMode = 'random'"
             >
-              Случайно
+              {{ i18n.t.createModal.teamBalanceRandom }}
             </button>
             <button
               type="button"
@@ -146,7 +150,7 @@ function submit() {
               :class="{ active: selectedTeamMode === 'manual' }"
               @click="selectedTeamMode = 'manual'"
             >
-              Свои команды (ручной)
+              {{ i18n.t.createModal.teamBalanceManual }}
             </button>
           </div>
         </div>
@@ -156,8 +160,8 @@ function submit() {
           <label class="checkbox-label">
             <input type="checkbox" v-model="isPrivate" />
             <span>
-              <strong>Приватное лобби</strong>
-              <small class="dim">Не будет отображаться в общем списке столов. Вход только по 6-значному коду или прямой ссылке.</small>
+              <strong>{{ i18n.t.createModal.privateTable }}</strong>
+              <small class="dim">{{ i18n.t.createModal.privateTableHint }}</small>
             </span>
           </label>
         </div>
@@ -166,9 +170,15 @@ function submit() {
       </div>
 
       <footer class="modal-foot">
-        <button type="button" @click="emit('close')">Отмена</button>
-        <button type="button" class="primary big" :disabled="busy" @click="submit">
-          {{ busy ? 'Создаём…' : 'Создать стол' }}
+        <button type="button" @click="emit('close')">{{ i18n.t.createModal.cancelBtn }}</button>
+        <button
+          type="button"
+          class="primary"
+          :disabled="busy"
+          @click="submit"
+        >
+          <AppIcon name="plus" :size="15" />
+          {{ busy ? i18n.t.createModal.creatingBtn : i18n.t.createModal.createBtn }}
         </button>
       </footer>
     </div>

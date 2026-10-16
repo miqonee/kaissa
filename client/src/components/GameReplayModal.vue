@@ -2,8 +2,11 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { GameSummary, MoveRecord } from 'shared';
 import { api } from '../api/rest';
+import { useI18n } from '../stores/i18n';
 import AppIcon from './AppIcon.vue';
 import GameReplayer from './GameReplayer.vue';
+
+const i18n = useI18n();
 
 const props = defineProps<{
   gameId: number;
@@ -26,7 +29,7 @@ async function load(): Promise<void> {
     game.value = res.game;
     moves.value = res.moves;
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Не удалось загрузить партию';
+    error.value = e instanceof Error ? e.message : (i18n.locale === 'en' ? 'Failed to load game' : 'Не удалось загрузить партию');
   } finally {
     loading.value = false;
   }
@@ -64,19 +67,19 @@ watch(() => props.gameId, load);
       :class="{ 'two-boards': game?.mode === 'bughouse' }"
       role="dialog"
       aria-modal="true"
-      :aria-label="title ?? `Партия #${gameId}`"
+      :aria-label="title ?? (i18n.locale === 'en' ? `Match #${gameId}` : `Партия #${gameId}`)"
     >
       <header class="modal-head">
-        <h2>{{ title ?? `Партия #${gameId}` }}</h2>
+        <h2>{{ title ?? (i18n.locale === 'en' ? `Match #${gameId}` : `Партия #${gameId}`) }}</h2>
         <div class="rh-actions">
-          <button class="modal-close" aria-label="Закрыть" @click="emit('close')">
+          <button class="modal-close" :aria-label="i18n.locale === 'en' ? 'Close' : 'Закрыть'" @click="emit('close')">
             <AppIcon name="close" :size="18" />
           </button>
         </div>
       </header>
 
       <div class="modal-body">
-        <div v-if="loading" class="empty">Загружаем партию…</div>
+        <div v-if="loading" class="empty">{{ i18n.locale === 'en' ? 'Loading game…' : 'Загружаем партию…' }}</div>
         <div v-else-if="error" class="empty">
           <p class="empty-title">{{ error }}</p>
         </div>

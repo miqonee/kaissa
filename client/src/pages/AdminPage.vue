@@ -3,11 +3,14 @@ import { computed, onMounted, ref } from 'vue';
 import { fmtDuration, type AdminUserRow, type PlatformMetrics } from 'shared';
 import { api } from '../api/rest';
 import { useAuthStore } from '../stores/auth';
+import { useI18n } from '../stores/i18n';
 import AppIcon from '../components/AppIcon.vue';
 import { usePageSeo } from '../composables/useSeo';
 
+const i18n = useI18n();
+
 usePageSeo({
-  title: 'Панель администратора | Каисса',
+  title: computed(() => (i18n.locale === 'en' ? `Admin Dashboard | ${i18n.t.nav.brand}` : 'Панель администратора | Каисса')),
   canonical: '/admin',
   noindex: true,
 });
@@ -172,34 +175,34 @@ const durationSubtext = computed(() => {
     <section class="panel" aria-labelledby="admin-title">
       <div class="panel-head">
         <div>
-          <h1 id="admin-title" class="panel-title">Панель администратора</h1>
-          <span class="hint">Метрики платформы, балансировка ботов и управление игроками</span>
+          <h1 id="admin-title" class="panel-title">{{ i18n.t.admin.title }}</h1>
+          <span class="hint">{{ i18n.locale === 'en' ? 'Platform metrics, bot balancing, and user management' : 'Метрики платформы, балансировка ботов и управление игроками' }}</span>
         </div>
         <button class="small ghost" @click="loadData">
-          <AppIcon name="refresh" :size="14" /> Обновить
+          <AppIcon name="refresh" :size="14" /> {{ i18n.locale === 'en' ? 'Refresh' : 'Обновить' }}
         </button>
       </div>
 
       <!-- Общие метрики платформы -->
       <div v-if="metrics" class="metrics-grid">
         <div class="metric-card">
-          <span class="dim tiny">Онлайн</span>
+          <span class="dim tiny">{{ i18n.t.admin.metricOnline }}</span>
           <span class="metric-val mono">{{ metrics.onlineUsers }}</span>
         </div>
         <div class="metric-card">
-          <span class="dim tiny">Пользователей</span>
+          <span class="dim tiny">{{ i18n.t.admin.metricUsers }}</span>
           <span class="metric-val mono">{{ metrics.totalUsers }}</span>
         </div>
         <div class="metric-card">
-          <span class="dim tiny">Всего партий</span>
+          <span class="dim tiny">{{ i18n.t.admin.metricGames }}</span>
           <span class="metric-val mono">{{ metrics.totalGames }}</span>
         </div>
         <div class="metric-card">
-          <span class="dim tiny">Всего ходов</span>
+          <span class="dim tiny">{{ i18n.t.admin.metricMoves }}</span>
           <span class="metric-val mono">{{ metrics.totalMoves }}</span>
         </div>
         <div class="metric-card" :title="durationTooltip">
-          <span class="dim tiny">Ср. длительность</span>
+          <span class="dim tiny">{{ i18n.t.admin.metricAvgDuration }}</span>
           <span class="metric-val mono">{{ fmtDuration(metrics.avgGameDurationSec) }}</span>
           <span v-if="durationSubtext" class="metric-sub-hint mono tiny dim">{{ durationSubtext }}</span>
         </div>

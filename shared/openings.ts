@@ -28,6 +28,7 @@ export interface RecognizedOpening {
   planRu: string;          // Стратегический план
   stage: 'start' | 'theory' | 'middlegame';
   stageLabelRu: string;
+  stageLabelEn?: string;
   continuations: OpeningContinuation[]; // Теоретические ветки из текущей позиции
   plyCount: number;
 }
@@ -916,6 +917,7 @@ export function detectOpening(movesSan: string[]): RecognizedOpening {
       planRu: 'Оригинальная расстановка фигур вне основных классических дебютных канонов. Стремитесь к контролю центра и ранней рокировке.',
       stage: movesSan.length > 8 ? 'middlegame' : 'theory',
       stageLabelRu: movesSan.length > 8 ? 'Миттельшпиль' : 'Вне теории',
+      stageLabelEn: movesSan.length > 8 ? 'Middlegame' : 'Out of book',
       continuations: [],
       plyCount: movesSan.length,
     };
@@ -936,6 +938,7 @@ export function detectOpening(movesSan: string[]): RecognizedOpening {
     planRu: bestMatch.planRu,
     stage: isMiddlegame ? 'middlegame' : 'theory',
     stageLabelRu: isMiddlegame ? 'Миттельшпиль' : (continuations.length > 0 ? 'Теория' : 'Окончание теории'),
+    stageLabelEn: isMiddlegame ? 'Middlegame' : (continuations.length > 0 ? 'Theory' : 'Out of book'),
     continuations,
     plyCount: movesSan.length,
   };

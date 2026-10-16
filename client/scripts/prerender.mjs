@@ -30,7 +30,7 @@ const pages = [
         name: 'Каисса',
         alternateName: ['Kaissa', 'DuoChess'],
         url: 'https://duochess.ru/',
-        inLanguage: 'ru',
+        inLanguage: ['ru', 'en'],
         description: 'Платформа для игры в шахматы на двоих онлайн: командные шахматы 2 на 2 на одной доске и шведские шахматы (багхаус).',
       },
       {
@@ -49,7 +49,7 @@ const pages = [
           price: '0',
           priceCurrency: 'RUB',
         },
-        inLanguage: 'ru',
+        inLanguage: ['ru', 'en'],
         image: 'https://duochess.ru/og-image.png',
         author: {
           '@type': 'Organization',
@@ -136,7 +136,7 @@ const pages = [
         description:
           'Официальные правила командных шахмат 2 на 2 на одной доске: очередность ходов, командные часы и основы игры в паре на платформе Каисса.',
         url: 'https://duochess.ru/rules/duo',
-        inLanguage: 'ru',
+        inLanguage: ['ru', 'en'],
         author: {
           '@type': 'Organization',
           name: 'Каисса',
@@ -233,7 +233,7 @@ const pages = [
         description:
           'Подробные правила шведских шахмат (Bughouse Chess) онлайн: дропы фигур из резерва, передача сбитых фигур партнеру, разжалование пешек и командная игра на платформе Каисса.',
         url: 'https://duochess.ru/rules/bughouse',
-        inLanguage: 'ru',
+        inLanguage: ['ru', 'en'],
         author: {
           '@type': 'Organization',
           name: 'Каисса',
@@ -319,7 +319,7 @@ const pages = [
         description:
           'Платформа Каисса: площадка для командных шахмат 2х2 на одной доске и шведских шахмат (Багхаус) онлайн. Боты разного уровня и игра в реальном времени.',
         url: 'https://duochess.ru/about',
-        inLanguage: 'ru',
+        inLanguage: ['ru', 'en'],
       },
     ],
     contentHtml: `
@@ -389,7 +389,7 @@ const pages = [
         '@type': 'WebPage',
         name: 'Таблица лидеров: рейтинг игроков в шахматы 2 на 2 и Багхаус | Каисса',
         url: 'https://duochess.ru/leaderboard',
-        inLanguage: 'ru',
+        inLanguage: ['ru', 'en'],
       },
     ],
     contentHtml: `
@@ -438,7 +438,7 @@ const pages = [
         '@type': 'WebPage',
         name: 'Архив партий: реплеи командных шахмат 2 на 2 и Багхауса | Каисса',
         url: 'https://duochess.ru/history',
-        inLanguage: 'ru',
+        inLanguage: ['ru', 'en'],
       },
     ],
     contentHtml: `
@@ -468,7 +468,7 @@ const pages = [
         '@type': 'WebPage',
         name: 'Вход и регистрация в шахматном клубе | Каисса',
         url: 'https://duochess.ru/login',
-        inLanguage: 'ru',
+        inLanguage: ['ru', 'en'],
       },
     ],
     contentHtml: `
@@ -503,10 +503,24 @@ function generateHtmlForPage(page) {
     `<meta name="keywords" content="${page.keywords}" />`,
   );
 
-  // 4. Canonical link
+  // 4. Canonical & Hreflang links
+  const cleanBase = page.canonical.replace(/\/+$/, '');
+  const enUrl = page.path === '/' ? `${cleanBase}/?lang=en` : `${cleanBase}?lang=en`;
   html = html.replace(
     /<link\s+rel="canonical"\s+href=".*?"\s*\/?>/i,
     `<link rel="canonical" href="${page.canonical}" />`,
+  );
+  html = html.replace(
+    /<link\s+rel="alternate"\s+hreflang="ru"\s+href=".*?"\s*\/?>/i,
+    `<link rel="alternate" hreflang="ru" href="${page.canonical}" />`,
+  );
+  html = html.replace(
+    /<link\s+rel="alternate"\s+hreflang="en"\s+href=".*?"\s*\/?>/i,
+    `<link rel="alternate" hreflang="en" href="${enUrl}" />`,
+  );
+  html = html.replace(
+    /<link\s+rel="alternate"\s+hreflang="x-default"\s+href=".*?"\s*\/?>/i,
+    `<link rel="alternate" hreflang="x-default" href="${page.canonical}" />`,
   );
 
   // 5. OpenGraph

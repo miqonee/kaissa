@@ -3,6 +3,7 @@ import { computed, onMounted, watch } from 'vue';
 import { useAuthStore } from './stores/auth';
 import { useThemeStore } from './stores/theme';
 import { useConnectionStore } from './stores/connection';
+import { useI18nStore } from './stores/i18n';
 import { useToast } from './stores/toast';
 import { getSocket, resetSocket } from './api/socket';
 import AppIcon from './components/AppIcon.vue';
@@ -12,9 +13,11 @@ const auth = useAuthStore();
 const theme = useThemeStore();
 const conn = useConnectionStore();
 const toast = useToast();
+const i18n = useI18nStore();
 
 onMounted(async () => {
   theme.init();
+  i18n.init();
   if (!auth.checked) {
     await auth.check();
   }
@@ -34,19 +37,19 @@ function logout(): void {
 }
 
 const themeTitle = computed(() =>
-  theme.current === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему',
+  theme.current === 'dark' ? i18n.t.nav.themeLight : i18n.t.nav.themeDark,
 );
 
 const connLabel = computed(() => {
   switch (conn.state) {
     case 'connected':
-      return 'Связь установлена';
+      return i18n.t.nav.connConnected;
     case 'reconnecting':
-      return 'Переподключение…';
+      return i18n.t.nav.connReconnecting;
     case 'offline':
-      return 'Нет связи';
+      return i18n.t.nav.connOffline;
     default:
-      return 'Подключение…';
+      return i18n.t.nav.connConnecting;
   }
 });
 </script>
@@ -62,16 +65,27 @@ const connLabel = computed(() => {
             <rect class="logo-gold" x="24" y="98" width="46" height="46" rx="12" />
             <rect class="logo-felt" x="80" y="98" width="46" height="46" rx="12" />
           </svg>
-          Каисса
+          {{ i18n.t.nav.brand }}
         </router-link>
 
         <nav aria-label="Основная навигация">
-          <router-link to="/">Лобби</router-link>
-          <router-link to="/leaderboard">Рейтинг</router-link>
-          <router-link to="/history">Архив партий</router-link>
+          <router-link to="/">{{ i18n.t.nav.lobbies }}</router-link>
+          <router-link to="/leaderboard">{{ i18n.t.nav.leaderboard }}</router-link>
+          <router-link to="/history">{{ i18n.t.nav.history }}</router-link>
         </nav>
 
         <div class="topbar-right">
+          <button
+            class="lang-btn"
+            @click="i18n.toggle"
+            :title="i18n.t.nav.switchLang"
+            :aria-label="i18n.t.nav.switchLang"
+          >
+            <span class="lang-opt" :class="{ active: i18n.locale === 'ru' }">RU</span>
+            <span class="lang-divider">/</span>
+            <span class="lang-opt" :class="{ active: i18n.locale === 'en' }">EN</span>
+          </button>
+
           <span
             v-if="auth.user"
             class="conn-indicator"
@@ -93,23 +107,23 @@ const connLabel = computed(() => {
               v-if="auth.user.isAdmin"
               to="/admin"
               class="admin-header-btn"
-              title="Панель администратора"
+              :title="i18n.t.admin.title"
             >
               <AppIcon name="crown" :size="14" />
-              <span>Админка</span>
+              <span>{{ i18n.t.nav.admin }}</span>
             </router-link>
 
             <router-link :to="`/players/${auth.user.username}`" class="me-link">
               <span class="me-name">{{ auth.user.username }}</span>
               <span class="rating-chip mono">{{ auth.user.rating }}</span>
             </router-link>
-            <button class="logout-btn" @click="logout" title="Выйти из аккаунта" aria-label="Выйти">
+            <button class="logout-btn" @click="logout" :title="i18n.t.nav.logout" :aria-label="i18n.t.nav.logout">
               <AppIcon name="log-out" :size="14" />
-              <span class="logout-text">Выйти</span>
+              <span class="logout-text">{{ i18n.t.nav.logout }}</span>
             </button>
           </template>
           <template v-else>
-            <router-link to="/login" class="login-header-btn">Войти / Регистрация</router-link>
+            <router-link to="/login" class="login-header-btn">{{ i18n.locale === 'ru' ? 'Войти / Регистрация' : 'Sign In / Register' }}</router-link>
           </template>
         </div>
       </div>
@@ -234,7 +248,49 @@ const connLabel = computed(() => {
   }
 }
 
+.lang-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--r-s);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.lang-btn:hover {
+  border-color: var(--line-active);
+  color: var(--ink);
+}
+
+.lang-opt {
+  transition: color 0.15s ease;
+}
+
+.lang-opt.active {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.lang-divider {
+  opacity: 0.35;
+  font-size: 11px;
+}
+
 @media (max-width: 720px) {
+  .lang-btn {
+    height: 30px;
+    padding: 0 6px;
+    font-size: 11px;
+  }
+
   .admin-header-btn {
     height: 30px;
     padding: 0 6px;

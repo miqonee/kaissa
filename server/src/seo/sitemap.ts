@@ -13,11 +13,17 @@ export const VALID_CHANGEFREQS: ReadonlySet<ChangeFreq> = new Set([
   'never',
 ]);
 
+export interface SitemapAlternateLink {
+  hreflang: string;
+  href: string;
+}
+
 export interface SitemapUrlEntry {
   loc: string;
   lastmod?: string; // W3C format: YYYY-MM-DD
   changefreq?: ChangeFreq;
   priority?: number; // 0.0 - 1.0
+  alternates?: SitemapAlternateLink[];
 }
 
 export interface GenerateSitemapOptions {
@@ -58,6 +64,11 @@ export function formatW3CDate(d: Date | string | number | null | undefined): str
 export function formatUrlXml(entry: SitemapUrlEntry): string {
   const parts: string[] = ['  <url>'];
   parts.push(`    <loc>${escapeXml(entry.loc)}</loc>`);
+  if (entry.alternates && entry.alternates.length > 0) {
+    for (const alt of entry.alternates) {
+      parts.push(`    <xhtml:link rel="alternate" hreflang="${escapeXml(alt.hreflang)}" href="${escapeXml(alt.href)}" />`);
+    }
+  }
   if (entry.lastmod) {
     parts.push(`    <lastmod>${escapeXml(entry.lastmod)}</lastmod>`);
   }
@@ -147,6 +158,12 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
   const historyLastmod = formatW3CDate(latestGame?.endedAt || latestGame?.startedAt || today);
   const leaderboardLastmod = formatW3CDate(latestRating?.createdAt || today);
 
+  const makeAlternates = (loc: string): SitemapAlternateLink[] => [
+    { hreflang: 'ru', href: loc },
+    { hreflang: 'en', href: `${loc}${loc.includes('?') ? '&' : '?'}lang=en` },
+    { hreflang: 'x-default', href: loc },
+  ];
+
   const entries: SitemapUrlEntry[] = [
     // Главная страница: наивысший приоритет, ежедневное обновление
     {
@@ -154,6 +171,7 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
       lastmod: today,
       changefreq: 'daily',
       priority: 1.0,
+      alternates: makeAlternates(`${baseUrl}/`),
     },
     // Таблица лидеров: частые обновления рейтинга
     {
@@ -161,6 +179,7 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
       lastmod: leaderboardLastmod,
       changefreq: 'hourly',
       priority: 0.8,
+      alternates: makeAlternates(`${baseUrl}/leaderboard`),
     },
     // Архив партий: ежедневные обновления
     {
@@ -168,6 +187,7 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
       lastmod: historyLastmod,
       changefreq: 'daily',
       priority: 0.7,
+      alternates: makeAlternates(`${baseUrl}/history`),
     },
     // Правила и информация о платформе
     {
@@ -175,18 +195,21 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
       lastmod: today,
       changefreq: 'weekly',
       priority: 0.9,
+      alternates: makeAlternates(`${baseUrl}/rules/duo`),
     },
     {
       loc: `${baseUrl}/rules/bughouse`,
       lastmod: today,
       changefreq: 'weekly',
       priority: 0.9,
+      alternates: makeAlternates(`${baseUrl}/rules/bughouse`),
     },
     {
       loc: `${baseUrl}/about`,
       lastmod: today,
       changefreq: 'monthly',
       priority: 0.8,
+      alternates: makeAlternates(`${baseUrl}/about`),
     },
     // Вход и регистрация: статичная служебная страница
     {
@@ -194,23 +217,26 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
       lastmod: today,
       changefreq: 'monthly',
       priority: 0.5,
+      alternates: makeAlternates(`${baseUrl}/login`),
     },
   ];
 
   // Динамические профили активных игроков
   for (const player of activePlayers) {
+    const playerLoc = `${baseUrl}/players/${encodeURIComponent(player.username)}`;
     entries.push({
-      loc: `${baseUrl}/players/${encodeURIComponent(player.username)}`,
+      loc: playerLoc,
       lastmod: formatW3CDate(player.updatedAt || player.createdAt || today),
       changefreq: 'weekly',
       priority: 0.6,
+      alternates: makeAlternates(playerLoc),
     });
   }
 
   const urlsXml = entries.map(formatUrlXml).join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
 ${urlsXml}
 </urlset>
 `;
@@ -296,11 +322,15 @@ export function validateSitemapXml(xml: string): ValidationResult {
   }
 
   // Корневой элемент и namespace
-  const rootMatch = trimmed.match(/<urlset\s+xmlns="([^"]+)">/);
+  const rootMatch = trimmed.match(/<urlset\s+([^>]+)>/);
   if (!rootMatch) {
     errors.push('Missing <urlset> root element');
-  } else if (rootMatch[1] !== 'http://www.sitemaps.org/schemas/sitemap/0.9') {
-    errors.push(`Invalid namespace: expected "http://www.sitemaps.org/schemas/sitemap/0.9", got "${rootMatch[1]}"`);
+  } else {
+    const attrs = rootMatch[1];
+    const nsMatch = attrs.match(/xmlns="([^"]+)"/);
+    if (!nsMatch || nsMatch[1] !== 'http://www.sitemaps.org/schemas/sitemap/0.9') {
+      errors.push(`Invalid namespace: expected "http://www.sitemaps.org/schemas/sitemap/0.9", got "${nsMatch ? nsMatch[1] : 'none'}"`);
+    }
   }
 
   if (!trimmed.endsWith('</urlset>')) {

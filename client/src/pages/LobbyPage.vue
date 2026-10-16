@@ -21,7 +21,7 @@ const lobby = ref<LobbySummary | null>(null);
 const lobbyDisplayName = computed(() => {
   if (!lobby.value) return '';
   if (lobby.value.isAuto) {
-    return i18n.locale === 'en' ? 'Quick 3+0' : 'Быстрый 3+0';
+    return i18n.t.lobby.quickAutoTitle;
   }
   return lobby.value.name;
 });

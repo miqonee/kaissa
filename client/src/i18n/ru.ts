@@ -21,7 +21,7 @@ export const ru: TranslationSchema = {
   },
   home: {
     bannerTitle: 'Шахматы на двоих онлайн: 2 на 2 и Багхаус',
-    bannerSubtitle: 'Играйте в шахматы на двоих парами на одной доске или в шведские шахматы (багхаус) с обменом фигурами в реальном времени.',
+    bannerSubtitle: 'Играйте парами 2х2 на одной доске или в шведские шахматы (багхаус) с обменом фигурами.',
     createTable: 'Создать стол',
     tableCodePlaceholder: 'КОД СТОЛА',
     joinTable: 'Войти',
@@ -68,7 +68,7 @@ export const ru: TranslationSchema = {
   },
   lobby: {
     tableHeading: 'Стол',
-    quickAutoTitle: 'Быстрый 3+0',
+    quickAutoTitle: 'Быстрый старт',
     copyCode: 'Скопировать код стола',
     codeCopied: 'Код скопирован!',
     changeTime: 'Сменить контроль',

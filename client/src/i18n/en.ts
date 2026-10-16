@@ -68,7 +68,7 @@ export const en: TranslationSchema = {
   },
   lobby: {
     tableHeading: 'Table',
-    quickAutoTitle: 'Quick 3+0',
+    quickAutoTitle: 'Quick Start',
     copyCode: 'Copy room code',
     codeCopied: 'Code copied!',
     changeTime: 'Change time control',

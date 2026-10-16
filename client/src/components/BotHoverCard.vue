@@ -118,6 +118,7 @@ onBeforeUnmount(() => {
 .bot-hover-trigger {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   cursor: help;
 }
 

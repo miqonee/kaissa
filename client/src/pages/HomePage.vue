@@ -427,14 +427,14 @@ function lobbyRosterTitle(l: LobbySummary): string {
                 <span class="badges-row">
                   <span class="badge auto-chip">
                     <AppIcon name="bolt" :size="12" />
-                    {{ i18n.t.home.quickStartChip }} {{ autoLobby.timeControl.kind === 'clock' ? `${autoLobby.timeControl.baseMin}+${autoLobby.timeControl.incSec}` : '' }}
+                    {{ i18n.t.home.quickStartChip }}
                   </span>
                   <span class="badge">{{ modeLabel(autoLobby.mode) }}</span>
+                  <span
+                    class="badge auto-hint-chip"
+                    :title="i18n.t.home.quickStartHint"
+                  >{{ i18n.t.home.quickStartHint }}</span>
                 </span>
-                <span
-                  class="auto-hint-text dim tiny"
-                  :title="i18n.t.home.quickStartHint"
-                >{{ i18n.t.home.quickStartHint }}</span>
               </div>
 
               <div class="lobby-card-meta">
@@ -524,29 +524,40 @@ function lobbyRosterTitle(l: LobbySummary): string {
 }
 
 .home-banner {
-  padding: 24px 28px;
+  padding: 22px 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  flex-wrap: wrap;
   background: linear-gradient(135deg, var(--surface) 0%, color-mix(in srgb, var(--felt) 12%, var(--surface)) 100%);
   border-color: color-mix(in srgb, var(--accent-2) 35%, var(--line));
   min-height: 90px;
   box-sizing: border-box;
-  contain: layout;
+}
+
+.banner-intro {
+  flex: 1 1 500px;
+  min-width: 0;
+  max-width: 680px;
 }
 
 .banner-intro h1 {
-  font-size: 26px;
+  font-size: 24px;
+  line-height: 1.25;
   margin-bottom: 4px;
+}
+
+.banner-intro p.dim {
+  font-size: 13.5px;
+  line-height: 1.45;
+  margin: 0;
 }
 
 .banner-actions {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
 }
 
 .banner-create-btn {
@@ -862,10 +873,16 @@ function lobbyRosterTitle(l: LobbySummary): string {
   cursor: help;
 }
 
-.auto-hint-text {
+.auto-hint-chip {
+  background: color-mix(in srgb, var(--surface-inset) 85%, var(--line));
+  color: var(--ink-2);
+  border: 1px solid var(--line);
   font-size: 11px;
-  color: var(--ink-3);
-  flex-basis: 100%;
+  font-weight: 500;
+  border-radius: 999px;
+  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .auto-lobby-desc {
@@ -959,11 +976,30 @@ function lobbyRosterTitle(l: LobbySummary): string {
 }
 
 /* На узких экранах карточка стола и баннер перестраиваются вертикально */
+@media (max-width: 768px) {
+  .home-banner {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 18px 16px;
+    gap: 16px;
+    min-height: auto;
+  }
+
+  .banner-intro h1 {
+    font-size: 21px;
+  }
+
+  .banner-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+}
+
 @media (max-width: 560px) {
   .home-banner {
     padding: 16px 14px;
     gap: 14px;
-    min-height: 160px;
+    min-height: auto;
   }
 
   .banner-intro h1 {

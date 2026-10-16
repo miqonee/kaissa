@@ -18,8 +18,16 @@ const socket = getSocket();
 
 const lobby = ref<LobbySummary | null>(null);
 
+const lobbyDisplayName = computed(() => {
+  if (!lobby.value) return '';
+  if (lobby.value.isAuto) {
+    return i18n.locale === 'en' ? 'Quick 3+0' : 'Быстрый 3+0';
+  }
+  return lobby.value.name;
+});
+
 usePageSeo({
-  title: computed(() => (lobby.value ? `${i18n.locale === 'en' ? 'Table' : 'Стол'} «${lobby.value.name}» | ${i18n.t.nav.brand}` : `${i18n.t.nav.lobbies} | ${i18n.t.nav.brand}`)),
+  title: computed(() => (lobby.value ? `${i18n.locale === 'en' ? 'Table' : 'Стол'} «${lobbyDisplayName.value}» | ${i18n.t.nav.brand}` : `${i18n.t.nav.lobbies} | ${i18n.t.nav.brand}`)),
   description: computed(() => (i18n.locale === 'en' ? 'Waiting for players and game preparation on Kaissa.' : 'Ожидание игроков и подготовка к командной шахматной партии на платформе Каисса.')),
   canonical: computed(() => `/lobby/${route.params.id}`),
 });
@@ -44,15 +52,15 @@ const isPausedByMe = computed(() => {
   return lobby.value.pausedBy?.includes(auth.user.id) ?? false;
 });
 
-const TC_OPTIONS: { label: string; tc: TimeControl }[] = [
+const tcOptions = computed<{ label: string; tc: TimeControl }[]>(() => [
   { label: '1+0', tc: { kind: 'clock', baseMin: 1, incSec: 0 } },
   { label: '3+0', tc: { kind: 'clock', baseMin: 3, incSec: 0 } },
   { label: '3+2', tc: { kind: 'clock', baseMin: 3, incSec: 2 } },
   { label: '5+0', tc: { kind: 'clock', baseMin: 5, incSec: 0 } },
   { label: '5+3', tc: { kind: 'clock', baseMin: 5, incSec: 3 } },
   { label: '10+5', tc: { kind: 'clock', baseMin: 10, incSec: 5 } },
-  { label: 'Без часов', tc: { kind: 'none', baseMin: 0, incSec: 0 } },
-];
+  { label: i18n.t.createModal.tcNoClock, tc: { kind: 'none', baseMin: 0, incSec: 0 } },
+]);
 
 function isCurrentTc(tc: TimeControl): boolean {
   if (!lobby.value) return false;
@@ -94,7 +102,7 @@ function joinLobby(): void {
     if (ack.ok && ack.data) {
       lobby.value = ack.data.lobby;
     } else if (!lobby.value) {
-      error.value = ack.error ?? 'Не удалось войти в лобби';
+      error.value = ack.error ?? (i18n.locale === 'en' ? 'Failed to join lobby' : 'Не удалось войти в лобби');
     }
   });
 }
@@ -175,7 +183,10 @@ function kick(userId: number, username?: string, isBot?: boolean): void {
     socket.emit('lobby:kick', userId);
     return;
   }
-  if (confirm(`Исключить игрока ${username ?? ''} из стола?`)) {
+  const confirmMsg = i18n.locale === 'en'
+    ? `Remove player ${username ?? ''} from table?`
+    : `Исключить игрока ${username ?? ''} из стола?`;
+  if (confirm(confirmMsg)) {
     socket.emit('lobby:kick', userId);
   }
 }
@@ -185,13 +196,13 @@ function summon(): void {
     void Notification.requestPermission();
   }
   socket.emit('lobby:summon');
-  showNotification('Участникам отправлено браузерное уведомление');
+  showNotification(i18n.locale === 'en' ? 'Browser notification sent to participants' : 'Участникам отправлено браузерное уведомление');
 }
 
 function start(): void {
   socket.emit('lobby:start', (ack) => {
     if (!ack.ok) {
-      const err = ack.error ?? 'Не удалось начать игру';
+      const err = ack.error ?? (i18n.locale === 'en' ? 'Failed to start game' : 'Не удалось начать игру');
       error.value = err;
       showNotification(err);
       setTimeout(() => (error.value = ''), 4000);
@@ -213,7 +224,7 @@ function sendChat(): void {
 
 function copyLink(): void {
   void navigator.clipboard.writeText(link.value);
-  showNotification('Прямая ссылка скопирована');
+  showNotification(i18n.locale === 'en' ? 'Direct table link copied' : 'Прямая ссылка скопирована');
 }
 
 function copyCode(): void {
@@ -238,7 +249,7 @@ function modeLabel(m: string): string {
     <header class="lobby-hero panel">
       <div class="hero-left">
         <div class="hero-title-row">
-          <h1>{{ lobby.name }}</h1>
+          <h1>{{ lobbyDisplayName }}</h1>
           <span class="badge">{{ modeLabel(lobby.mode) }}</span>
           <span class="badge mono">{{ timeControlLabel(lobby.timeControl) }}</span>
         </div>
@@ -331,7 +342,7 @@ function modeLabel(m: string): string {
             <span class="dim tiny">{{ i18n.locale === 'en' ? 'Time control:' : 'Контроль времени:' }}</span>
             <div class="tc-pills">
               <button
-                v-for="preset in TC_OPTIONS"
+                v-for="preset in tcOptions"
                 :key="preset.label"
                 type="button"
                 class="tiny pill mono"
@@ -352,21 +363,11 @@ function modeLabel(m: string): string {
             >
               <div class="slot-idx mono">{{ i + 1 }}</div>
               <div class="slot-avatar">
-                <span class="dot" :class="{ on: p.online }" :title="p.online ? 'В сети' : 'Не в сети'"></span>
+                <span class="dot" :class="{ on: p.online }" :title="p.online ? (i18n.locale === 'en' ? 'Online' : 'В сети') : (i18n.locale === 'en' ? 'Offline' : 'Не в сети')"></span>
               </div>
               <div class="slot-info">
                 <div class="slot-name-row">
-                  <template v-if="p.isBot">
-                    <BotHoverCard :username="p.username" :rating="p.rating">
-                      <span class="slot-name">{{ p.username }}</span>
-                      <span class="bot-badge">
-                        {{ i18n.locale === 'en' ? 'Bot Lvl.' : 'Бот Ур.' }}{{ p.botLevel || eloToLevel(p.rating) }} · {{ (i18n.locale === 'en' && getBotPersonality(p.username)?.badgeEn) || getBotPersonality(p.username)?.badge || (i18n.locale === 'en' ? 'AI' : 'ИИ') }}
-                      </span>
-                    </BotHoverCard>
-                  </template>
-                  <template v-else>
-                    <span class="slot-name">{{ p.username }}</span>
-                  </template>
+                  <span class="slot-name">{{ p.username }}</span>
                   <span v-if="p.host" class="host-crown" :title="i18n.locale === 'en' ? 'Table creator' : 'Создатель стола'">
                     <AppIcon name="crown" :size="12" /> {{ i18n.locale === 'en' ? 'Host' : 'Хост' }}
                   </span>
@@ -395,6 +396,11 @@ function modeLabel(m: string): string {
               </div>
 
               <div class="slot-status">
+                <BotHoverCard v-if="p.isBot" :username="p.username" :rating="p.rating">
+                  <span class="bot-badge">
+                    {{ i18n.locale === 'en' ? 'Bot Lvl.' : 'Бот Ур.' }}{{ p.botLevel || eloToLevel(p.rating) }} · {{ (i18n.locale === 'en' && getBotPersonality(p.username)?.badgeEn) || getBotPersonality(p.username)?.badge || (i18n.locale === 'en' ? 'AI' : 'ИИ') }}
+                  </span>
+                </BotHoverCard>
                 <span class="ready-badge" :class="p.ready ? 'ready' : 'waiting'">
                   <AppIcon v-if="p.ready" name="check" :size="12" /><span>{{ p.ready ? (i18n.locale === 'en' ? 'Ready' : 'Готов') : (i18n.locale === 'en' ? 'Waiting…' : 'Ждём…') }}</span>
                 </span>
@@ -519,7 +525,7 @@ function modeLabel(m: string): string {
     <div v-if="toastText" class="toast">{{ toastText }}</div>
   </div>
 
-  <div v-else class="empty">Загрузка стола…</div>
+  <div v-else class="empty">{{ i18n.locale === 'en' ? 'Loading table…' : 'Загрузка стола…' }}</div>
 </template>
 
 <style scoped>
@@ -907,7 +913,10 @@ function modeLabel(m: string): string {
   color: var(--accent-2);
   border: 1px solid var(--accent-2);
   border-radius: 999px;
-  padding: 2px 7px;
+  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
 }
 
 .team-mode-selector {

@@ -70,6 +70,7 @@ export interface TranslationSchema {
   };
   lobby: {
     tableHeading: string;
+    quickAutoTitle: string;
     copyCode: string;
     codeCopied: string;
     changeTime: string;

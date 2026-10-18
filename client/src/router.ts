@@ -58,6 +58,11 @@ export const router = createRouter({
       },
     },
     {
+      path: '/rules/crazyhouse', name: 'rules-crazyhouse',
+      component: () => import('./pages/CrazyhouseRulesPage.vue'),
+      meta: { title: 'Crazyhouse онлайн: правила 1×1 и 2×2 | Каисса', description: 'Резерв, дропы и превращения в Crazyhouse. Играйте 1×1 или командой 2×2 с людьми и ботами.' },
+    },
+    {
       path: '/rules/duo',
       name: 'rules-duo',
       component: () => import('./pages/DuoRulesPage.vue'),

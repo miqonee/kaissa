@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { lobbyCapacity, GAME_MODES, modeLabel as sharedModeLabel } from 'shared';
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import type { LobbySummary, LiveGameInfo, GameMode, TimeControl, TeamMode } from 'shared';
@@ -50,7 +51,7 @@ const liveGames = ref<LiveGameInfo[]>([]);
 const loadingLobbies = ref(true);
 
 const autoLobbies = computed(() => lobbies.value.filter((l) => l.isAuto).sort((a, b) => a.mode.localeCompare(b.mode)));
-const userLobbies = computed(() => lobbies.value.filter((l) => !l.isAuto));
+const userLobbies = computed(() => lobbies.value.filter((l) => !l.isAuto || (l.mode !== 'team' && l.players.some(p => !p.isBot))));
 const humanCount = (lobby: LobbySummary) => lobby.players.filter(p => !p.isBot).length;
 
 const sortedLiveGames = computed(() => {
@@ -213,7 +214,7 @@ function enterLobby(l: LobbySummary): void {
 
 function handleCtaAction(action: unknown): void {
   if (action === 'quick') {
-    const target = autoLobbies.value.find(l => l.mode === (route.query.mode === 'bughouse' ? 'bughouse' : 'team'));
+    const target = autoLobbies.value.find(l => l.mode === (GAME_MODES.includes(route.query.mode as GameMode) ? route.query.mode : 'team'));
     if (target) {
       enterLobby(target);
     } else {
@@ -235,9 +236,7 @@ watch(
   },
 );
 
-function modeLabel(m: string): string {
-  return m === 'bughouse' ? i18n.t.home.modeBughouse : i18n.t.home.modeTeam;
-}
+function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale); }
 
 function teamAvgRating(players: { team: number; rating: number }[], team: number): number {
   const tp = players.filter((p) => p.team === team);
@@ -406,7 +405,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
         <div class="panel">
           <div class="panel-head">
             <h2 id="open-lobbies-heading">{{ i18n.t.home.openTablesHeading }}</h2>
-            <span class="hint">{{ lobbies.length }} {{ i18n.t.home.tablesCount }}</span>
+            <span class="hint">{{ userLobbies.length + (autoLobbies.some(l => l.mode === 'team') ? 1 : 0) }} {{ i18n.t.home.tablesCount }}</span>
           </div>
 
           <div v-if="loadingLobbies" class="empty dim" style="padding: 32px 16px;">
@@ -416,7 +415,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
           <div v-else-if="lobbies.length" class="panel-body lobby-rows">
             <!-- Быстрый стол 2х2 (ультракомпактная карточка во главе) -->
             <article
-              v-for="autoLobby in autoLobbies"
+              v-for="autoLobby in autoLobbies.filter(l => l.mode === 'team').slice(0, 1)"
               :key="autoLobby.id"
               class="lobby-card auto-lobby-card compact-card single-line-card"
               role="button"
@@ -479,14 +478,14 @@ function lobbyRosterTitle(l: LobbySummary): string {
               </div>
 
               <div class="lobby-card-meta">
-                <span class="seats-indicator" :title="`${l.players.length} из 4 мест занято`">
+                <span class="seats-indicator" :title="`${l.players.length}/${lobbyCapacity(l.mode)}`">
                   <span
-                    v-for="s in 4"
+                    v-for="s in lobbyCapacity(l.mode)"
                     :key="s"
                     class="seat-pip"
                     :class="{ filled: s <= l.players.length }"
                   ></span>
-                  <span class="seats mono">{{ l.players.length }}/4</span>
+                  <span class="seats mono">{{ l.players.length }}/{{ lobbyCapacity(l.mode) }}</span>
                 </span>
                 <button class="primary small" @click.stop="enterLobby(l)">Войти</button>
               </div>
@@ -500,15 +499,6 @@ function lobbyRosterTitle(l: LobbySummary): string {
         </div>
       </section>
     </div>
-
-    <section class="panel home-resources" :aria-label="i18n.t.resources.title">
-      <h2>{{ i18n.t.resources.title }}</h2>
-      <nav>
-        <router-link to="/rules/bughouse">{{ i18n.t.resources.bughouse }}</router-link>
-        <router-link to="/rules/duo">{{ i18n.t.resources.duo }}</router-link>
-        <a href="https://github.com/miqonee/kaissa" target="_blank" rel="noopener noreferrer">{{ i18n.t.resources.repository }} ↗</a>
-      </nav>
-    </section>
 
     <!-- Модальное окно создания стола -->
     <CreateLobbyModal
@@ -529,9 +519,6 @@ function lobbyRosterTitle(l: LobbySummary): string {
 </template>
 
 <style scoped>
-.home-resources { margin-top: 20px; padding: 18px; }
-.home-resources h2 { margin: 0 0 12px; font-size: 17px; }
-.home-resources nav { display: flex; flex-wrap: wrap; gap: 12px 24px; }
 .home {
   display: flex;
   flex-direction: column;

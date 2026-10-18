@@ -11,7 +11,7 @@ const readline = require('node:readline');
 const fs = require('node:fs');
 const path = require('node:path');
 require(process.argv[1])({wasmBinary:fs.readFileSync(path.join(path.dirname(process.argv[1]), 'stockfish.wasm'))}).then(sf => {
-  sf.FS.writeFile('/kaissa.ini', '[kaissa-bughouse:bughouse]\\nnMoveRule = 0\\nnFoldRule = 0\\nstalemateValue = loss\\n');
+  sf.FS.writeFile('/kaissa.ini', '[kaissa-bughouse:bughouse]\\nnMoveRule = 0\\nnFoldRule = 0\\nstalemateValue = loss\\n[kaissa-crazyhouse:crazyhouse]\\nnMoveRule = 0\\nnFoldRule = 3\\n');
   sf.postMessage('load /kaissa.ini');
   const input = readline.createInterface({input:process.stdin});
   input.on('line', line => { sf.postMessage(line); if(line === 'quit') process.exit(0); });
@@ -66,12 +66,14 @@ export class FairyStockfish {
       await this.exchange('setoption name Threads value 1\nsetoption name Hash value 16\nsetoption name Use NNUE value false\nsetoption name UCI_Variant value kaissa-bughouse\nisready', line => line === 'readyok', 2000);
     } catch (error) { this.quit(); throw error; }
   }
-  search(fen: string, level: number, budgetMs: number): Promise<FairyCandidate[]> {
+  search(fen: string, level: number, budgetMs: number, variant: 'kaissa-bughouse' | 'kaissa-crazyhouse' = 'kaissa-bughouse'): Promise<FairyCandidate[]> {
     const job = this.queue.then(async () => {
       clearTimeout(this.idleTimer);
       await this.ready();
       const candidates = new Map<number, FairyCandidate>();
+      let bestUci: string | undefined;
       try {
+        await this.exchange(`setoption name UCI_Variant value ${variant}\nisready`, line => line === 'readyok', 2000);
         await this.exchange(`setoption name Skill Level value ${Math.round((Math.max(1, Math.min(12, level)) - 1) * 20 / 11)}\nsetoption name MultiPV value 4\nposition fen ${fen}\ngo movetime ${Math.max(20, Math.round(budgetMs))}`, line => {
           const pv = line.match(/\bpv\s+(\S+)/);
           const cp = line.match(/\bscore cp (-?\d+)/);
@@ -82,10 +84,18 @@ export class FairyStockfish {
           }
           if (!line.startsWith('bestmove ')) return false;
           const best = line.split(/\s+/)[1];
+          if (best && best !== '(none)' && best !== '0000') bestUci = best;
           if (!candidates.size && best && best !== '(none)' && best !== '0000') candidates.set(1, { uci: best, score: 0 });
           return true;
         }, Math.max(1500, budgetMs + 1000));
-        return [...candidates.entries()].sort(([a], [b]) => a - b).map(([, candidate]) => candidate);
+        const ranked = [...candidates.entries()].sort(([a], [b]) => a - b).map(([, candidate]) => candidate);
+        // Skill Level may deliberately select a move other than MultiPV 1.
+        // Keep its actual bestmove first for single-board Crazyhouse.
+        if (bestUci) {
+          const chosen = ranked.find(c => c.uci === bestUci) ?? { uci: bestUci, score: Math.min(0, ...ranked.map(c => c.score)) };
+          return [chosen, ...ranked.filter(c => c.uci !== bestUci)];
+        }
+        return ranked;
       } catch (error) { this.quit(); throw error; }
       finally { this.idleTimer = setTimeout(() => this.quit(), 60_000); this.idleTimer.unref(); }
     });
@@ -104,7 +114,7 @@ export class FairyStockfish {
 export class FairyPool {
   private engines = [new FairyStockfish(), new FairyStockfish()];
   private next = 0;
-  search(fen: string, level: number, budgetMs: number): Promise<FairyCandidate[]> { return this.engines[this.next++ % 2].search(fen, level, budgetMs); }
+  search(fen: string, level: number, budgetMs: number, variant: 'kaissa-bughouse' | 'kaissa-crazyhouse' = 'kaissa-bughouse'): Promise<FairyCandidate[]> { return this.engines[this.next++ % 2].search(fen, level, budgetMs, variant); }
   quit(): void { this.engines.forEach(engine => engine.quit()); }
 }
 export const fairyPool = new FairyPool();

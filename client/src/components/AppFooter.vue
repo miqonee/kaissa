@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppIcon from './AppIcon.vue';
 import { useAuthStore } from '../stores/auth';
 import { useI18n } from '../stores/i18n';
 
@@ -46,7 +47,10 @@ const i18n = useI18n();
           <span class="footer-sep">·</span>
           <router-link to="/rules/bughouse" class="footer-link">{{ i18n.t.footer.rulesBughouse }}</router-link>
           <span class="footer-sep">·</span>
+          <router-link to="/rules/crazyhouse" class="footer-link">Crazyhouse</router-link>
+          <span class="footer-sep">·</span>
           <router-link to="/about" class="footer-link">{{ i18n.t.footer.about }}</router-link>
+          <a class="footer-link repository-link" href="https://github.com/miqonee/kaissa" target="_blank" rel="noopener noreferrer" :aria-label="i18n.locale === 'en' ? 'Source code on GitHub' : 'Код проекта на GitHub'" :title="i18n.locale === 'en' ? 'Source code on GitHub' : 'Код проекта на GitHub'"><AppIcon name="github" :size="18" /></a>
         </nav>
       </div>
     </div>

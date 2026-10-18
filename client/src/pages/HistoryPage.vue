@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { modeLabel as sharedModeLabel, type GameMode } from 'shared';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import type { GameSummary } from 'shared';
@@ -55,9 +56,7 @@ async function loadGames() {
 onMounted(loadGames);
 watch(tab, loadGames);
 
-function modeLabel(m: string): string {
-  return m === 'bughouse' ? i18n.t.home.modeBughouse : i18n.t.home.modeTeam;
-}
+function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale); }
 
 function meOf(g: GameSummary) {
   return g.participants.find((p) => p.userId === auth.user?.id);

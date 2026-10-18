@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { modeLabel as sharedModeLabel, type GameMode } from 'shared';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { GameSummary, MoveRecord, PieceType, Pocket } from 'shared';
 import { detectOpening, timeControlLabel } from 'shared';
@@ -175,9 +176,7 @@ onBeforeUnmount(() => {
 
 // ---------- Отображение ----------
 
-function modeLabel(m: string): string {
-  return m === 'bughouse' ? (i18n.locale === 'en' ? 'Bughouse' : 'Багхаус') : (i18n.locale === 'en' ? '2v2 Match' : 'Матч 2×2');
-}
+function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale); }
 
 function orientationOf(b: number): 'white' | 'black' {
   // как в живой игре: доска 1 — белые снизу, доска 2 — чёрные снизу
@@ -299,6 +298,7 @@ function pieceLabel(t: PieceType): string {
             <span class="rp-board-num mono">Доска {{ b }}</span>
             <span
               class="badge bad rp-check-badge"
+              :aria-hidden="!checkOf(b - 1)"
               :class="{ visible: Boolean(checkOf(b - 1)) }"
               aria-label="Шах"
             >шах</span>
@@ -308,6 +308,7 @@ function pieceLabel(t: PieceType): string {
             v-if="pocketOf(b - 1, bottomColorOf(b - 1) === 'w' ? 'b' : 'w')"
             class="rp-pocket"
             :pocket="pocketOf(b - 1, bottomColorOf(b - 1) === 'w' ? 'b' : 'w')!"
+            :label="bottomColorOf(b - 1) === 'w' ? (i18n.locale === 'en' ? 'Black reserve' : 'Резерв чёрных') : (i18n.locale === 'en' ? 'White reserve' : 'Резерв белых')"
             :color="bottomColorOf(b - 1) === 'w' ? 'b' : 'w'"
             :interactive="false"
             :selected="null"
@@ -326,6 +327,7 @@ function pieceLabel(t: PieceType): string {
             v-if="pocketOf(b - 1, bottomColorOf(b - 1))"
             class="rp-pocket"
             :pocket="pocketOf(b - 1, bottomColorOf(b - 1))!"
+            :label="bottomColorOf(b - 1) === 'w' ? (i18n.locale === 'en' ? 'White reserve' : 'Резерв белых') : (i18n.locale === 'en' ? 'Black reserve' : 'Резерв чёрных')"
             :color="bottomColorOf(b - 1)"
             :interactive="false"
             :selected="null"
@@ -370,7 +372,7 @@ function pieceLabel(t: PieceType): string {
         <p v-if="!total" class="empty tiny">В этой партии не было ходов.</p>
 
         <!-- Дебют и оценка текущей позиции (для режима 1 доски) -->
-        <div v-if="boardsCount === 1" class="rp-analysis-card">
+        <div v-if="game.mode === 'team'" class="rp-analysis-card">
           <div class="rp-an-top">
             <div class="rp-an-title-group">
               <AppIcon name="book-open" :size="13" />

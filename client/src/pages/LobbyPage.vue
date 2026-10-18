@@ -3,7 +3,7 @@ import { trackGoal } from '../utils/analytics';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { ChatMessage, LobbySummary, TimeControl } from 'shared';
-import { eloToLevel, getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
+import { GAME_MODES, lobbyCapacity, hasPockets, modeLabel as sharedModeLabel, type GameMode, eloToLevel, getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
 import { getSocket, onSocketResync } from '../api/socket';
 import { useAuthStore } from '../stores/auth';
 import { useI18n } from '../stores/i18n';
@@ -41,7 +41,9 @@ const lobbyId = computed(() => String(route.params.id));
 const me = computed(() => auth.user);
 const isHost = computed(() => lobby.value?.players.find((p) => p.userId === auth.user?.id)?.host ?? false);
 const iAmReady = computed(() => lobby.value?.players.find((p) => p.userId === auth.user?.id)?.ready ?? false);
-const allReady = computed(() => lobby.value?.players.length === 4 && lobby.value.players.every((p) => p.ready));
+const capacity = computed(() => lobbyCapacity(lobby.value?.mode ?? 'team'));
+const quick = computed(() => Boolean(lobby.value?.isAuto || lobby.value?.isQuick));
+const allReady = computed(() => lobby.value?.players.length === capacity.value && lobby.value.players.every((p) => p.ready));
 const offlinePlayers = computed(() => lobby.value?.players.filter((p) => !p.online && !p.isBot) ?? []);
 const link = computed(() => `${location.origin}/lobby/${lobbyId.value}`);
 
@@ -69,6 +71,12 @@ function isCurrentTc(tc: TimeControl): boolean {
   if (cur.kind !== tc.kind) return false;
   if (cur.kind === 'none') return true;
   return cur.baseMin === tc.baseMin && cur.incSec === tc.incSec;
+}
+
+const modeBusy = ref(false);
+function changeMode(mode: GameMode): void {
+  modeBusy.value = true;
+  socket.timeout(5000).emit('lobby:set-mode', mode, (err, ack) => { modeBusy.value = false; if (err || !ack?.ok) showNotification(ack?.error ?? (i18n.locale === 'en' ? 'Unable to change mode' : 'Не удалось сменить режим')); });
 }
 
 function setTimeControl(tc: TimeControl): void {
@@ -236,9 +244,7 @@ function copyCode(): void {
   showNotification(i18n.locale === 'en' ? `Code ${lobby.value.code} copied` : `Код ${lobby.value.code} скопирован`);
 }
 
-function modeLabel(m: string): string {
-  return m === 'bughouse' ? i18n.t.createModal.modeBughouse : i18n.t.createModal.modeTeam;
-}
+function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale); }
 </script>
 
 <template>
@@ -260,7 +266,7 @@ function modeLabel(m: string): string {
           {{ lobby.rematchOf
             ? (i18n.locale === 'en' ? 'Play again with the same teams and settings.' : 'Ещё одна партия с прежними командами и настройками.')
             : (i18n.locale === 'en' ? 'Wait for people or start with bots filling the available seats.' : 'Подождите людей или начните с ботами на свободных местах.') }}
-          <span v-if="lobby.mode === 'bughouse'">{{ i18n.locale === 'en' ? ' Bughouse bots can use pocket pieces.' : ' Боты багхауса умеют выставлять фигуры из кармана.' }}</span>
+          <span v-if="hasPockets(lobby.mode)">{{ i18n.locale === 'en' ? ' Bots can use pocket pieces.' : ' Боты умеют выставлять фигуры из кармана.' }}</span>
         </p>
       </div>
 
@@ -285,12 +291,12 @@ function modeLabel(m: string): string {
       <section class="panel players-panel" aria-labelledby="lobby-players-heading">
         <div class="panel-head">
           <h2 id="lobby-players-heading">{{ i18n.locale === 'en' ? 'Players at Table' : 'Игроки за столом' }}</h2>
-          <span class="hint">{{ lobby.players.length }}/4 {{ i18n.t.home.playersCount }}</span>
+          <span class="hint">{{ lobby.players.length }}/{{ capacity }} {{ i18n.t.home.playersCount }}</span>
         </div>
 
         <div class="panel-body">
           <!-- Баннер Быстрого стола (Автолобби) -->
-          <div v-if="lobby.isAuto || countdown !== null" class="auto-lobby-banner">
+          <div v-if="quick || countdown !== null" class="auto-lobby-banner">
             <div class="auto-banner-info">
               <span class="countdown-chip" :class="{ paused: countdown?.paused }">
                 <span v-if="countdown?.paused">{{ i18n.locale === 'en' ? 'Paused' : 'Пауза' }} ({{ countdown?.pausedCount }}/{{ countdown?.neededCount }})</span>
@@ -299,7 +305,9 @@ function modeLabel(m: string): string {
               <p class="dim tiny auto-hint">
                 {{ lobby.rematchOf
                   ? (i18n.locale === 'en' ? 'Same players, bot strength and settings. You can pause the countdown.' : 'Тот же состав, сила ботов и настройки. Отсчёт можно приостановить.')
-                  : (i18n.locale === 'en' ? 'Incoming humans displace bots. Teams are balanced adaptively.' : 'Вход человека вытесняет бота. При 2 игроках команды балансируются адаптивно.') }}
+                  : lobby.mode === 'crazyhouse'
+                    ? (i18n.locale === 'en' ? 'People replace bots. You can wait for an opponent.' : 'Человек заменяет бота. Можно дождаться соперника.')
+                    : (i18n.locale === 'en' ? 'Incoming humans displace bots. Teams are balanced adaptively.' : 'Вход человека вытесняет бота. При 2 игроках команды балансируются адаптивно.') }}
               </p>
             </div>
             <button
@@ -342,8 +350,16 @@ function modeLabel(m: string): string {
             </div>
           </div>
 
+          <div class="tc-selector mode-selector">
+            <label for="lobby-mode" class="dim tiny">{{ i18n.locale === 'en' ? 'Game mode:' : 'Режим игры:' }}</label>
+            <select id="lobby-mode" :value="lobby.mode" :disabled="!isHost || modeBusy" @change="changeMode(($event.target as HTMLSelectElement).value as GameMode)">
+              <option v-for="mode in GAME_MODES" :key="mode" :value="mode">{{ modeLabel(mode) }}</option>
+            </select>
+            <router-link :to="lobby.mode === 'bughouse' ? '/rules/bughouse' : lobby.mode === 'team' ? '/rules/duo' : '/rules/crazyhouse'" target="_blank">{{ i18n.locale === 'en' ? 'Rules' : 'Правила' }}</router-link>
+          </div>
+
           <!-- Контроль времени (для хоста обычных столов или игроков быстрого стола) -->
-          <div v-if="(isHost && !lobby.isAuto) || (lobby.isAuto && me)" class="tc-selector">
+          <div v-if="isHost || (quick && me)" class="tc-selector">
             <span class="dim tiny">{{ i18n.locale === 'en' ? 'Time control:' : 'Контроль времени:' }}</span>
             <div class="tc-pills">
               <button
@@ -382,19 +398,19 @@ function modeLabel(m: string): string {
                     type="button"
                     class="tiny pill"
                     :class="{ active: p.teamChoice === 1 }"
-                    :disabled="p.userId !== me?.id || (p.teamChoice !== 1 && team1Count >= 2)"
+                    :disabled="p.userId !== me?.id || (p.teamChoice !== 1 && team1Count >= capacity / 2)"
                     @click="chooseTeam(p.teamChoice === 1 ? null : 1)"
                   >
-                    {{ i18n.locale === 'en' ? 'White' : 'Белые' }} ({{ team1Count }}/2)
+                    {{ i18n.locale === 'en' ? 'White' : 'Белые' }} ({{ team1Count }}/{{ capacity / 2 }})
                   </button>
                   <button
                     type="button"
                     class="tiny pill"
                     :class="{ active: p.teamChoice === 2 }"
-                    :disabled="p.userId !== me?.id || (p.teamChoice !== 2 && team2Count >= 2)"
+                    :disabled="p.userId !== me?.id || (p.teamChoice !== 2 && team2Count >= capacity / 2)"
                     @click="chooseTeam(p.teamChoice === 2 ? null : 2)"
                   >
-                    {{ i18n.locale === 'en' ? 'Black' : 'Чёрные' }} ({{ team2Count }}/2)
+                    {{ i18n.locale === 'en' ? 'Black' : 'Чёрные' }} ({{ team2Count }}/{{ capacity / 2 }})
                   </button>
                 </div>
                 <span class="slot-rating mono dim">{{ i18n.locale === 'en' ? 'Rating' : 'Рейтинг' }}: {{ p.rating }}</span>
@@ -410,7 +426,7 @@ function modeLabel(m: string): string {
                   <AppIcon v-if="p.ready" name="check" :size="12" /><span>{{ p.ready ? (i18n.locale === 'en' ? 'Ready' : 'Готов') : (i18n.locale === 'en' ? 'Waiting…' : 'Ждём…') }}</span>
                 </span>
                 <button
-                  v-if="isHost && !lobby.isAuto && p.userId !== me?.id"
+                  v-if="isHost && !quick && p.userId !== me?.id"
                   class="small danger icon-only"
                   :title="p.isBot ? (i18n.locale === 'en' ? `Remove bot ${p.username}` : `Убрать бота ${p.username}`) : (i18n.locale === 'en' ? 'Kick player' : 'Исключить игрока')"
                   :aria-label="p.isBot ? (i18n.locale === 'en' ? `Remove bot ${p.username}` : `Убрать бота ${p.username}`) : (i18n.locale === 'en' ? `Kick ${p.username}` : `Исключить ${p.username}`)"
@@ -423,17 +439,17 @@ function modeLabel(m: string): string {
 
             <!-- Пустые слоты -->
             <div
-              v-for="i in 4 - lobby.players.length"
+              v-for="i in capacity - lobby.players.length"
               :key="'empty' + i"
               class="slot-card empty-slot"
             >
               <div class="slot-idx mono">{{ lobby.players.length + i }}</div>
               <div class="slot-info">
                 <span class="slot-name dim">{{ i18n.locale === 'en' ? 'Waiting for player…' : 'Ожидание игрока…' }}</span>
-                <span v-if="lobby.mode === 'bughouse'" class="dim tiny">{{ i18n.locale === 'en' ? 'You can fill empty seats with bots' : 'Свободные места можно заполнить ботами' }}</span>
+                <span v-if="hasPockets(lobby.mode)" class="dim tiny">{{ i18n.locale === 'en' ? 'You can fill empty seats with bots' : 'Свободные места можно заполнить ботами' }}</span>
               </div>
               <button
-                v-if="isHost && !lobby.isAuto"
+                v-if="isHost && !quick"
                 type="button"
                 class="small ghost add-bot-slot-btn"
                 :title="i18n.locale === 'en' ? 'Add bot with random style' : 'Добавить бота со случайным стилем'"
@@ -494,8 +510,8 @@ function modeLabel(m: string): string {
         <p v-if="error" class="error-text start-error">
           {{ error }}
         </p>
-        <p v-else-if="lobby.players.length < 4" class="dim">
-          {{ i18n.locale === 'en' ? `4 players needed to start. Current: ${lobby.players.length}/4.` : `Для начала матча нужно 4 игрока. Сейчас: ${lobby.players.length}/4.` }}
+        <p v-else-if="lobby.players.length < capacity" class="dim">
+          {{ i18n.locale === 'en' ? `${capacity} players needed to start. Current: ${lobby.players.length}/${capacity}.` : `Для начала матча нужно ${capacity} игрока. Сейчас: ${lobby.players.length}/${capacity}.` }}
         </p>
         <p v-else-if="!allReady" class="dim">
           {{ i18n.locale === 'en' ? 'All players must confirm readiness.' : 'Все игроки должны подтвердить готовность.' }}

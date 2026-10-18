@@ -42,6 +42,7 @@ export class BughouseGame {
   turn(board: Board): SideColor { return this.boards[board].turn(); }
   isCheck(board: Board): boolean { return this.boards[board].isCheck(); }
   pocketOf(board: Board, color: SideColor): Pocket { return this.pockets[pocketKey(board, color)]; }
+  protected captureRecipient(player: PlayerRef): PlayerRef { return partnerOf(player); }
   legalDrops(board: Board, color = this.turn(board)): LegalDrops {
     if (this.turn(board) !== color) return {};
     const chess = this.boards[board];
@@ -123,7 +124,7 @@ export class BughouseGame {
     if (wasPromoted || move.promotion) this.promoted[board].add(mv.to);
     let captured: { piece: DropPieceType; toBoard: Board; toColor: SideColor } | undefined;
     if (move.captured) {
-      const partner = partnerOf({ board, color });
+      const partner = this.captureRecipient({ board, color });
       const piece = capturedPromoted ? 'p' : move.captured as DropPieceType;
       this.pocketOf(partner.board, partner.color)[piece]++;
       captured = { piece, toBoard: partner.board, toColor: partner.color };

@@ -1,3 +1,4 @@
+import type { GameMode } from 'shared';
 import { Router } from 'express';
 import { currentUser, requireAuth, toPublic } from '../auth/auth.js';
 import { prisma } from '../prisma.js';
@@ -120,7 +121,7 @@ async function getPgnData(id: number): Promise<{ game: PgnGame; moves: PgnMove[]
       mode: game.mode,
       game: {
         id: game.id,
-        mode: game.mode as 'team' | 'bughouse',
+        mode: game.mode as GameMode,
         rulesVersion: game.rulesVersion,
         result: game.result,
         reason: game.reason,
@@ -294,7 +295,7 @@ gamesRouter.post('/:id/rematch', requireAuth, async (req, res) => {
     players,
     {
       gameId: id,
-      mode: game.mode as 'team' | 'bughouse',
+      mode: game.mode as GameMode,
       timeControl: game.noClock
         ? { kind: 'none', baseMin: 0, incSec: 0 }
         : { kind: 'clock', baseMin: game.baseMin, incSec: game.incSec },
@@ -347,7 +348,7 @@ function dbGameToSummary(game: DbGame): GameSummary {
   return {
     id: game.id,
     rulesVersion: game.rulesVersion,
-    mode: game.mode as 'team' | 'bughouse',
+    mode: game.mode as GameMode,
     status: game.status as 'active' | 'finished' | 'abandoned',
     result: game.result as '1-0' | '0-1' | '*',
     reason: (game.reason as GameSummary['reason']) ?? null,

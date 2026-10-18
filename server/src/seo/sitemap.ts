@@ -189,6 +189,7 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
       priority: 0.7,
       alternates: makeAlternates(`${baseUrl}/history`),
     },
+    { loc: `${baseUrl}/rules/crazyhouse`, lastmod: today, changefreq: 'weekly', priority: 0.9, alternates: makeAlternates(`${baseUrl}/rules/crazyhouse`) },
     // Правила и информация о платформе
     {
       loc: `${baseUrl}/rules/duo`,

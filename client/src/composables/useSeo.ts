@@ -79,6 +79,7 @@ export interface PageSeoOptions {
   description?: MaybeRefOrGetter<string | undefined>;
   keywords?: MaybeRefOrGetter<string | string[] | undefined>;
   canonical?: MaybeRefOrGetter<string | undefined>;
+  canonicalLocale?: MaybeRefOrGetter<'ru' | 'en'>;
   path?: MaybeRefOrGetter<string | undefined>;
   ogTitle?: MaybeRefOrGetter<string | undefined>;
   ogDescription?: MaybeRefOrGetter<string | undefined>;
@@ -140,7 +141,7 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
     return getCurrentLocale() === 'en' ? DEFAULT_KEYWORDS_EN : DEFAULT_KEYWORDS;
   });
 
-  const resolvedCanonical = computed(() => {
+  const canonicalBase = computed(() => {
     const explicitCanonical = toValue(options.canonical);
     if (explicitCanonical) {
       return createCanonicalUrl(explicitCanonical);
@@ -157,6 +158,8 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
     }
     return `${BASE_CANONICAL_DOMAIN}/`;
   });
+
+  const resolvedCanonical = computed(() => canonicalBase.value + (toValue(options.canonicalLocale) === 'en' ? '?lang=en' : ''));
 
   const resolvedOgTitle = computed(() => {
     const val = toValue(options.ogTitle);
@@ -260,8 +263,8 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
       setCanonicalTag(canonicalUrl);
 
       // Мультиязычные теги hreflang согласно стандарту Google & Yandex
-      const ruHref = canonicalUrl;
-      const enHref = canonicalUrl.includes('?') ? `${canonicalUrl}&lang=en` : `${canonicalUrl}?lang=en`;
+      const ruHref = canonicalBase.value;
+      const enHref = `${ruHref}?lang=en`;
       setHreflangTag('ru', ruHref);
       setHreflangTag('en', enHref);
       setHreflangTag('x-default', ruHref);

@@ -1,4 +1,6 @@
 import { Chess, type Square } from 'chess.js';
+import { CrazyhouseGame } from 'shared/crazyhouse';
+import { hasPockets, isCrazyhouse } from 'shared';
 import { BughouseGame } from 'shared/bughouse';
 import type { DropPieceType } from 'shared';
 import { DEFAULT_POCKET, type GameSummary, type MoveRecord, type PieceType, type Pocket } from 'shared';
@@ -104,7 +106,7 @@ function fallbackSan(mv: MoveRecord): string {
  * и плеер просто показывает их как есть, не падая.
  */
 export function buildReplay(game: GameSummary, rawMoves: MoveRecord[]): ReplayData {
-  if (game.mode === 'bughouse' && (game.rulesVersion ?? 0) >= 2) return buildBughouseReplay(game, rawMoves);
+  if (hasPockets(game.mode) && (game.rulesVersion ?? 0) >= 2) return buildBughouseReplay(game, rawMoves);
   const boardsCount: 1 | 2 = game.mode === 'bughouse' ? 2 : 1;
   const moves = [...rawMoves].sort((a, b) => a.ply - b.ply);
 
@@ -219,14 +221,15 @@ export function buildReplay(game: GameSummary, rawMoves: MoveRecord[]): ReplayDa
 
 /** v2 uses exactly the same transfer, promotion and drop rules as live play. */
 function buildBughouseReplay(game: GameSummary, records: MoveRecord[]): ReplayData {
-  const engine = new BughouseGame();
+  const engine = isCrazyhouse(game.mode) ? new CrazyhouseGame(game.mode === 'crazyhouse-team') : new BughouseGame();
+  const boards: (0 | 1)[] = game.mode === 'bughouse' ? [0, 1] : [0];
   const views: ReplayMoveView[] = [];
   const last: [string | null, string | null][] = [[null, null], [null, null]];
   function frame(ply: number): ReplayFrame {
     return {
       ply,
-      boards: ([0, 1] as const).map(board => ({ fen: engine.fen(board), lastMove: [...last[board]], check: engine.isCheck(board) ? kingSquare(engine.boards[board]) : null })) as [ReplayBoardFrame, ReplayBoardFrame],
-      pockets: ([0, 1] as const).map(board => [{ ...engine.pocketOf(board, 'w') }, { ...engine.pocketOf(board, 'b') }]),
+      boards: boards.map(board => ({ fen: engine.fen(board), lastMove: [...last[board]], check: engine.isCheck(board) ? kingSquare(engine.boards[board]) : null })) as ReplayFrame['boards'],
+      pockets: boards.map(board => [{ ...engine.pocketOf(board, 'w') }, { ...engine.pocketOf(board, 'b') }]),
     };
   }
   const frames = [frame(0)];
@@ -246,7 +249,7 @@ function buildBughouseReplay(game: GameSummary, records: MoveRecord[]): ReplayDa
     views.push({ index, ...record, san, ok });
     frames.push(frame(index + 1));
   });
-  return { game, moves: views, frames, boardsCount: 2 };
+  return { game, moves: views, frames, boardsCount: game.mode === 'bughouse' ? 2 : 1 };
 }
 
 /** «1. e4 e5» — сгруппировать ходы по парам для списка */

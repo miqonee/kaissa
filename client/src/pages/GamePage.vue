@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router';
 import { Chess, type Square } from 'chess.js';
 import type { ChatMessage, GameParticipantInfo, GameState, PieceType, DropPieceType } from 'shared';
-import { detectOpening, getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
+import { hasPockets, isCrazyhouse, modeLabel, detectOpening, getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
 import { getSocket, onSocketResync } from '../api/socket';
 import { useAuthStore } from '../stores/auth';
 import { api } from '../api/rest';
@@ -40,7 +40,7 @@ const pageTitle = computed(() => {
   const id = route.params.id;
   const isEn = i18n.locale === 'en';
   if (!state.value) return `${isEn ? 'Match' : 'Партия'} #${id} | ${i18n.t.nav.brand}`;
-  const mode = state.value.mode === 'bughouse' ? (isEn ? 'Bughouse' : 'Багхаус') : '2v2';
+  const mode = modeLabel(state.value.mode, i18n.locale);
   const t1 = state.value.participants.filter((p) => p.team === 1).map((p) => p.username).join(' / ');
   const t2 = state.value.participants.filter((p) => p.team === 2).map((p) => p.username).join(' / ');
   if (t1 && t2) {
@@ -55,7 +55,7 @@ const pageOgDescription = computed(() => {
   if (!state.value) {
     return isEn ? `Online match #${id} view on Kaissa chess club.` : `Онлайн-просмотр партии #${id} на платформе Каисса.`;
   }
-  const mode = state.value.mode === 'bughouse' ? (isEn ? 'Bughouse chess' : 'Багхаус (шведские шахматы)') : (isEn ? '2v2 Team chess' : 'Командные шахматы 2х2');
+  const mode = modeLabel(state.value.mode, i18n.locale);
   const tc = timeControlLabel(state.value.timeControl);
   const t1 = state.value.participants.filter((p) => p.team === 1).map((p) => p.username).join(' / ') || (isEn ? 'Team 1' : 'Команда 1');
   const t2 = state.value.participants.filter((p) => p.team === 2).map((p) => p.username).join(' / ') || (isEn ? 'Team 2' : 'Команда 2');
@@ -139,6 +139,8 @@ async function dragPocket(board: 0 | 1, payload: { piece: DropPieceType; event: 
 function viewedColor(board: 0 | 1): 'w' | 'b' { return orientationOf(board) === 'white' ? 'w' : 'b'; }
 function otherColor(color: 'w' | 'b'): 'w' | 'b' { return color === 'w' ? 'b' : 'w'; }
 function readHint(key: string): boolean { try { return localStorage.getItem(key) === '1'; } catch { return false; } }
+const crazyHintSeen = ref(readHint('kaissa.crazyhouse.intro.v1'));
+function dismissCrazyHint(): void { crazyHintSeen.value = true; try { localStorage.setItem('kaissa.crazyhouse.intro.v1', '1'); } catch {} }
 const introSeen = ref(readHint('kaissa.bughouse.intro.v1'));
 const pocketSeen = ref(readHint('kaissa.bughouse.pocket.v1'));
 const pocketTip = ref(false);
@@ -150,7 +152,7 @@ function dismissHint(kind: 'intro' | 'pocket'): void {
 function cancelDrop(event: KeyboardEvent): void { if (event.key === 'Escape') selectedDrop.value = null; }
 watch(() => state.value, (st) => {
   if (selectedDrop.value && (!st || !myTurnOn(myBoard.value ?? 0) || !pocketOfBoard(myBoard.value ?? 0, myParticipant.value?.color ?? 'w')?.[selectedDrop.value])) selectedDrop.value = null;
-  const pocket = st?.mode === 'bughouse' && myParticipant.value ? pocketOfBoard(myParticipant.value.boardIndex, myParticipant.value.color) : null;
+  const pocket = st && hasPockets(st.mode) && myParticipant.value ? pocketOfBoard(myParticipant.value.boardIndex, myParticipant.value.color) : null;
   if (pocket && !pocketSeen.value && Object.values(pocket).some(count => count > 0)) pocketTip.value = true;
 });
 const promoDialog = ref<{ board: 0 | 1; from: string; to: string } | null>(null);
@@ -159,7 +161,7 @@ const showReplay = ref(false);
 const disconnected = ref<{ userId: number; username: string }[]>([]);
 
 const myBoard = computed<0 | 1 | null>(() => {
-  if (!state.value || state.value.mode !== 'bughouse') return null;
+  if (!state.value || !hasPockets(state.value.mode)) return null;
   return myParticipant.value?.boardIndex ?? null;
 });
 
@@ -319,7 +321,7 @@ function fmtClock(ms: number | null): string {
 
 /** Для 2x2: возвращает обе команды по 2 игрока */
 const teamModeSides = computed(() => {
-  if (!state.value || state.value.mode !== 'team') return null;
+  if (!state.value || state.value.mode === 'bughouse') return null;
   const parts = state.value.participants;
   // Верхняя сторона (черные по умолчанию или соперники)
   const topColor: 'w' | 'b' = orientationOf(0) === 'white' ? 'b' : 'w';
@@ -362,7 +364,7 @@ function displayName(p: GameParticipantInfo): string {
 }
 
 const orderedTurnParticipants = computed(() => {
-  if (!state.value || state.value.mode !== 'team') return state.value?.participants ?? [];
+  if (!state.value || state.value.mode === 'bughouse') return state.value?.participants ?? [];
   const parts = state.value.participants;
   const w0 = parts.find((p) => p.color === 'w' && p.moveSlot === 0);
   const b0 = parts.find((p) => p.color === 'b' && p.moveSlot === 0);
@@ -483,7 +485,7 @@ onMounted(() => {
     if (mv.userId === myId.value) {
       const params = { mode: state.value?.mode ?? 'unknown', paced: Boolean(state.value?.botPacing) };
       trackGoal('game_first_move', params, String(gameId));
-      if (mv.dropPiece) trackGoal('bughouse_first_drop', params, String(gameId));
+      if (mv.dropPiece) trackGoal(state.value?.mode === 'bughouse' ? 'bughouse_first_drop' : 'crazyhouse_first_drop', params, String(gameId));
     }
     lastMoves.value = {
       ...lastMoves.value,
@@ -682,7 +684,7 @@ function resultHeadline(): string {
           <AppIcon name="arrow-left" :size="14" /> {{ i18n.locale === 'en' ? 'Tables' : 'Столы' }}
         </router-link>
         <h1>
-          {{ state.mode === 'bughouse' ? (i18n.locale === 'en' ? 'Bughouse' : 'Багхаус') : (i18n.locale === 'en' ? '2v2 Match (Single Board)' : 'Матч 2×2 (одна доска)') }}
+          {{ modeLabel(state.mode, i18n.locale) }}
         </h1>
         <span class="badge mono">{{ timeControlLabel(state.timeControl) }}</span>
         <span v-if="state.status === 'active'" class="badge on">{{ i18n.locale === 'en' ? 'Live' : 'В игре' }}</span>
@@ -714,12 +716,16 @@ function resultHeadline(): string {
         ? (i18n.locale === 'en' ? 'Both boards are paused. Press Resume when ready.' : 'Обе доски на паузе. Нажмите «Продолжить», когда будете готовы.')
         : (i18n.locale === 'en' ? 'The bots on the other board move in step with your board. Take your time.' : 'Боты на соседней доске ходят вслед за вашей доской. Можно спокойно подумать.') }}
     </p>
+    <aside v-if="isCrazyhouse(state.mode) && isParticipant && state.status === 'active' && !crazyHintSeen" class="panel bughouse-help">
+      <p>{{ i18n.locale === 'en' ? 'Captured pieces become your colour and enter the reserve. On your turn select a reserve piece, then a highlighted square. In 2×2 partners share the reserve and alternate moves.' : 'Взятые фигуры меняют цвет и попадают в резерв. В свой ход выберите фигуру резерва и подсвеченную клетку. В 2×2 резерв общий, партнёры ходят по очереди.' }}</p>
+      <button class="small" @click="dismissCrazyHint">{{ i18n.t.bughouse.dismiss }}</button>
+    </aside>
     <!-- Основная сетка игры -->
     <div class="game-layout">
       <!-- Игровая зона (1 или 2 доски) -->
       <section class="boards-container" aria-label="Шахматные доски" :class="{ 'two-boards': state.mode === 'bughouse' }">
         <!-- ================= РЕЖИМ 2х2 (ОДНА ДОСКА) ================= -->
-        <div v-if="state.mode === 'team' && teamModeSides" class="team-board-wrapper">
+        <div v-if="state.mode !== 'bughouse' && teamModeSides" class="team-board-wrapper" :class="{ 'with-reserve': isCrazyhouse(state.mode) }">
           <!-- Верхняя команда (соперники) -->
           <div class="team-players-bar top">
             <!-- Слева: Игрок 1 (слот 1, начинает) -->
@@ -729,7 +735,7 @@ function resultHeadline(): string {
                 class="member-pill compact"
                 :class="[roleOf(teamModeSides.top.players[0]), { 'active-turn': isPlayerTurn(teamModeSides.top.players[0].userId) }]"
               >
-                <span v-if="!teamModeSides.top.players[0].isBot" class="slot-num mono">1</span>
+                <span v-if="state.mode !== 'crazyhouse' && !teamModeSides.top.players[0].isBot" class="slot-num mono">1</span>
                 <span v-if="!teamModeSides.top.players[0].isBot" class="member-name">{{ teamModeSides.top.players[0].username }}</span>
                 <BotHoverCard
                   v-if="teamModeSides.top.players[0].isBot"
@@ -782,9 +788,21 @@ function resultHeadline(): string {
             </div>
           </div>
 
+          <div v-if="isCrazyhouse(state.mode)" class="single-pocket">
+            <span class="pocket-label dim">{{ i18n.t.bughouse.opponentPocket }}</span>
+            <PocketBar :pocket="pocketOfBoard(0, teamModeSides.top.color)!" :color="teamModeSides.top.color" :interactive="false" :selected="null" :label="i18n.t.bughouse.opponentPocket" />
+          </div>
+          <div class="board-top-info" v-if="isCrazyhouse(state.mode)">
+            <strong class="board-status" role="status">{{ boardStatus(0) }}</strong>
+            <router-link to="/rules/crazyhouse" target="_blank">{{ i18n.locale === 'en' ? 'Rules' : 'Правила' }}</router-link>
+          </div>
           <!-- Сама доска -->
           <div class="board-frame">
             <ChessBoard
+              :ref="el => setBughouseBoard(0, el)"
+              :drop-piece="myTurnOn(0) ? selectedDrop : null"
+              :drop-dests="myTurnOn(0) && selectedDrop ? state.legalDrops?.[0]?.[selectedDrop] ?? [] : []"
+              @drop="onDrop(0, $event)" @cancel-drop="selectedDrop = null"
               :fen="fenOf(0)"
               :orientation="orientationOf(0)"
               :movable-color="movableOn(0)"
@@ -798,6 +816,11 @@ function resultHeadline(): string {
             />
           </div>
 
+          <div v-if="isCrazyhouse(state.mode)" class="single-pocket">
+            <span class="pocket-label dim">{{ state.mode === 'crazyhouse-team' ? (i18n.locale === 'en' ? 'Shared team reserve' : 'Общий резерв команды') : i18n.t.bughouse.yourPocket }}</span>
+            <PocketBar :pocket="pocketOfBoard(0, teamModeSides.bottom.color)!" :color="teamModeSides.bottom.color" :interactive="myTurnOn(0)" :selected="selectedDrop" :label="i18n.t.bughouse.yourPocket" @select="selectedDrop = $event" @drag="dragPocket(0, $event)" />
+            <p v-if="selectedDrop" class="drop-hint" role="status">{{ i18n.t.bughouse.dropHint }} <button class="small ghost" @click="selectedDrop = null">{{ i18n.t.bughouse.cancel }}</button></p>
+          </div>
           <!-- Нижняя команда (моя сторона) -->
           <div class="team-players-bar bottom">
             <!-- Слева: Игрок 1 (слот 1, начинает) -->
@@ -807,7 +830,7 @@ function resultHeadline(): string {
                 class="member-pill compact"
                 :class="[roleOf(teamModeSides.bottom.players[0]), { 'active-turn': isPlayerTurn(teamModeSides.bottom.players[0].userId) }]"
               >
-                <span v-if="!teamModeSides.bottom.players[0].isBot" class="slot-num mono">1</span>
+                <span v-if="state.mode !== 'crazyhouse' && !teamModeSides.bottom.players[0].isBot" class="slot-num mono">1</span>
                 <span v-if="!teamModeSides.bottom.players[0].isBot" class="member-name">{{ teamModeSides.bottom.players[0].username }}</span>
                 <BotHoverCard
                   v-if="teamModeSides.bottom.players[0].isBot"
@@ -909,7 +932,7 @@ function resultHeadline(): string {
             <h3>Очередь ходов</h3>
           </div>
           <div class="panel-body queue-body">
-            <div v-if="state.mode === 'team'" class="queue-explain">
+            <div v-if="state.mode !== 'bughouse'" class="queue-explain">
               <div class="queue-list">
                 <div
                   v-for="(p, idx) in orderedTurnParticipants"
@@ -1103,6 +1126,12 @@ function resultHeadline(): string {
                 </div>
               </template>
 
+              <template v-else-if="isCrazyhouse(state.mode)">
+                <div class="opening-name-block"><h4 class="opening-title">{{ modeLabel(state.mode, i18n.locale) }}</h4>
+                  <p class="opening-variation">{{ i18n.locale === 'en' ? 'One board with reserves' : 'Одна доска с резервом' }}</p></div>
+                <div class="opening-plan-box"><p class="plan-text">{{ i18n.locale === 'en' ? 'Captured pieces become your colour and enter your reserve. A drop can defend check or deliver mate. Team partners share the reserve and alternate turns.' : 'Взятые фигуры меняют цвет и попадают в свой резерв. Дроп может защитить от шаха или поставить мат. В команде резерв общий, ходы партнёров чередуются.' }}</p>
+                  <router-link to="/rules/crazyhouse">{{ i18n.locale === 'en' ? 'Crazyhouse rules and examples' : 'Правила и примеры Crazyhouse' }}</router-link></div>
+              </template>
               <template v-else>
                 <div class="opening-name-block">
                   <h4 class="opening-title">Багхаус (Шведские шахматы)</h4>
@@ -1249,7 +1278,7 @@ function resultHeadline(): string {
             <div class="analysis-text">
               <h4>{{ i18n.locale === 'en' ? 'Game Analysis' : 'Анализ партии' }}</h4>
               <p class="dim small-hint">
-                {{ state.mode === 'bughouse' ? i18n.t.bughouse.replayHint : (i18n.locale === 'en' ? 'Review the game, download PGN or open Lichess analysis.' : 'Пересмотрите партию, скачайте PGN или откройте анализ на Lichess.') }}
+                {{ hasPockets(state.mode) ? (isCrazyhouse(state.mode) ? (i18n.locale === 'en' ? 'Replay the game with reserves or download PGN.' : 'Пересмотрите партию с резервами или скачайте PGN.') : i18n.t.bughouse.replayHint) : (i18n.locale === 'en' ? 'Review the game, download PGN or open Lichess analysis.' : 'Пересмотрите партию, скачайте PGN или откройте анализ на Lichess.') }}
               </p>
             </div>
             <div class="analysis-buttons">
@@ -1445,6 +1474,17 @@ function resultHeadline(): string {
   gap: 6px;
 }
 
+.team-board-wrapper.with-reserve {
+  container-type: inline-size;
+  max-width: min(100%, max(300px, calc(100dvh - 400px)));
+}
+@media (max-width: 1024px) { .team-board-wrapper.with-reserve { max-width: 100%; } }
+@container (max-width: 440px) {
+  .member-rating, .slot-num, .turn-chip { display: none; }
+}
+.member-pill.compact :deep(.bot-hover-trigger) { min-width: 0; flex-shrink: 1; }
+.member-pill.compact :deep(.bot-badge) { display: block; overflow: hidden; text-overflow: ellipsis; }
+
 .team-players-bar {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -1467,14 +1507,18 @@ function resultHeadline(): string {
 }
 
 .team-slot.left {
+  grid-column: 1;
   justify-content: flex-start;
 }
 
 .team-slot.right {
+  grid-column: 3;
   justify-content: flex-end;
 }
 
 .member-pill.compact {
+  min-width: 0;
+  overflow: hidden;
   height: 28px;
   padding: 0 8px;
   font-size: 12px;
@@ -1482,6 +1526,9 @@ function resultHeadline(): string {
   max-width: 100%;
   white-space: nowrap;
 }
+
+.member-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.member-role { flex-shrink: 0; }
 
 .slot-num {
   font-size: 10px;
@@ -1498,6 +1545,8 @@ function resultHeadline(): string {
 }
 
 .clock-display.center {
+  grid-column: 2;
+  grid-row: 1;
   height: 32px;
   line-height: 32px;
   padding: 0 14px;
@@ -2411,6 +2460,7 @@ function resultHeadline(): string {
     height: 26px;
     line-height: 26px;
   }
+  .with-reserve .slot-num, .with-reserve .turn-chip { display: none; }
   .member-pill.compact {
     height: 24px;
     padding: 0 4px;

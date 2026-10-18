@@ -36,8 +36,8 @@ usePageSeo({
       <h1 itemprop="headline">{{ i18n.locale === 'en' ? 'About Kaissa Platform' : 'О платформе Каисса' }}</h1>
       <p class="article-lead" itemprop="description">
         {{ i18n.locale === 'en'
-          ? 'Kaissa is a modern collaborative platform for 4-player team chess. Play in pairs on a single board (2v2) or Bughouse with live piece drops.'
-          : 'Каисса — площадка для игры в шахматы вчетвером. Здесь можно играть парами 2 на 2 на одной доске или в шведские шахматы (багхаус) с обменом сбитыми фигурами.' }}
+          ? 'Kaissa offers team chess on one board, Bughouse on two boards and Crazyhouse 1v1 or 2v2 with reserves. Play with people or bots.'
+          : 'Каисса — площадка для командных шахмат на одной доске, багхауса на двух досках и Crazyhouse 1×1 или 2×2 с резервом. Играйте с людьми или ботами.' }}
       </p>
     </header>
 
@@ -73,6 +73,7 @@ usePageSeo({
               <AppIcon name="arrow-right" :size="12" />
             </router-link>
           </p>
+          <h3>3. Crazyhouse 1v1 & 2v2</h3><p>Captures change colour and enter your own reserve on the same board. Play standard 1v1 or Kaissa's team format: partners alternate moves and share a reserve.</p><p><router-link to="/rules/crazyhouse" class="button ghost small">Crazyhouse rules</router-link></p>
         </section>
 
         <section class="article-section">
@@ -93,7 +94,7 @@ usePageSeo({
 
           <h3>Elo Rating & Match History</h3>
           <p>
-            Ratings are updated using the standard Elo formula balancing team strength. Every completed game is saved to the club archive with PGN download and one-click Lichess Stockfish analysis.
+            Human opponents affect your Elo rating; games against bots keep the rating unchanged. Completed games have replay and PGN download. Reserve variants include pockets in the replay; Lichess import is offered for team chess without reserves.
           </p>
         </section>
 
@@ -144,6 +145,7 @@ usePageSeo({
               <AppIcon name="arrow-right" :size="12" />
             </router-link>
           </p>
+          <h3>3. Crazyhouse 1×1 и 2×2</h3><p>Взятые фигуры меняют цвет и попадают в свой резерв на той же доске. В 1×1 играет один против одного; в командном формате клуба 2×2 партнёры чередуют ходы и делят резерв.</p><p><router-link to="/rules/crazyhouse" class="button ghost small">Правила Crazyhouse</router-link></p>
         </section>
 
         <!-- Секция: Возможности -->

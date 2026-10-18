@@ -4,7 +4,6 @@
 export type Locale = 'ru' | 'en';
 
 export interface TranslationSchema {
-  resources: { title: string; bughouse: string; duo: string; repository: string };
   bughouse: {
     board: string; yourBoard: string; partnerBoard: string; yourPocket: string; opponentPocket: string;
     partnerPocket: string; yourTurn: string; waiting: string; expand: string; collapse: string;

@@ -10,13 +10,12 @@ import type {
   TeamMode,
   TimeControl,
 } from 'shared';
-import { eloToLevel } from 'shared';
+import { GAME_MODES, lobbyCapacity, defaultTimeControl, modeLabel, eloToLevel } from 'shared';
 import { presence } from '../socket/presence.js';
 import { prisma } from '../prisma.js';
 import { env } from '../env.js';
 import type { GamesManager } from '../game/manager.js';
 
-const MAX_SLOTS = 4;
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export interface LobbyMember {
@@ -40,6 +39,8 @@ export class Lobby {
   private: boolean;
   teamMode: TeamMode = 'auto';
   isAuto = false;
+  quickStart = false;
+  get isQuick(): boolean { return this.isAuto || this.quickStart; }
   autoCountdown: number | null = null;
   isPaused = false;
   countdownTimer: NodeJS.Timeout | null = null;
@@ -99,6 +100,7 @@ export class Lobby {
       code: this.code,
       started: this.started,
       isAuto: this.isAuto,
+      isQuick: this.isQuick,
       rematchOf: this.rematchOf,
       teamMode: this.teamMode,
       autoCountdown: this.autoCountdown,
@@ -214,7 +216,7 @@ export class LobbiesManager {
 
   private autoLobbyJobs = new Map<GameMode, Promise<void>>();
   async ensureAutoLobby(): Promise<void> {
-    await Promise.all((['team', 'bughouse'] as const).map(mode => {
+    await Promise.all(GAME_MODES.map(mode => {
       const existing = this.autoLobbyJobs.get(mode);
       if (existing) return existing;
       const job = this.createAutoLobby(mode).finally(() => this.autoLobbyJobs.delete(mode));
@@ -230,11 +232,11 @@ export class LobbiesManager {
     const botUsers = await prisma.user.findMany({
       where: { isBot: true },
     });
-    if (botUsers.length < 4) return;
+    if (botUsers.length < lobbyCapacity(mode)) return;
 
     // Перемешиваем и выбираем 4 разных ботов
     const shuffled = botUsers.slice().sort(() => Math.random() - 0.5);
-    const chosen = shuffled.slice(0, 4);
+    const chosen = shuffled.slice(0, lobbyCapacity(mode));
 
     const id = `AUTO_${this.idSeq++}`;
     const code = genCode();
@@ -247,9 +249,9 @@ export class LobbiesManager {
       {
         id,
         code,
-        name: mode === 'bughouse' ? 'Быстрый багхаус' : 'Быстрый стол 2х2',
+        name: `Быстрый стол · ${modeLabel(mode)}`,
         mode,
-        timeControl: mode === 'bughouse' ? { kind: 'none', baseMin: 0, incSec: 0 } : { kind: 'clock', baseMin: 3, incSec: 0 },
+        timeControl: defaultTimeControl(mode),
         private: false,
         teamMode: 'auto',
       },
@@ -266,7 +268,7 @@ export class LobbiesManager {
     );
     lobby.isAuto = true;
 
-    for (let i = 1; i < 4; i++) {
+    for (let i = 1; i < lobbyCapacity(mode); i++) {
       const b = chosen[i];
       const botElo = baseElo + Math.floor(Math.random() * 80 - 40);
       lobby.members.set(b.id, {
@@ -286,7 +288,7 @@ export class LobbiesManager {
   }
 
   adaptAutoLobbyRatings(lobby: Lobby): void {
-    if (!lobby.isAuto || lobby.started) return;
+    if (!lobby.isQuick || lobby.started) return;
 
     const humans = [...lobby.members.values()].filter((m) => !m.isBot);
     const bots = [...lobby.members.values()].filter((m) => m.isBot);
@@ -362,13 +364,14 @@ export class LobbiesManager {
   }
 
   async refillAutoBots(lobby: Lobby): Promise<void> {
-    if (!lobby.isAuto || lobby.started) return;
+    if (!lobby.isQuick || lobby.started) return;
     const botUsers = await prisma.user.findMany({
       where: { isBot: true },
     });
+    if (lobby.started || this.lobbies.get(lobby.id) !== lobby) return;
     const shuffled = botUsers.slice().sort(() => Math.random() - 0.5);
     for (const b of shuffled) {
-      if (lobby.members.size >= MAX_SLOTS) break;
+      if (lobby.members.size >= lobbyCapacity(lobby.mode)) break;
       if (!lobby.members.has(b.id)) {
         lobby.members.set(b.id, {
           uid: b.id,
@@ -453,9 +456,9 @@ export class LobbiesManager {
     if (lobby.started) return { ok: false, error: 'Игра уже началась' };
     if (lobby.members.has(member.uid)) return { ok: true };
 
-    if (lobby.isAuto && !member.isBot) {
+    if (lobby.isQuick && !member.isBot) {
       // Человек вытесняет первого бота
-      if (lobby.members.size >= MAX_SLOTS) {
+      if (lobby.members.size >= lobbyCapacity(lobby.mode)) {
         const botEntry = [...lobby.members.values()].find((m) => m.isBot);
         if (botEntry) {
           lobby.members.delete(botEntry.uid);
@@ -467,7 +470,7 @@ export class LobbiesManager {
         }
       }
     } else {
-      if (lobby.members.size >= MAX_SLOTS) return { ok: false, error: 'Лобби заполнено' };
+      if (lobby.members.size >= lobbyCapacity(lobby.mode)) return { ok: false, error: 'Лобби заполнено' };
     }
 
     const isHost = lobby.members.size === 0 || (!member.isBot && ![...lobby.members.values()].some((m) => !m.isBot && m.host));
@@ -479,14 +482,14 @@ export class LobbiesManager {
       uid: member.uid,
       username: member.username,
       rating: member.rating,
-      ready: lobby.isAuto ? true : false,
+      ready: lobby.isQuick ? true : false,
       host: isHost,
       joinedAt: Date.now(),
       isBot: member.isBot,
       botLevel: member.botLevel,
     });
 
-    if (lobby.isAuto) {
+    if (lobby.isQuick) {
       this.adaptAutoLobbyRatings(lobby);
       if (!member.isBot) {
         const humans = [...lobby.members.values()].filter((m) => !m.isBot);
@@ -498,23 +501,24 @@ export class LobbiesManager {
       }
     }
 
-    if (lobby.rematchOf && !lobby.isAuto) lobby.clearCountdown();
+    if (lobby.rematchOf && !lobby.isQuick) lobby.clearCountdown();
     this.broadcastState(lobby);
     this.broadcastList();
     return { ok: true };
   }
 
-  resetAutoCountdown(lobby: Lobby): void {
-    if ((!lobby.isAuto && !lobby.rematchOf) || lobby.started) return;
+  resetAutoCountdown(lobby: Lobby, preservePause = false): void {
+    if ((!lobby.isQuick && !lobby.rematchOf) || lobby.started) return;
     const humans = [...lobby.members.values()].filter((m) => !m.isBot);
     if (!humans.length) {
       lobby.clearCountdown();
       return;
     }
 
-    lobby.pausedBy.clear();
+    const previousPause = preservePause ? [...lobby.pausedBy] : [];
+    lobby.pausedBy = new Set(previousPause.filter(uid => humans.some(h => h.uid === uid)));
     lobby.autoCountdown = 10;
-    lobby.isPaused = false;
+    lobby.isPaused = humans.every(h => lobby.pausedBy.has(h.uid));
 
     if (lobby.countdownTimer) clearInterval(lobby.countdownTimer);
 
@@ -557,7 +561,7 @@ export class LobbiesManager {
 
   pauseToggle(lobbyId: string, uid: number): void {
     const lobby = this.lobbies.get(lobbyId);
-    if (!lobby || (!lobby.isAuto && !lobby.rematchOf) || lobby.autoCountdown === null) return;
+    if (!lobby || (!lobby.isQuick && !lobby.rematchOf) || lobby.autoCountdown === null) return;
     const m = lobby.members.get(uid);
     if (!m || m.isBot) return;
 
@@ -592,7 +596,7 @@ export class LobbiesManager {
     // Не даём занять команду, где уже 2 игрока
     if (team !== null) {
       const count = [...lobby.members.values()].filter((x) => x.teamChoice === team && x.uid !== uid).length;
-      if (count >= 2) return;
+      if (count >= lobbyCapacity(lobby.mode) / 2) return;
     }
 
     m.teamChoice = team;
@@ -609,16 +613,53 @@ export class LobbiesManager {
     this.broadcastState(lobby);
   }
 
+  async setMode(lobbyId: string, uid: number, mode: GameMode): Promise<{ ok: boolean; error?: string }> {
+    if (!GAME_MODES.includes(mode)) return { ok: false, error: 'Неизвестный режим' };
+    const lobby = this.lobbies.get(lobbyId);
+    if (!lobby || lobby.started || !lobby.members.get(uid)?.host) return { ok: false, error: 'Режим меняет хост до начала партии' };
+    if (lobby.mode === mode) return { ok: true };
+    const botUsers = lobby.isQuick ? await prisma.user.findMany({ where: { isBot: true } }) : [];
+    // Recheck after the query: a countdown or another request may have changed the table.
+    if (lobby.started || this.lobbies.get(lobbyId) !== lobby || !lobby.members.get(uid)?.host) return { ok: false, error: 'Стол уже изменился' };
+    const humans = [...lobby.members.values()].filter(m => !m.isBot);
+    if (humans.length > lobbyCapacity(mode)) return { ok: false, error: 'Для 1×1 за столом должно быть не больше двух людей' };
+    if (lobby.isQuick && botUsers.filter(b => !humans.some(h => h.uid === b.id)).length < lobbyCapacity(mode) - humans.length) return { ok: false, error: 'Не хватает ботов для нового режима' };
+    const wasAuto = lobby.isAuto;
+    const previousPause = [...lobby.pausedBy];
+    lobby.clearCountdown();
+    if (wasAuto) { lobby.isAuto = false; lobby.quickStart = true; }
+    lobby.mode = mode;
+    if (lobby.isQuick) lobby.name = modeLabel(mode);
+    lobby.timeControl = defaultTimeControl(mode);
+    lobby.rematchTeams = null;
+    lobby.rematchOf = null;
+    for (const m of lobby.members.values()) { m.teamChoice = null; m.ready = Boolean(m.isBot || m.host || lobby.isQuick); }
+    for (const m of [...lobby.members.values()].reverse()) {
+      if (lobby.members.size <= lobbyCapacity(mode)) break;
+      if (m.isBot) lobby.members.delete(m.uid);
+    }
+    if (lobby.isQuick) {
+      for (const b of botUsers) {
+        if (lobby.members.size >= lobbyCapacity(mode)) break;
+        if (!lobby.members.has(b.id)) lobby.members.set(b.id, { uid: b.id, username: b.username, rating: humans[0]?.rating ?? b.rating, ready: true, host: false, joinedAt: Date.now(), isBot: true, botLevel: eloToLevel(humans[0]?.rating ?? b.rating) });
+      }
+      lobby.pausedBy = new Set(previousPause);
+      this.resetAutoCountdown(lobby, true);
+    }
+    this.broadcastState(lobby);
+    this.broadcastList();
+    if (wasAuto) void this.ensureAutoLobby();
+    return { ok: true };
+  }
+
   setTimeControl(lobbyId: string, uid: number, tc: TimeControl): void {
     const lobby = this.lobbies.get(lobbyId);
     if (!lobby || lobby.started) return;
     const m = lobby.members.get(uid);
-    if (lobby.isAuto) {
-      if (m && m.isBot) return;
-    } else {
-      if (!m?.host) return;
-    }
+    if (!m || m.isBot || (!lobby.isQuick && !m.host)) return;
+    if (!tc || !['none', 'clock'].includes(tc.kind) || !Number.isInteger(tc.baseMin) || !Number.isInteger(tc.incSec) || (tc.kind === 'none' ? tc.baseMin !== 0 || tc.incSec !== 0 : tc.baseMin < 1 || tc.baseMin > 120 || tc.incSec < 0 || tc.incSec > 60)) return;
     lobby.timeControl = tc;
+    if (lobby.isQuick) this.resetAutoCountdown(lobby, true);
     this.broadcastState(lobby);
     this.broadcastList();
   }
@@ -628,7 +669,7 @@ export class LobbiesManager {
     if (!lobby || lobby.started || lobby.isAuto) return { ok: false, error: 'Нельзя добавить бота' };
     const caller = lobby.members.get(uid);
     if (!caller?.host) return { ok: false, error: 'Только создатель стола может добавлять ботов' };
-    if (lobby.members.size >= MAX_SLOTS) return { ok: false, error: 'Стол уже заполнен' };
+    if (lobby.members.size >= lobbyCapacity(lobby.mode)) return { ok: false, error: 'Стол уже заполнен' };
 
     const humans = [...lobby.members.values()].filter((m) => !m.isBot);
     const baseRating = humans.length
@@ -641,9 +682,9 @@ export class LobbiesManager {
     const botLevel = eloToLevel(botElo);
 
     // Доступные боты, которых еще нет за столом
-    const existingUids = new Set([...lobby.members.values()].map((m) => m.uid));
     const allBots = await prisma.user.findMany({ where: { isBot: true } });
-    const available = allBots.filter((b) => !existingUids.has(b.id));
+    if (lobby.started || this.lobbies.get(lobbyId) !== lobby || lobby.members.size >= lobbyCapacity(lobby.mode) || !lobby.members.get(uid)?.host) return { ok: false, error: 'Стол уже изменился' };
+    const available = allBots.filter((b) => !lobby.members.has(b.id));
     if (!available.length) return { ok: false, error: 'Нет доступных ботов' };
 
     const chosen = available[Math.floor(Math.random() * available.length)];
@@ -669,9 +710,10 @@ export class LobbiesManager {
     lobby.members.delete(uid);
     lobby.pausedBy.delete(uid);
 
-    if (lobby.isAuto) {
+    if (lobby.isQuick) {
       const humans = [...lobby.members.values()].filter((m) => !m.isBot);
       if (humans.length === 0) {
+        if (lobby.quickStart) { this.closeLobby(lobbyId, 'Стол закрыт: все игроки ушли'); return; }
         lobby.clearCountdown();
         lobby.createdAt = Date.now();
         lobby.staleWarned = false;
@@ -768,8 +810,8 @@ export class LobbiesManager {
     if (!lobby) return { ok: false, error: 'Лобби не найдено' };
     if (lobby.started) return { ok: false, error: 'Партия уже начинается' };
     const host = lobby.members.get(uid);
-    if (!host?.host && !lobby.isAuto) return { ok: false, error: 'Только хост может начать игру' };
-    if (lobby.members.size !== MAX_SLOTS) return { ok: false, error: 'Нужно 4 игрока' };
+    if (!host?.host && !lobby.isQuick) return { ok: false, error: 'Только хост может начать игру' };
+    if (lobby.members.size !== lobbyCapacity(lobby.mode)) return { ok: false, error: `Нужно ${lobbyCapacity(lobby.mode)} игрока` };
 
 
     for (const m of lobby.members.values()) {
@@ -797,24 +839,27 @@ export class LobbiesManager {
       team2 = [...chosenT2];
 
       for (const u of unassigned) {
-        if (team1.length < 2) team1.push(u);
+        if (team1.length < lobbyCapacity(lobby.mode) / 2) team1.push(u);
         else team2.push(u);
       }
 
       // Страховка от перекоса: гарантируем строго по 2 игрока в каждой команде
-      while (team1.length > 2) {
+      while (team1.length > lobbyCapacity(lobby.mode) / 2) {
         team2.push(team1.pop()!);
       }
-      while (team2.length > 2) {
+      while (team2.length > lobbyCapacity(lobby.mode) / 2) {
         team1.push(team2.pop()!);
       }
     } else if (lobby.teamMode === 'random') {
       const shuffled = [...membersList].sort(() => Math.random() - 0.5);
-      team1 = [shuffled[0], shuffled[1]];
-      team2 = [shuffled[2], shuffled[3]];
+      team1 = shuffled.slice(0, lobbyCapacity(lobby.mode) / 2);
+      team2 = shuffled.slice(lobbyCapacity(lobby.mode) / 2);
     } else {
       // 'auto' mode
-      if (humans.length === 2 && bots.length === 2) {
+      if (lobby.mode === 'crazyhouse') {
+        const ordered = [...membersList].sort(() => Math.random() - 0.5);
+        team1 = [ordered[0]]; team2 = [ordered[1]];
+      } else if (humans.length === 2 && bots.length === 2) {
         // Балансировка 2 игроков: Человек А против Человека Б
         const [humanA, humanB] = humans.sort((a, b) => b.rating - a.rating);
         const [botA, botB] = bots.sort((a, b) => b.rating - a.rating);

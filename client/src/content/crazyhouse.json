@@ -1,0 +1,64 @@
+{
+  "ru": {
+    "title": "Crazyhouse онлайн: правила 1×1 и командного 2×2 | Каисса",
+    "description": "Как играть в Crazyhouse: взятие в свой резерв, дропы, защита от шаха и превращения. Интерактивные примеры и игра 1×1 или 2×2 с людьми и ботами.",
+    "heading": "Crazyhouse: взятые фигуры возвращаются в игру",
+    "intro": "В Crazyhouse одна доска, а каждая взятая фигура меняет цвет и становится вашим резервом. Вместо обычного хода её можно выставить на свободную клетку. На Каиссе доступны стандартный формат 1×1 и командный формат клуба 2×2.",
+    "formatsTitle": "Два формата на одной доске",
+    "solo": "1×1 — два игрока, каждый управляет своим цветом и своим резервом.",
+    "team": "2×2 — авторский формат Каиссы: два партнёра играют одним цветом, чередуют ходы и используют общий резерв команды. Выставление фигуры тоже считается ходом и передаёт очередь партнёру.",
+    "difference": "В багхаусе две доски, и взятия отправляются напарнику на другую доску. В Crazyhouse резерв остаётся на той же доске и принадлежит стороне, сделавшей взятие.",
+    "rulesTitle": "Правила резерва и дропа",
+    "rules": [
+      "Взятый конь, слон, ладья или ферзь попадает в ваш резерв и меняет цвет. Короля взять или выставить нельзя.",
+      "За один ход можно либо переместить фигуру, либо выставить одну фигуру резерва на пустую клетку.",
+      "Пешку можно выставить только на 2–7 горизонтали. Выставленная на начальную горизонталь пешка может сделать обычный двойной ход.",
+      "Выставление может закрыть шах, объявить шах или поставить мат, в том числе пешкой. Оставлять своего короля под шахом запрещено.",
+      "Превращение сохраняется до взятия: взятая превращённая фигура возвращается в резерв пешкой, даже если успела сменить несколько клеток.",
+      "Рокировка, взятие на проходе и выбор фигуры при превращении действуют как обычно. Выставление ладьи не восстанавливает право рокировки."
+    ],
+    "examplesTitle": "Посмотрите на доске",
+    "examples": [
+      { "title": "Взятие → резерв → выставление", "caption": "После exd5 у белых появляется пешка резерва. Чёрные отвечают Qxd5, и белые выставляют свою пешку на e4. Чёрные также сохраняют взятую пешку в своём резерве." },
+      { "title": "Защита выставлением", "caption": "Белый король под шахом и не может уйти. Конь из резерва на e2 перекрывает линию ладьи. Пока такой дроп возможен, мата нет." },
+      { "title": "Превращённый ферзь станет пешкой", "caption": "Чёрный ферзь на b7 получен превращением. После Rxb7 белые получают в резерв пешку, а не ферзя, и могут выставить её следующим ходом." },
+      { "title": "Мат из резерва", "caption": "N@f7# — конь из резерва ставит мат. У чёрных нет фигур в резерве и нет легальной защиты." }
+    ],
+    "endTitle": "Когда партия заканчивается",
+    "end": "Мат учитывает и обычные ходы, и все доступные выставления. Сдача и истечение выбранного времени дают поражение. Пат и троекратное повторение всей позиции, включая резервы, дают ничью; в 2×2 учитывается также очередь партнёров. Правило 50 ходов и ничья из-за недостатка материала здесь не применяются.",
+    "startTitle": "Как начать",
+    "start": "Нажмите «Играть», выберите режим в лобби и дождитесь людей или отсчёта до игры с ботами. Crazyhouse по умолчанию без часов; контроль можно выбрать перед стартом. В свой ход нажмите фигуру резерва и подсвеченную клетку или перетащите фигуру на доску. Боты понимают оба резерва и умеют выставлять фигуры. В 2×2 следите за подсветкой игрока, чья сейчас очередь.",
+    "playSolo": "Играть 1×1", "playTeam": "Играть 2×2", "next": "Следующий ход", "back": "Назад", "reset": "Сначала", "initial": "Начальная позиция", "white": "Резерв белых", "black": "Резерв чёрных"
+  },
+  "en": {
+    "title": "Crazyhouse online: 1v1 and team 2v2 rules | Kaissa",
+    "description": "Learn Crazyhouse captures, reserves, drops, check defence and promotions with interactive examples. Play 1v1 or team 2v2 with people and bots.",
+    "heading": "Crazyhouse: captured pieces return to play",
+    "intro": "Crazyhouse uses one board. Each captured piece changes colour and enters your reserve. Instead of a normal move you may place it on an empty square. Kaissa offers standard 1v1 and the club's own team 2v2 format.",
+    "formatsTitle": "Two formats, one board",
+    "solo": "1v1 — two players, each controlling their own colour and reserve.",
+    "team": "2v2 — Kaissa's team format: partners play one colour, alternate moves and share a team reserve. A drop also counts as a move and passes the next turn to your partner.",
+    "difference": "Bughouse uses two boards and sends captures to a partner on the other board. In Crazyhouse the reserve stays on the same board and belongs to the capturing side.",
+    "rulesTitle": "Reserves and drops",
+    "rules": [
+      "A captured knight, bishop, rook or queen changes colour and enters your reserve. Kings cannot be captured or dropped.",
+      "On your turn either move a piece or drop one reserve piece onto an empty square.",
+      "Pawns may only be dropped on ranks 2–7. A pawn dropped on its starting rank can make the usual double move.",
+      "A drop can block check, give check or deliver mate, including a pawn drop. You may never leave your king in check.",
+      "A promoted piece retains its origin when it moves. When captured it enters the reserve as a pawn, regardless of its promoted type.",
+      "Castling, en passant and promotion choices otherwise work normally. Dropping a rook does not restore castling rights."
+    ],
+    "examplesTitle": "See it on the board",
+    "examples": [
+      { "title": "Capture → reserve → drop", "caption": "After exd5 White gains a reserve pawn. Black replies Qxd5, then White drops their pawn on e4. Black also keeps the captured pawn in their own reserve." },
+      { "title": "Defending with a drop", "caption": "White is in check and the king cannot escape. N@e2 blocks the rook's line. A position is not checkmate while this drop is available." },
+      { "title": "A promoted queen returns as a pawn", "caption": "The black queen on b7 was promoted. After Rxb7 White receives a reserve pawn rather than a queen, and can drop it on the next turn." },
+      { "title": "Mate from the reserve", "caption": "N@f7# delivers mate from the reserve. Black has no reserve pieces and no legal defence." }
+    ],
+    "endTitle": "Ending the game",
+    "end": "Checkmate considers ordinary moves and every available drop. Resignation or running out of selected clock time loses the game. Stalemate and threefold repetition of the full position, including reserves, are draws. In 2v2 the partner turn order also counts. The fifty-move rule and insufficient-material draws do not apply.",
+    "startTitle": "Start playing",
+    "start": "Press Play, choose a mode in the lobby and wait for people or the bot countdown. Crazyhouse defaults to no clock; a time control can be selected before starting. On your turn select a reserve piece and a highlighted square, or drag the piece onto the board. Bots understand both reserves and can drop pieces. In 2v2 the highlighted player shows whose turn it is.",
+    "playSolo": "Play 1v1", "playTeam": "Play 2v2", "next": "Next move", "back": "Back", "reset": "Restart", "initial": "Initial position", "white": "White reserve", "black": "Black reserve"
+  }
+}

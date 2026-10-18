@@ -2,7 +2,6 @@
 import type { TranslationSchema } from './types';
 
 export const ru: TranslationSchema = {
-  resources: { title: 'Ресурсы', bughouse: 'Правила багхауса', duo: 'Правила 2×2', repository: 'Код проекта на GitHub' },
   bughouse: {
     board: 'Доска', yourBoard: 'Ваша доска', partnerBoard: 'Доска напарника', yourPocket: 'Ваш карман', opponentPocket: 'Карман соперника',
     partnerPocket: 'Карман напарника', yourTurn: 'Ваш ход', waiting: 'Ход соперника', expand: 'Увеличить', collapse: 'Уменьшить',
@@ -31,7 +30,7 @@ export const ru: TranslationSchema = {
   },
   home: {
     bannerTitle: 'Шахматы на двоих онлайн: 2 на 2 и Багхаус',
-    bannerSubtitle: 'Играйте парами 2х2 на одной доске или в шведские шахматы (багхаус) с обменом фигурами.',
+    bannerSubtitle: 'Играйте 2×2, в багхаус или Crazyhouse 1×1 и 2×2. Выберите режим в лобби.',
     createTable: 'Создать стол',
     tableCodePlaceholder: 'КОД СТОЛА',
     joinTable: 'Войти',
@@ -200,7 +199,7 @@ export const ru: TranslationSchema = {
     deleteAccount: 'Удалить аккаунт',
   },
   footer: {
-    brandDesc: 'Онлайн-платформа для командных шахмат 2×2 на одной доске и шведских шахмат (багхаус).',
+    brandDesc: 'Командные шахматы 2×2, багхаус и Crazyhouse 1×1 и 2×2 онлайн.',
     rulesDuo: 'Правила 2×2',
     rulesBughouse: 'Правила Багхауса',
     about: 'О платформе',

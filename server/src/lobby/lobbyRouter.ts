@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import type { CreateLobbyPayload, GameMode } from 'shared';
+import { GAME_MODES } from 'shared';
 import { currentUser, requireAuth } from '../auth/auth.js';
 import { lobbies } from '../state.js';
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(40),
-  mode: z.enum(['team', 'bughouse']),
+  mode: z.enum(GAME_MODES),
   timeControl: z.union([
     z.object({ kind: z.literal('none'), baseMin: z.literal(0), incSec: z.literal(0) }),
     z.object({ kind: z.literal('clock'), baseMin: z.number().int().min(1).max(120), incSec: z.number().int().min(0).max(60) }),

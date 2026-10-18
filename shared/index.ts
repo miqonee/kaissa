@@ -4,7 +4,16 @@
 
 export type Team = 1 | 2;
 
-export type GameMode = 'team' | 'bughouse';
+export const GAME_MODES = ['team', 'bughouse', 'crazyhouse', 'crazyhouse-team'] as const;
+export type GameMode = typeof GAME_MODES[number];
+export const isCrazyhouse = (mode: GameMode): boolean => mode === 'crazyhouse' || mode === 'crazyhouse-team';
+export const hasPockets = (mode: GameMode): boolean => mode !== 'team';
+export const lobbyCapacity = (mode: GameMode): number => mode === 'crazyhouse' ? 2 : 4;
+export function modeLabel(mode: GameMode, locale = 'ru'): string {
+  return ({ team: locale === 'en' ? 'One board 2×2' : 'Одна доска 2×2', bughouse: locale === 'en' ? 'Bughouse' : 'Багхаус', crazyhouse: 'Crazyhouse 1×1', 'crazyhouse-team': 'Crazyhouse 2×2' })[mode];
+}
+export const defaultTimeControl = (mode: GameMode): TimeControl => mode === 'team'
+  ? { kind: 'clock', baseMin: 3, incSec: 0 } : { kind: 'none', baseMin: 0, incSec: 0 };
 
 // Контроль времени: без часов либо base+increment (минуты/секунды)
 export interface TimeControl {
@@ -73,6 +82,7 @@ export interface LobbySummary {
   code: string;
   started: boolean;
   isAuto?: boolean;
+  isQuick?: boolean;
   teamMode?: TeamMode;
   autoCountdown?: number | null;
   pausedBy?: number[];
@@ -160,6 +170,7 @@ export type ClientToServerEvents = {
   'lobby:set-team': (team: 1 | 2 | null) => void;
   'lobby:pause-toggle': () => void;
   'lobby:set-team-mode': (mode: TeamMode) => void;
+  'lobby:set-mode': (mode: GameMode, cb: (ack: Ack<null>) => void) => void;
   'lobby:set-time-control': (payload: TimeControl | { lobbyId: string; tc: TimeControl }) => void;
   'lobby:add-bot': (cb?: (res: Ack<null>) => void) => void;
 
@@ -356,9 +367,25 @@ export interface ModeInfo {
   title: string;
   short: string;
   rules: string[];
+  shortEn?: string;
+  rulesEn?: string[];
 }
 
 export const MODE_INFO: ModeInfo[] = [
+  {
+    mode: 'crazyhouse', title: 'Crazyhouse 1×1',
+    shortEn: 'One board, two players. Captured pieces become your reserve.',
+    rulesEn: ['Captured pieces change colour and enter your reserve.', 'Drop a piece instead of moving; pawns may only be dropped on ranks 2–7.', 'Drops can defend check, give check or mate.', 'Captured promoted pieces return as pawns.', 'Stalemate and threefold repetition are draws. No fifty-move or insufficient-material rule.'],
+    short: 'Одна доска, два игрока. Взятые фигуры становятся вашим резервом.',
+    rules: ['Взятая фигура меняет цвет и попадает в ваш карман.', 'Вместо хода можно выставить фигуру на пустую клетку; пешку — только на 2–7 горизонтали.', 'Выставлением можно защититься от шаха, объявить шах или мат.', 'Превращённая фигура после взятия возвращается пешкой.', 'Пат и троекратное повторение — ничья. Правило 50 ходов и недостаток материала не применяются.'],
+  },
+  {
+    mode: 'crazyhouse-team', title: 'Crazyhouse 2×2',
+    shortEn: 'Club team format: one board, a shared reserve and alternating partners.',
+    rulesEn: ['Partners play one colour and alternate every move.', 'Captures enter the shared team reserve.', 'A move or drop passes the next turn to your partner.', 'Other rules match Crazyhouse 1×1.'],
+    short: 'Командный формат клуба: одна доска, общий резерв, ходы по очереди.',
+    rules: ['Два игрока команды играют одним цветом и чередуют ходы.', 'Взятые фигуры попадают в общий резерв своей команды.', 'Обычный ход и выставление из резерва одинаково передают очередь партнёру.', 'Остальные правила совпадают с Crazyhouse 1×1.'],
+  },
   {
     mode: 'bughouse',
     title: 'Багхаус',
@@ -381,7 +408,7 @@ export const MODE_INFO: ModeInfo[] = [
       'Внутри команды ходы чередуются: первый игрок, затем партнёр, затем снова первый.',
       'Совещаться можно, но ход делает только тот, чья очередь.',
       'Правила классические: рокировка, взятие на проходе, превращение пешки.',
-      'Пат считается поражением зажатой стороны — ничьих в клубе нет.',
+      'Пат, повторение позиции, правило 50 ходов и недостаток материала дают ничью.',
       'Партия завершается матом, патом, сдачей или флагом.',
     ],
   },

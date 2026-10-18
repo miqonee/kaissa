@@ -11,10 +11,12 @@ import type {
   Team,
   TimeControl,
 } from 'shared';
-import { DEFAULT_POCKET, eloDelta, eloToLevel, type DropPieceType } from 'shared';
+import { DEFAULT_POCKET, hasPockets, isCrazyhouse, lobbyCapacity, eloDelta, eloToLevel, type DropPieceType } from 'shared';
 import { prisma } from '../prisma.js';
 import { presence } from '../socket/presence.js';
 import { BughouseGame, isDrop, type Board, type SideColor } from './bughouse.js';
+import { CrazyhouseGame } from 'shared/crazyhouse';
+import { chooseCrazyhouseMove } from '../ai/crazyhouse.js';
 import { TeamGame } from './teamGame.js';
 import { clockOnMove, clockSnapshot, initClock, type ClockState } from './clock.js';
 import { chooseBotMove, getBotThinkingDelayMs } from '../ai/engine.js';
@@ -163,7 +165,7 @@ export class GamesManager {
       const remaining = g.timeControl.kind === 'clock' ? state.clocks[b][participant.color === 'w' ? 0 : 1] : undefined;
       const teamGame = g.engine instanceof TeamGame ? g.engine : null;
       const history = teamGame?.chess.history({ verbose: true }) ?? [];
-      const delay = g.mode === 'bughouse' ? (g.pacing ? 700 + Math.floor(Math.random() * 500) : bughouseThinkingDelay(remaining)) : getBotThinkingDelayMs(state.fens[b], history.at(-1), g.ply, Boolean(g.isDemo));
+      const delay = hasPockets(g.mode) ? (g.pacing || (isCrazyhouse(g.mode) && (remaining === undefined || remaining >= 10_000)) ? 700 + Math.floor(Math.random() * 500) : bughouseThinkingDelay(remaining)) : getBotThinkingDelayMs(state.fens[b], history.at(-1), g.ply, Boolean(g.isDemo));
       const timer = setTimeout(async () => {
         this.botTimers.delete(key);
         this.botPending.add(key);
@@ -174,7 +176,9 @@ export class GamesManager {
           const clocks = this.toGameState(current).clocks[b];
           const time = current.timeControl.kind === 'clock' ? clocks[participant.color === 'w' ? 0 : 1] : undefined;
           if (current.engine instanceof BughouseGame) {
-            const move = await chooseBughouseMove(current.engine.snapshot(), board, participant.ratingBefore, time);
+            const move = current.engine instanceof CrazyhouseGame
+              ? await chooseCrazyhouseMove(current.engine.snapshot(), participant.ratingBefore, time)
+              : await chooseBughouseMove(current.engine.snapshot(), board, participant.ratingBefore, time);
             if (move) await this.applyMove(gameId, participant.uid, {
               boardIndex: board, from: isDrop(move) ? '-' : move.from, to: move.to,
               ...(isDrop(move) ? { dropPiece: move.piece } : { promotion: move.promotion }),
@@ -223,9 +227,9 @@ export class GamesManager {
   // ---------------- Создание ----------------
 
   async createGame(opts: CreateGameOpts): Promise<number> {
-    const team1 = opts.team1.slice(0, 2);
-    const team2 = opts.team2.slice(0, 2);
-    if (team1.length !== 2 || team2.length !== 2) throw new Error('Нужны команды по 2 игрока');
+    const team1 = opts.team1.slice(0, lobbyCapacity(opts.mode) / 2);
+    const team2 = opts.team2.slice(0, lobbyCapacity(opts.mode) / 2);
+    if (team1.length !== lobbyCapacity(opts.mode) / 2 || team2.length !== team1.length || new Set([...team1, ...team2].map(p => p.uid)).size !== lobbyCapacity(opts.mode)) throw new Error('Неверный состав игроков');
 
     const noClock = opts.timeControl.kind === 'none';
     const baseMs = opts.timeControl.baseMin * 60_000;
@@ -240,7 +244,7 @@ export class GamesManager {
       const dbGame = await prisma.game.create({
         data: {
           mode: opts.mode,
-          rulesVersion: opts.mode === 'bughouse' ? 2 : null,
+          rulesVersion: hasPockets(opts.mode) ? 2 : null,
           status: 'active',
           baseMin: opts.timeControl.baseMin,
           incSec: opts.timeControl.incSec,
@@ -260,7 +264,7 @@ export class GamesManager {
       gameId = dbGame.id;
     }
 
-    const engine = opts.mode === 'bughouse' ? new BughouseGame() : new TeamGame();
+    const engine = opts.mode === 'bughouse' ? new BughouseGame() : isCrazyhouse(opts.mode) ? new CrazyhouseGame(opts.mode === 'crazyhouse-team') : new TeamGame();
     const clockCount = opts.mode === 'bughouse' ? 2 : 1;
     const clocks = Array.from({ length: clockCount }, () => initClock(baseMs, incMs));
 
@@ -269,7 +273,7 @@ export class GamesManager {
       botEpoch: 0,
       id: gameId,
       mode: opts.mode,
-      rulesVersion: opts.mode === 'bughouse' ? 2 : null,
+      rulesVersion: hasPockets(opts.mode) ? 2 : null,
       timeControl: opts.timeControl,
       participants,
       engine,
@@ -317,8 +321,8 @@ export class GamesManager {
     if (g.pacing?.paused) return { ok: false, error: 'Партия на паузе' };
     if (p.isBot && !this.botMayMove(g, data?.boardIndex)) return { ok: false, error: 'Ожидание хода на доске людей' };
 
-    if (!data || (data.boardIndex !== 0 && data.boardIndex !== 1) || (g.mode === 'team' && data.boardIndex !== 0)
-      || !/^[a-h][1-8]$/.test(data.to) || (data.dropPiece !== undefined && (!['p','n','b','r','q'].includes(data.dropPiece) || g.mode !== 'bughouse' || data.promotion !== undefined))
+    if (!data || (data.boardIndex !== 0 && data.boardIndex !== 1) || (g.mode !== 'bughouse' && data.boardIndex !== 0)
+      || !/^[a-h][1-8]$/.test(data.to) || (data.dropPiece !== undefined && (!['p','n','b','r','q'].includes(data.dropPiece) || !hasPockets(g.mode) || data.promotion !== undefined))
       || (data.dropPiece === undefined && !/^[a-h][1-8]$/.test(data.from))
       || (data.promotion !== undefined && !['q','r','b','n'].includes(data.promotion))) return { ok: false, error: 'Некорректный ход' };
     if (expectedPosition !== undefined && this.positionKey(g, data.boardIndex) !== expectedPosition) return { ok: false, error: 'Позиция изменилась' };
@@ -339,12 +343,13 @@ export class GamesManager {
     let check = false;
 
     try {
-      if (g.mode === 'bughouse') {
+      if (g.engine instanceof BughouseGame) {
         const bg = g.engine as BughouseGame;
         const board = data.boardIndex as Board;
         if (board !== p.boardIndex) return { ok: false, error: 'Это не ваша доска' };
-        const moverColor = TEAM_COLORS_BUGHOUSE[p.team][board];
+        const moverColor = p.color;
         if (bg.turn(board) !== moverColor) return { ok: false, error: 'Сейчас не ваш ход' };
+        if (bg instanceof CrazyhouseGame && bg.currentSlot() !== p.moveSlot) return { ok: false, error: 'Сейчас ход вашего партнёра' };
         const res = bg.apply(
           data.dropPiece
             ? { board, to: data.to, piece: data.dropPiece as DropPieceType }
@@ -384,7 +389,7 @@ export class GamesManager {
     g.ply += 1;
     try { await this.persistMove(g, uid, data, fen, clocksAfter); }
     catch (error) {
-      if (before) g.engine = BughouseGame.fromSnapshot(before);
+      if (before) g.engine = g.engine instanceof CrazyhouseGame ? CrazyhouseGame.fromSnapshot(before) : BughouseGame.fromSnapshot(before);
       else (g.engine as TeamGame).undoLastMove();
       g.clocks = previousClocks;
       g.ply = previousPly;
@@ -409,10 +414,9 @@ export class GamesManager {
       ...(data.dropPiece ? { dropPiece: data.dropPiece } : {}),
       clocksAfter,
     });
-    this.io?.to(this.gameRoom(g.id)).emit('game:state', this.toGameState(g));
-    this.io?.to('live').emit('live:update', this.liveInfo(g));
-
     await this.checkEndAfterMove(g, data.boardIndex as Board);
+    this.io?.to(this.gameRoom(g.id)).emit('game:state', this.toGameState(g));
+    if (g.status === 'active') this.io?.to('live').emit('live:update', this.liveInfo(g));
     if (g.status === 'active') {
       this.triggerBotTurn(g.id);
     }
@@ -446,6 +450,13 @@ export class GamesManager {
   /** Автоматические условия завершения после хода */
   private async checkEndAfterMove(g: ActiveGame, board: Board): Promise<void> {
     if (g.status !== 'active') return;
+    if (g.engine instanceof CrazyhouseGame) {
+      const cg = g.engine;
+      if (cg.isBughouseCheckmate(0)) await this.finish(g, cg.turn(0) === 'w' ? '0-1' : '1-0', 'checkmate');
+      else if (cg.isBughouseStalemate(0)) await this.finish(g, '1/2-1/2', 'stalemate');
+      else if (cg.isThreefoldRepetition()) await this.finish(g, '1/2-1/2', 'repetition');
+      return;
+    }
     if (g.mode === 'bughouse') {
       const bg = g.engine as BughouseGame;
       if (bg.isBughouseCheckmate(board)) {
@@ -619,7 +630,7 @@ export class GamesManager {
     g.disconnected.add(uid);
     this.pauseForDisconnect(gameId, uid);
     this.broadcastDisconnected(g);
-    if (g.disconnected.size >= 4) {
+    if (g.disconnected.size >= g.participants.length) {
       void this.serialize(g.id, () => this.abandon(g));
     }
   }
@@ -718,7 +729,7 @@ export class GamesManager {
     const fens =
       g.mode === 'bughouse'
         ? [(g.engine as BughouseGame).fen(0), (g.engine as BughouseGame).fen(1)]
-        : [(g.engine as TeamGame).fen()];
+        : [g.engine instanceof BughouseGame ? g.engine.fen(0) : g.engine.fen()];
     return {
       gameId: g.id,
       mode: g.mode,
@@ -748,10 +759,10 @@ export class GamesManager {
     const now = Date.now();
     const fens = isBug
       ? [(g.engine as BughouseGame).fen(0), (g.engine as BughouseGame).fen(1)]
-      : [(g.engine as TeamGame).fen()];
+      : [g.engine instanceof BughouseGame ? g.engine.fen(0) : g.engine.fen()];
     const turns: ('w' | 'b')[] = isBug
       ? [(g.engine as BughouseGame).turn(0), (g.engine as BughouseGame).turn(1)]
-      : [(g.engine as TeamGame).turn()];
+      : [g.engine instanceof BughouseGame ? g.engine.turn(0) : g.engine.turn()];
     const clocks: [number, number][] = g.clocks.map((c) => {
       if (!c) return [0, 0] as [number, number];
       const s = clockSnapshot(c, now);
@@ -770,8 +781,8 @@ export class GamesManager {
           turnUserIds.push(who?.uid ?? 0);
         }
       } else {
-        const tg = g.engine as TeamGame;
-        const team: Team = tg.turn() === 'w' ? 1 : 2;
+        const tg = g.engine as TeamGame | CrazyhouseGame;
+        const team: Team = turns[0] === 'w' ? 1 : 2;
         const who = g.participants.find((p) => p.team === team && p.moveSlot === tg.currentSlot());
         turnUserIds.push(who?.uid ?? 0);
       }
@@ -781,25 +792,25 @@ export class GamesManager {
 
     // Карманы по участникам в порядке participants
     let pockets: Pocket[] | null = null;
-    if (isBug) {
+    if (hasPockets(g.mode)) {
       const bg = g.engine as BughouseGame;
       pockets = g.participants.map((p) => bg.pocketOf(p.boardIndex, p.color));
     }
 
     const turnSlots = !isBug
       ? {
-          w: (g.engine as TeamGame).nextSlotFor('w'),
-          b: (g.engine as TeamGame).nextSlotFor('b'),
+          w: (g.engine as TeamGame | CrazyhouseGame).nextSlotFor('w'),
+          b: (g.engine as TeamGame | CrazyhouseGame).nextSlotFor('b'),
         }
       : undefined;
 
-    const moves = !isBug ? (g.engine as TeamGame).chess.history() : undefined;
+    const moves = g.engine instanceof TeamGame ? (g.engine as TeamGame).chess.history() : undefined;
 
     return {
       gameId: g.id,
       rulesVersion: g.rulesVersion,
       ...(g.pacing ? { botPacing: { controlledBoard: g.pacing.board, waiting: g.pacing.credits === 0, paused: g.pacing.paused, pauseAllowed: g.participants.filter(p => !p.isBot).length === 1 } } : {}),
-      ...(isBug ? { legalDrops: [(g.engine as BughouseGame).legalDrops(0), (g.engine as BughouseGame).legalDrops(1)] } : {}),
+      ...(g.engine instanceof BughouseGame ? { legalDrops: isBug ? [g.engine.legalDrops(0), g.engine.legalDrops(1)] : [g.engine.legalDrops(0)] } : {}),
       mode: g.mode,
       status: g.status,
       result: g.result,
@@ -889,6 +900,7 @@ function buildParticipants(mode: GameMode, team1: ParticipantSetup[], team2: Par
       mk(team2[1], 2, 'w', 1, 0), // доска 1, белые
     ];
   }
+  if (mode === 'crazyhouse') return [mk(team1[0], 1, 'w', 0, 0), mk(team2[0], 2, 'b', 0, 0)];
   return [
     mk(team1[0], 1, 'w', 0, 0),
     mk(team1[1], 1, 'w', 0, 1),

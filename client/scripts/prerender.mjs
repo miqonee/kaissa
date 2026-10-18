@@ -66,6 +66,7 @@ const pages = [
           <ul>
             <li><a href="/rules/duo">Командные шахматы 2 на 2 на одной доске: правила игры</a></li>
             <li><a href="/rules/bughouse">Правила шведских шахмат (Багхаус) онлайн: дропы и тактика</a></li>
+            <li><a href="/rules/crazyhouse">Crazyhouse: правила 1×1 и 2×2</a></li>
             <li><a href="/about">О платформе Каисса</a></li>
             <li><a href="/leaderboard">Таблица лидеров и рейтинг игроков</a></li>
             <li><a href="/history">Архив сыгранных партий</a></li>
@@ -485,8 +486,22 @@ const pages = [
   },
 ];
 
+const crazyhouseContent = JSON.parse(fs.readFileSync(path.resolve('src/content/crazyhouse.json'), 'utf8'));
+function crazyhousePage(locale) {
+  const c = crazyhouseContent[locale];
+  return {
+    path: '/rules/crazyhouse', locale, title: c.title, description: c.description,
+    keywords: 'crazyhouse, крейзихаус, резерв, дропы, crazyhouse 1x1, crazyhouse 2x2',
+    canonical: 'https://duochess.ru/rules/crazyhouse',
+    schema: [{ '@context': 'https://schema.org', '@type': 'WebPage', name: c.title, description: c.description, url: 'https://duochess.ru/rules/crazyhouse' + (locale === 'en' ? '?lang=en' : ''), inLanguage: locale }],
+    contentHtml: `<main><h1>${c.heading}</h1><p>${c.intro}</p><h2>${c.formatsTitle}</h2><p>${c.solo}</p><p>${c.team}</p><p>${c.difference}</p><h2>${c.rulesTitle}</h2><ul>${c.rules.map(rule => `<li>${rule}</li>`).join('')}</ul><h2>${c.examplesTitle}</h2>${c.examples.map(e => `<section><h3>${e.title}</h3><p>${e.caption}</p></section>`).join('')}<h2>${c.endTitle}</h2><p>${c.end}</p><h2>${c.startTitle}</h2><p>${c.start}</p><a href="/?action=quick&amp;mode=crazyhouse">${c.playSolo}</a> · <a href="/?action=quick&amp;mode=crazyhouse-team">${c.playTeam}</a><p><a href="/rules/bughouse">Bughouse</a> · <a href="/rules/duo">2×2</a></p></main>`,
+  };
+}
+pages.push(crazyhousePage('ru'));
+
 function generateHtmlForPage(page) {
   let html = baseHtml;
+  const localizedCanonical = page.canonical + (page.locale === 'en' ? '?lang=en' : '');
 
   // 1. Title
   html = html.replace(/<title>.*?<\/title>/s, `<title>${page.title}</title>`);
@@ -508,7 +523,7 @@ function generateHtmlForPage(page) {
   const enUrl = page.path === '/' ? `${cleanBase}/?lang=en` : `${cleanBase}?lang=en`;
   html = html.replace(
     /<link\s+rel="canonical"\s+href=".*?"\s*\/?>/i,
-    `<link rel="canonical" href="${page.canonical}" />`,
+    `<link rel="canonical" href="${localizedCanonical}" />`,
   );
   html = html.replace(
     /<link\s+rel="alternate"\s+hreflang="ru"\s+href=".*?"\s*\/?>/i,
@@ -534,7 +549,7 @@ function generateHtmlForPage(page) {
   );
   html = html.replace(
     /<meta\s+property="og:url"\s+content=".*?"\s*\/?>/i,
-    `<meta property="og:url" content="${page.canonical}" />`,
+    `<meta property="og:url" content="${localizedCanonical}" />`,
   );
 
   // 6. Twitter
@@ -596,4 +611,5 @@ for (const page of pages) {
   }
 }
 
-console.log('[prerender] Successfully prerendered all 7 public pages!');
+fs.writeFileSync(path.join(distDir, 'rules/crazyhouse.en.html'), generateHtmlForPage(crazyhousePage('en')).replace('<html lang="ru"', '<html lang="en"').replace('content="ru_RU"', 'content="en_US"'), 'utf8');
+console.log(`[prerender] Successfully prerendered ${pages.length} public pages!`);

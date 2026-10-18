@@ -1,4 +1,6 @@
 import { Chess, type Square } from 'chess.js';
+import { CrazyhouseGame } from 'shared/crazyhouse';
+import { hasPockets, isCrazyhouse, modeLabel } from 'shared';
 import { BughouseGame } from 'shared/bughouse';
 import type { DropPieceType } from 'shared';
 import type { GameMode } from 'shared';
@@ -73,7 +75,7 @@ function sideRating(g: PgnGame, boardIndex: number, color: 'w' | 'b'): string {
 
 /** Результат с точки зрения конкретной доски */
 function boardResult(g: PgnGame, boardIndex: number): string {
-  if (g.result !== '1-0' && g.result !== '0-1') return '*';
+  if (g.result !== '1-0' && g.result !== '0-1') return g.result === '1/2-1/2' ? g.result : '*';
   const winnerTeam = g.result === '1-0' ? 1 : 2;
   // какой цвет на этой доске принадлежит команде-победителю
   const whiteTeam = g.participants.find((p) => p.boardIndex === boardIndex && p.color === 'w')?.team;
@@ -93,8 +95,8 @@ function boardPgn(g: PgnGame, boardIndex: number, moves: PgnMove[]): string {
   const chess = new Chess();
   const sanList: string[] = [];
   const variantSans = new Map<number, string>();
-  if (g.mode === 'bughouse' && (g.rulesVersion ?? 0) >= 2) {
-    const bg = new BughouseGame();
+  if (hasPockets(g.mode) && (g.rulesVersion ?? 0) >= 2) {
+    const bg = isCrazyhouse(g.mode) ? new CrazyhouseGame(g.mode === 'crazyhouse-team') : new BughouseGame();
     for (const mv of moves.slice().sort((a, b) => a.ply - b.ply)) {
       const board = mv.boardIndex as 0 | 1;
       try {
@@ -134,7 +136,7 @@ function boardPgn(g: PgnGame, boardIndex: number, moves: PgnMove[]): string {
 
   const result = boardResult(g, boardIndex);
   const tags: string[] = [
-    tag('Event', g.mode === 'bughouse' ? `Каисса, багхаус #${g.id} (доска ${boardIndex + 1})` : `Каисса, 2×2 #${g.id}`),
+    tag('Event', g.mode === 'bughouse' ? `Каисса, багхаус #${g.id} (доска ${boardIndex + 1})` : `Каисса, ${modeLabel(g.mode)} #${g.id}`),
     tag('Site', 'Каисса'),
     tag('Date', fmtDate(g.startedAt)),
     tag('UTCDate', fmtDate(g.startedAt)),
@@ -147,6 +149,8 @@ function boardPgn(g: PgnGame, boardIndex: number, moves: PgnMove[]): string {
     tag('Result', result),
     tag('TimeControl', g.noClock ? '-' : `${g.baseMin * 60}+${g.incSec}`),
   ];
+  if (isCrazyhouse(g.mode)) tags.push(tag('Variant', 'Crazyhouse'));
+  if (g.mode === 'crazyhouse-team') tags.push(tag('TeamFormat', 'Alternating partners, shared reserve'));
   if (g.mode === 'bughouse') tags.push(tag('Variant', 'Bughouse'));
   if (g.reason) tags.push(tag('Termination', REASON_RU[g.reason] ?? g.reason));
 

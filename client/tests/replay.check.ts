@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { BughouseGame } from 'shared/bughouse';
+import { CrazyhouseGame } from 'shared/crazyhouse';
 // Быстрая самопроверка логики плеера без фреймворков:
 // node --experimental-strip-types client/tests/replay.check.ts
 import { buildReplay, buildMoveRows } from '../src/game/replay.ts';
@@ -90,3 +91,18 @@ assert.equal(v2.frames.at(-1)!.pockets?.[1]?.[0].q, 0);
 const legacy = buildReplay({ ...bGame, rulesVersion: null }, v2Moves);
 assert.equal(legacy.frames.at(-1)!.pockets?.[1]?.[0].q, 1, 'historical v1 records keep their original pocket semantics');
 console.log('OK: v2 promotions, shared rules and legacy compatibility');
+
+for (const mode of ['crazyhouse', 'crazyhouse-team'] as const) {
+  const engine = new CrazyhouseGame(mode === 'crazyhouse-team');
+  const records: MoveRecord[] = [];
+  for (const move of [{ board: 0, from: 'e2', to: 'e4' }, { board: 0, from: 'd7', to: 'd5' }, { board: 0, from: 'e4', to: 'd5' }, { board: 0, from: 'd8', to: 'd5' }, { board: 0, piece: 'p', to: 'e4' }] as const) {
+    const res = engine.apply(move);
+    records.push({ boardIndex: 0, ply: records.length + 1, userId: 1, from: 'from' in move ? move.from : '-', to: move.to, ...('piece' in move ? { dropPiece: move.piece } : {}), fenAfter: res.fen, clocksAfter: null });
+  }
+  const replay = buildReplay({ ...game, mode, rulesVersion: 2 }, records);
+  assert.equal(replay.boardsCount, 1); assert.equal(replay.frames.length, 6); assert(replay.moves.every(m => m.ok));
+  for (let i = 0; i < records.length; i++) assert.equal(replay.frames[i+1].boards[0].fen, records[i].fenAfter);
+  assert.equal(replay.frames[3].pockets![0][0].p, 1);
+  assert.equal(replay.frames[5].pockets![0][0].p, 0); assert.equal(replay.frames[5].pockets![0][1].p, 1);
+}
+console.log('OK: Crazyhouse 1v1 / 2v2 reserves, drops and all replay FENs match');

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { MODE_INFO, type GameMode, type TeamMode, type TimeControl } from 'shared';
+import { MODE_INFO, modeLabel, type GameMode, type TeamMode, type TimeControl } from 'shared';
 import { useI18n } from '../stores/i18n';
 import AppIcon from './AppIcon.vue';
 
@@ -23,6 +23,8 @@ const selectedTeamMode = ref<TeamMode>('auto');
 const expandedRules = ref<Record<GameMode, boolean>>({
   bughouse: false,
   team: false,
+  crazyhouse: false,
+  'crazyhouse-team': false,
 });
 
 function toggleRules(mode: GameMode) {
@@ -37,12 +39,12 @@ const tcPresets = computed<{ label: string; tc: TimeControl }[]>(() => [
   { label: i18n.t.createModal.tc10plus5, tc: { kind: 'clock', baseMin: 10, incSec: 5 } },
   { label: i18n.t.createModal.tcNoClock, tc: { kind: 'none', baseMin: 0, incSec: 0 } },
 ]);
-const modeTc = ref<Record<GameMode, number>>({ team: 0, bughouse: 5 });
+const modeTc = ref<Record<GameMode, number>>({ team: 0, bughouse: 5, crazyhouse: 5, 'crazyhouse-team': 5 });
 const selectedTcIdx = computed({ get: () => modeTc.value[selectedMode.value], set: value => { modeTc.value[selectedMode.value] = value; } });
 
 function submit() {
   const tc = tcPresets.value[selectedTcIdx.value].tc;
-  const defaultName = selectedMode.value === 'bughouse' ? i18n.t.home.modeBughouse : i18n.t.home.modeTeam;
+  const defaultName = modeLabel(selectedMode.value, i18n.locale);
   const name = lobbyName.value.trim() || defaultName;
   emit('create', {
     name,
@@ -87,12 +89,12 @@ function submit() {
               @click="selectedMode = info.mode"
             >
               <div class="mode-card-head">
-                <span class="mode-title">{{ i18n.locale === 'en' ? (info.mode === 'bughouse' ? i18n.t.createModal.modeBughouse : i18n.t.createModal.modeTeam) : info.title }}</span>
+                <span class="mode-title">{{ modeLabel(info.mode, i18n.locale) }}</span>
                 <span v-if="selectedMode === info.mode" class="mode-check">
                   <AppIcon name="check" :size="13" :stroke-width="2.6" />
                 </span>
               </div>
-              <p class="mode-short">{{ info.short }}</p>
+              <p class="mode-short">{{ i18n.locale === 'en' ? info.shortEn ?? info.short : info.short }}</p>
               <button
                 type="button"
                 class="mode-rules-toggle"
@@ -102,7 +104,7 @@ function submit() {
                 <AppIcon :name="expandedRules[info.mode] ? 'chevron-up' : 'chevron-down'" :size="13" />
               </button>
               <ul v-if="expandedRules[info.mode]" class="mode-rules">
-                <li v-for="(r, i) in info.rules" :key="i">{{ r }}</li>
+                <li v-for="(r, i) in (i18n.locale === 'en' ? info.rulesEn ?? info.rules : info.rules)" :key="i">{{ r }}</li>
                 <li v-if="info.mode === 'bughouse'">{{ i18n.locale === 'en' ? 'Play with people or bots' : 'Играйте с людьми или ботами' }}</li>
               </ul>
             </div>

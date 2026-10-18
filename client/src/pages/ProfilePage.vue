@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { modeLabel as sharedModeLabel, type GameMode } from 'shared';
 import { computed, onMounted, ref } from 'vue';
 import type { ProfilePayload } from 'shared';
 import { api } from '../api/rest';
@@ -66,9 +67,7 @@ function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString(i18n.locale === 'en' ? 'en-US' : 'ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function modeLabel(m: string): string {
-  return m === 'bughouse' ? i18n.t.home.modeBughouse : i18n.t.home.modeTeam;
-}
+function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale); }
 
 function gameOutcome(g: import('shared').GameSummary): string {
   const isEn = i18n.locale === 'en';

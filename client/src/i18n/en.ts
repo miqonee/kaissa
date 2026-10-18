@@ -2,7 +2,6 @@
 import type { TranslationSchema } from './types';
 
 export const en: TranslationSchema = {
-  resources: { title: 'Resources', bughouse: 'Bughouse rules', duo: '2v2 rules', repository: 'Source code on GitHub' },
   bughouse: {
     board: 'Board', yourBoard: 'Your board', partnerBoard: 'Partner’s board', yourPocket: 'Your pocket', opponentPocket: 'Opponent’s pocket',
     partnerPocket: 'Partner’s pocket', yourTurn: 'Your turn', waiting: 'Opponent’s turn', expand: 'Expand', collapse: 'Collapse',
@@ -31,7 +30,7 @@ export const en: TranslationSchema = {
   },
   home: {
     bannerTitle: 'Team Chess Online: 2v2 and Bughouse',
-    bannerSubtitle: 'Play collaborative team chess in pairs on a single board or Bughouse with live piece drops and AI bots.',
+    bannerSubtitle: 'Play team 2v2, Bughouse or Crazyhouse 1v1 and 2v2. Choose a mode in the lobby.',
     createTable: 'Create Table',
     tableCodePlaceholder: 'ROOM CODE',
     joinTable: 'Join',
@@ -200,7 +199,7 @@ export const en: TranslationSchema = {
     deleteAccount: 'Delete Account',
   },
   footer: {
-    brandDesc: 'Online collaborative platform for 2v2 single-board chess and Bughouse.',
+    brandDesc: 'Play team 2v2, Bughouse and Crazyhouse 1v1 or 2v2 online.',
     rulesDuo: '2v2 Rules',
     rulesBughouse: 'Bughouse Rules',
     about: 'About',

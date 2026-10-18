@@ -290,7 +290,7 @@ describe('Auto Lobby and Team Modes', () => {
       { uid: 1, username: 'bot_host', rating: 1200, ready: true, host: true, joinedAt: Date.now(), isBot: true, botLevel: 3 },
     );
     lobby.isAuto = true;
-    lobby.members.set(2, { uid: 10, username: 'human_player', rating: 1350, ready: true, host: false, joinedAt: Date.now(), isBot: false });
+    lobby.members.set(10, { uid: 10, username: 'human_player', rating: 1350, ready: true, host: false, joinedAt: Date.now(), isBot: false });
     (mgr as any).lobbies.set(lobby.id, lobby);
 
     // Bot cannot change time control

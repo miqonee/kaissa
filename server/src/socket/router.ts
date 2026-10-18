@@ -1,6 +1,8 @@
 import type { Server, Socket } from 'socket.io';
 import type { Ack, ClientToServerEvents, ServerToClientEvents } from 'shared';
 import { Chess } from 'chess.js';
+import { CrazyhouseGame } from 'shared/crazyhouse';
+import { isCrazyhouse, hasPockets, type GameMode } from 'shared';
 import { BughouseGame } from 'shared/bughouse';
 import type { Pocket, DropPieceType, PieceType } from 'shared';
 import { gamesManager, lobbies } from '../state.js';
@@ -122,6 +124,12 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
       if (ctx?.lobbyId) lobbies.setTeamChoice(ctx.lobbyId, ctx.uid, team);
     });
 
+    socket.on('lobby:set-mode', async (mode, cb) => {
+      if (!ctx?.lobbyId) return cb({ ok: false, error: 'Вы не в лобби' });
+      const result = await lobbies.setMode(ctx.lobbyId, ctx.uid, mode);
+      cb(result.ok ? { ok: true, data: null } : { ok: false, error: result.error ?? 'Не удалось сменить режим' });
+    });
+
     socket.on('lobby:set-team-mode', (mode) => {
       if (ctx?.lobbyId) lobbies.setTeamMode(ctx.lobbyId, ctx.uid, mode);
     });
@@ -213,7 +221,7 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
         const lastFen0 = dbGame.moves.filter((m: { boardIndex: number; fenAfter: string }) => m.boardIndex === 0).at(-1)?.fenAfter || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
         const lastFen1 = dbGame.moves.filter((m: { boardIndex: number; fenAfter: string }) => m.boardIndex === 1).at(-1)?.fenAfter || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
         let moves: string[] | undefined;
-        if (dbGame.mode !== 'bughouse') {
+        if (dbGame.mode === 'team') {
           try {
             const c = new Chess();
             const b0Moves = dbGame.moves.filter((m: any) => m.boardIndex === 0).sort((a: any, b: any) => a.ply - b.ply);
@@ -226,9 +234,9 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
           }
         }
         let pockets: Pocket[] | null = null;
-        if (dbGame.mode === 'bughouse' && (dbGame.rulesVersion ?? 0) >= 2) {
+        if (hasPockets(dbGame.mode as GameMode) && (dbGame.rulesVersion ?? 0) >= 2) {
           try {
-            const replay = new BughouseGame();
+            const replay = isCrazyhouse(dbGame.mode as GameMode) ? new CrazyhouseGame(dbGame.mode === 'crazyhouse-team') : new BughouseGame();
             for (const move of dbGame.moves.slice().sort((a, b) => a.ply - b.ply)) {
               const board = move.boardIndex as 0 | 1;
               replay.apply(move.dropPiece ? { board, to: move.to, piece: move.dropPiece as DropPieceType } : { board, from: move.from, to: move.to, ...(move.promotion ? { promotion: move.promotion as PieceType } : {}) });

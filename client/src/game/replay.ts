@@ -1,4 +1,6 @@
 import { Chess, type Square } from 'chess.js';
+import { BughouseGame } from 'shared/bughouse';
+import type { DropPieceType } from 'shared';
 import { DEFAULT_POCKET, type GameSummary, type MoveRecord, type PieceType, type Pocket } from 'shared';
 
 // ============================================================
@@ -102,6 +104,7 @@ function fallbackSan(mv: MoveRecord): string {
  * и плеер просто показывает их как есть, не падая.
  */
 export function buildReplay(game: GameSummary, rawMoves: MoveRecord[]): ReplayData {
+  if (game.mode === 'bughouse' && (game.rulesVersion ?? 0) >= 2) return buildBughouseReplay(game, rawMoves);
   const boardsCount: 1 | 2 = game.mode === 'bughouse' ? 2 : 1;
   const moves = [...rawMoves].sort((a, b) => a.ply - b.ply);
 
@@ -212,6 +215,38 @@ export function buildReplay(game: GameSummary, rawMoves: MoveRecord[]): ReplayDa
   });
 
   return { game, moves: moveViews, frames, boardsCount };
+}
+
+/** v2 uses exactly the same transfer, promotion and drop rules as live play. */
+function buildBughouseReplay(game: GameSummary, records: MoveRecord[]): ReplayData {
+  const engine = new BughouseGame();
+  const views: ReplayMoveView[] = [];
+  const last: [string | null, string | null][] = [[null, null], [null, null]];
+  function frame(ply: number): ReplayFrame {
+    return {
+      ply,
+      boards: ([0, 1] as const).map(board => ({ fen: engine.fen(board), lastMove: [...last[board]], check: engine.isCheck(board) ? kingSquare(engine.boards[board]) : null })) as [ReplayBoardFrame, ReplayBoardFrame],
+      pockets: ([0, 1] as const).map(board => [{ ...engine.pocketOf(board, 'w') }, { ...engine.pocketOf(board, 'b') }]),
+    };
+  }
+  const frames = [frame(0)];
+  [...records].sort((a, b) => a.ply - b.ply).forEach((record, index) => {
+    let ok = true;
+    let san = fallbackSan(record);
+    try {
+      if (record.dropPiece) engine.apply({ board: record.boardIndex, to: record.to, piece: record.dropPiece as DropPieceType });
+      else {
+        const move = engine.boards[record.boardIndex].moves({ verbose: true }).find(m => m.from === record.from && m.to === record.to && m.promotion === record.promotion);
+        san = move?.san.replace(/[+#]$/, '') ?? san;
+        engine.apply({ board: record.boardIndex, from: record.from, to: record.to, ...(record.promotion ? { promotion: record.promotion } : {}) });
+      }
+      if (engine.isCheck(record.boardIndex)) san += engine.isBughouseCheckmate(record.boardIndex) ? '#' : '+';
+    } catch { ok = false; }
+    last[record.boardIndex] = record.dropPiece ? [null, record.to] : [record.from, record.to];
+    views.push({ index, ...record, san, ok });
+    frames.push(frame(index + 1));
+  });
+  return { game, moves: views, frames, boardsCount: 2 };
 }
 
 /** «1. e4 e5» — сгруппировать ходы по парам для списка */

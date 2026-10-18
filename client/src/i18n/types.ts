@@ -4,6 +4,14 @@
 export type Locale = 'ru' | 'en';
 
 export interface TranslationSchema {
+  resources: { title: string; bughouse: string; duo: string; repository: string };
+  bughouse: {
+    board: string; yourBoard: string; partnerBoard: string; yourPocket: string; opponentPocket: string;
+    partnerPocket: string; yourTurn: string; waiting: string; expand: string; collapse: string;
+    helpTitle: string; helpBody: string; firstPocket: string; dismiss: string; rules: string;
+    cancel: string; dropHint: string; replayHint: string;
+    pieces: Record<'p' | 'n' | 'b' | 'r' | 'q' | 'k', string>;
+  };
   nav: {
     brand: string;
     lobbies: string;

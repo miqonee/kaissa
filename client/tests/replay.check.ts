@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+import { BughouseGame } from 'shared/bughouse';
 // Быстрая самопроверка логики плеера без фреймворков:
 // node --experimental-strip-types client/tests/replay.check.ts
 import { buildReplay, buildMoveRows } from '../src/game/replay.ts';
@@ -32,17 +34,17 @@ const moves: MoveRecord[] = [
 ];
 
 const r = buildReplay(game, moves);
-console.assert(r.frames.length === 8, `frames=${r.frames.length} должно быть 8`);
-console.assert(r.moves.length === 7, `moves=${r.moves.length}`);
-console.assert(r.moves[6].san === 'Qxf7#', `последний SAN: ${r.moves[6].san}`);
-console.assert(r.moves.every((m) => m.ok), 'все ходы должны распознаться');
-console.assert(r.frames[7].boards[0].check === 'e8', `шах на e8, а не ${r.frames[7].boards[0].check}`);
-console.assert(r.frames[3].boards[0].lastMove[1] === 'c4', 'lastMove после 2.Bc4');
+assert(r.frames.length === 8, `frames=${r.frames.length} должно быть 8`);
+assert(r.moves.length === 7, `moves=${r.moves.length}`);
+assert(r.moves[6].san === 'Qxf7#', `последний SAN: ${r.moves[6].san}`);
+assert(r.moves.every((m) => m.ok), 'все ходы должны распознаться');
+assert(r.frames[7].boards[0].check === 'e8', `шах на e8, а не ${r.frames[7].boards[0].check}`);
+assert(r.frames[3].boards[0].lastMove[1] === 'c4', 'lastMove после 2.Bc4');
 
 const rows = buildMoveRows(r, 0);
-console.assert(rows.length === 4, `rows=${rows.length} должно быть 4`);
-console.assert(rows[0].white?.san === 'e4' && rows[0].black?.san === 'e5', 'первая пара');
-console.assert(rows[3].black === null && rows[3].white?.san === 'Qxf7#', 'последняя строка неполная');
+assert(rows.length === 4, `rows=${rows.length} должно быть 4`);
+assert(rows[0].white?.san === 'e4' && rows[0].black?.san === 'e5', 'первая пара');
+assert(rows[3].black === null && rows[3].white?.san === 'Qxf7#', 'последняя строка неполная');
 
 // --- Багхаус с дропом ---
 const bGame: GameSummary = { ...game, mode: 'bughouse' };
@@ -58,14 +60,33 @@ const bMoves: MoveRecord[] = [
   { boardIndex: 1, ply: 7, userId: 2, from: '-', to: 'c5', dropPiece: 'p', fenAfter: '' }, // дроп чёрной пешки
 ];
 const rb = buildReplay(bGame, bMoves);
-console.assert(rb.boardsCount === 2, 'bughouse = 2 доски');
-console.assert(rb.moves[4].san === 'exd5', `взятие: ${rb.moves[4].san}`);
-console.assert(rb.moves[6].san === 'P@c5', `дроп: ${rb.moves[6].san}`);
+assert(rb.boardsCount === 2, 'bughouse = 2 доски');
+assert(rb.moves[4].san === 'exd5', `взятие: ${rb.moves[4].san}`);
+assert(rb.moves[6].san === 'P@c5', `дроп: ${rb.moves[6].san}`);
 // Карман чёрных доски 1: после взятия p=1, после дропа снова 0
-console.assert(rb.frames[5].pockets?.[1]?.[1].p === 1, `карман после взятия: ${rb.frames[5].pockets?.[1]?.[1].p}`);
+assert(rb.frames[5].pockets?.[1]?.[1].p === 1, `карман после взятия: ${rb.frames[5].pockets?.[1]?.[1].p}`);
 const lastFrame = rb.frames[7];
-console.assert(lastFrame.pockets?.[1]?.[1].p === 0, `карман после дропа: ${lastFrame.pockets?.[1]?.[1].p}`);
+assert(lastFrame.pockets?.[1]?.[1].p === 0, `карман после дропа: ${lastFrame.pockets?.[1]?.[1].p}`);
 // Доска 1 после дропа: чёрная пешка на c5
-console.assert(lastFrame.boards[1].fen.startsWith('rnbqkbnr/pppp1ppp/8/2p1p3/4P3/5N2/PPPP1PPP/RNBQKB1R'), 'доска 1: ' + lastFrame.boards[1].fen);
+assert(lastFrame.boards[1].fen.startsWith('rnbqkbnr/pppp1ppp/8/2p1p3/4P3/5N2/PPPP1PPP/RNBQKB1R'), 'доска 1: ' + lastFrame.boards[1].fen);
 
 console.log('OK: replay.check пройден');
+
+// New bughouse games share the live engine, including promotion provenance.
+const live = new BughouseGame();
+const v2Moves: MoveRecord[] = [];
+for (const [from, to, promotion] of [
+  ['a2','a4'], ['h7','h5'], ['a4','a5'], ['h5','h4'], ['a5','a6'], ['h4','h3'],
+  ['a6','b7'], ['h3','g2'], ['b7','a8','q'], ['g2','h1','q'], ['b2','b3'], ['h1','a8'],
+] as const) {
+  const result = live.apply({ board: 0, from, to, ...(promotion ? { promotion } : {}) });
+  v2Moves.push({ boardIndex: 0, ply: v2Moves.length + 1, userId: 1, from, to, ...(promotion ? { promotion } : {}), fenAfter: result.fen, clocksAfter: null });
+}
+const v2 = buildReplay({ ...bGame, rulesVersion: 2 }, v2Moves);
+assert(v2.moves.every(m => m.ok), 'v2 replay must apply every live move');
+assert.deepEqual(v2.frames.at(-1)!.pockets?.[1]?.[0], live.pocketOf(1, 'w'), 'v2 replay pocket must equal live pocket');
+assert.equal(v2.frames.at(-1)!.pockets?.[1]?.[0].p, 2, 'captured promoted queen is a pawn');
+assert.equal(v2.frames.at(-1)!.pockets?.[1]?.[0].q, 0);
+const legacy = buildReplay({ ...bGame, rulesVersion: null }, v2Moves);
+assert.equal(legacy.frames.at(-1)!.pockets?.[1]?.[0].q, 1, 'historical v1 records keep their original pocket semantics');
+console.log('OK: v2 promotions, shared rules and legacy compatibility');

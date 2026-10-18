@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { trackGoal } from '../utils/analytics';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { ChatMessage, LobbySummary, TimeControl } from 'shared';
@@ -101,6 +102,7 @@ function joinLobby(): void {
   socket.emit('lobby:join', lobbyId.value, (ack) => {
     if (ack.ok && ack.data) {
       lobby.value = ack.data.lobby;
+      trackGoal('lobby_joined', { mode: ack.data.lobby.mode }, String(lobbyId.value));
     } else if (!lobby.value) {
       error.value = ack.error ?? (i18n.locale === 'en' ? 'Failed to join lobby' : 'Не удалось войти в лобби');
     }
@@ -140,6 +142,7 @@ onMounted(() => {
   });
   socket.on('lobby:started', ({ gameId }) => {
     gameStarting = true;
+    if (lobby.value?.rematchOf) trackGoal('rematch_started', { mode: lobby.value.mode }, String(gameId));
     router.push(`/game/${gameId}`);
   });
   socket.on('lobby:closed', (reason) => {
@@ -254,10 +257,10 @@ function modeLabel(m: string): string {
           <span class="badge mono">{{ timeControlLabel(lobby.timeControl) }}</span>
         </div>
         <p class="dim hero-desc">
-          {{ i18n.locale === 'en'
-            ? 'Gather 4 players at the table. Teams will be balanced by Elo at start (1+4 vs 2+3).'
-            : 'Соберите 4 игроков за столом. При старте команды распределятся по рейтингу поровну (1+4 против 2+3).' }}
-          <span v-if="lobby.mode === 'bughouse'">{{ i18n.locale === 'en' ? ' In Bughouse, bots are disabled.' : ' В багхаусе играют только люди — боты отключены.' }}</span>
+          {{ lobby.rematchOf
+            ? (i18n.locale === 'en' ? 'Play again with the same teams and settings.' : 'Ещё одна партия с прежними командами и настройками.')
+            : (i18n.locale === 'en' ? 'Wait for people or start with bots filling the available seats.' : 'Подождите людей или начните с ботами на свободных местах.') }}
+          <span v-if="lobby.mode === 'bughouse'">{{ i18n.locale === 'en' ? ' Bughouse bots can use pocket pieces.' : ' Боты багхауса умеют выставлять фигуры из кармана.' }}</span>
         </p>
       </div>
 
@@ -287,14 +290,16 @@ function modeLabel(m: string): string {
 
         <div class="panel-body">
           <!-- Баннер Быстрого стола (Автолобби) -->
-          <div v-if="lobby.isAuto" class="auto-lobby-banner">
+          <div v-if="lobby.isAuto || countdown !== null" class="auto-lobby-banner">
             <div class="auto-banner-info">
               <span class="countdown-chip" :class="{ paused: countdown?.paused }">
                 <span v-if="countdown?.paused">{{ i18n.locale === 'en' ? 'Paused' : 'Пауза' }} ({{ countdown?.pausedCount }}/{{ countdown?.neededCount }})</span>
                 <span v-else>{{ i18n.locale === 'en' ? `Auto-start in ${countdown?.seconds ?? 10}s` : `Автостарт через ${countdown?.seconds ?? 10} с` }}</span>
               </span>
               <p class="dim tiny auto-hint">
-                {{ i18n.locale === 'en' ? 'Incoming humans displace bots. Teams are balanced adaptively.' : 'Вход человека вытесняет бота. При 2 игроках команды балансируются адаптивно.' }}
+                {{ lobby.rematchOf
+                  ? (i18n.locale === 'en' ? 'Same players, bot strength and settings. You can pause the countdown.' : 'Тот же состав, сила ботов и настройки. Отсчёт можно приостановить.')
+                  : (i18n.locale === 'en' ? 'Incoming humans displace bots. Teams are balanced adaptively.' : 'Вход человека вытесняет бота. При 2 игроках команды балансируются адаптивно.') }}
               </p>
             </div>
             <button
@@ -425,10 +430,10 @@ function modeLabel(m: string): string {
               <div class="slot-idx mono">{{ lobby.players.length + i }}</div>
               <div class="slot-info">
                 <span class="slot-name dim">{{ i18n.locale === 'en' ? 'Waiting for player…' : 'Ожидание игрока…' }}</span>
-                <span v-if="lobby.mode === 'bughouse'" class="dim tiny">{{ i18n.locale === 'en' ? 'Humans only — bots disabled in Bughouse' : 'Только люди — боты в багхаусе отключены' }}</span>
+                <span v-if="lobby.mode === 'bughouse'" class="dim tiny">{{ i18n.locale === 'en' ? 'You can fill empty seats with bots' : 'Свободные места можно заполнить ботами' }}</span>
               </div>
               <button
-                v-if="isHost && !lobby.isAuto && lobby.mode !== 'bughouse'"
+                v-if="isHost && !lobby.isAuto"
                 type="button"
                 class="small ghost add-bot-slot-btn"
                 :title="i18n.locale === 'en' ? 'Add bot with random style' : 'Добавить бота со случайным стилем'"

@@ -231,7 +231,7 @@ async function analyzeOnLichess(gameId: number) {
                   </a>
 
                   <button
-                    v-if="g.status !== 'active'"
+                    v-if="g.status !== 'active' && g.mode === 'team'"
                     class="button small brass"
                     :disabled="lichessLoading === g.id"
                     @click.stop="analyzeOnLichess(g.id)"

@@ -121,6 +121,7 @@ async function getPgnData(id: number): Promise<{ game: PgnGame; moves: PgnMove[]
       game: {
         id: game.id,
         mode: game.mode as 'team' | 'bughouse',
+        rulesVersion: game.rulesVersion,
         result: game.result,
         reason: game.reason,
         baseMin: game.baseMin,
@@ -218,6 +219,8 @@ gamesRouter.post('/:id/lichess-import', requireAuth, async (req, res) => {
   if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
   const data = await getPgnData(id);
   if (!data) return void res.status(404).json({ error: 'Партия не найдена' });
+
+  if (data.mode === 'bughouse') return void res.status(400).json({ error: 'Для багхауса используйте встроенный плеер обеих досок' });
 
   const pgn = buildPgn(data.game, data.moves);
 
@@ -318,6 +321,7 @@ gamesRouter.post('/:id/rematch', requireAuth, async (req, res) => {
 
 type DbGame = {
   id: number;
+  rulesVersion?: number | null;
   mode: string;
   status: string;
   result: string;
@@ -335,13 +339,14 @@ type DbGame = {
     moveSlot: number;
     ratingBefore: number;
     ratingAfter: number | null;
-    user: { username: string };
+    user: { username: string; isBot?: boolean; botLevel?: number | null };
   }[];
 };
 
 function dbGameToSummary(game: DbGame): GameSummary {
   return {
     id: game.id,
+    rulesVersion: game.rulesVersion,
     mode: game.mode as 'team' | 'bughouse',
     status: game.status as 'active' | 'finished' | 'abandoned',
     result: game.result as '1-0' | '0-1' | '*',
@@ -352,6 +357,8 @@ function dbGameToSummary(game: DbGame): GameSummary {
     participants: game.participants.map((p) => ({
       userId: p.userId,
       username: p.user.username,
+      isBot: p.user.isBot,
+      botLevel: p.user.botLevel,
       team: p.team as 1 | 2,
       color: p.color as 'w' | 'b',
       boardIndex: p.boardIndex as 0 | 1,

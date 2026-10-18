@@ -87,6 +87,14 @@ export class TeamGame {
     return { fen: this.chess.fen(), check: this.chess.isCheck() };
   }
 
+  undoLastMove(): void {
+    const undone = this.chess.undo();
+    if (undone) this.turnSlotByColor[undone.color] = this.turnSlotByColor[undone.color] === 0 ? 1 : 0;
+    this.halfmoves = Number(this.chess.fen().split(' ')[4]);
+    const last = this.chess.history({ verbose: true }).at(-1);
+    this.lastMoveSquares = last ? [last.from, last.to] : [null, null];
+  }
+
   // ---- Условия завершения (только автоматические, ничьих по согласию нет) ----
 
   isCheckmate(): boolean {

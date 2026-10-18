@@ -11,13 +11,14 @@ import type {
   Team,
   TimeControl,
 } from 'shared';
-import { DEFAULT_POCKET, eloDelta } from 'shared';
+import { DEFAULT_POCKET, eloDelta, eloToLevel, type DropPieceType } from 'shared';
 import { prisma } from '../prisma.js';
 import { presence } from '../socket/presence.js';
-import { BughouseGame, type Board, type SideColor } from './bughouse.js';
+import { BughouseGame, isDrop, type Board, type SideColor } from './bughouse.js';
 import { TeamGame } from './teamGame.js';
 import { clockOnMove, clockSnapshot, initClock, type ClockState } from './clock.js';
 import { chooseBotMove, getBotThinkingDelayMs } from '../ai/engine.js';
+import { chooseBughouseMove, bughouseThinkingDelay } from '../ai/bughouse.js';
 import { botStatsTracker } from '../ai/botStats.js';
 
 // ============================================================
@@ -61,6 +62,9 @@ interface ActiveParticipant {
 }
 
 interface ActiveGame {
+  instance: number;
+  botEpoch: number;
+  pacing?: { board: Board; credits: number; paused: boolean };
   id: number;
   mode: GameMode;
   timeControl: TimeControl;
@@ -76,6 +80,7 @@ interface ActiveGame {
   chatIdSeq: number;
   chat: ChatMessage[];
   isDemo?: boolean;
+  rulesVersion?: number | null;
 }
 
 const TEAM_COLORS_BUGHOUSE: Record<Team, Record<Board, SideColor>> = {
@@ -84,11 +89,57 @@ const TEAM_COLORS_BUGHOUSE: Record<Team, Record<Board, SideColor>> = {
 };
 
 export class GamesManager {
+  private instanceSeq = 0;
   private games = new Map<number, ActiveGame>();
   private io: SocketServer | null = null;
   private chatGlobalSeq = 1;
   private flagInterval: NodeJS.Timeout | null = null;
   private botTimers = new Map<string, NodeJS.Timeout>();
+
+  private botPending = new Set<string>();
+  private gameQueues = new Map<number, Promise<unknown>>();
+
+  private serialize<T>(gameId: number, work: () => Promise<T>): Promise<T> {
+    const result = (this.gameQueues.get(gameId) ?? Promise.resolve()).then(work, work);
+    const tail = result.then(() => {}, () => {});
+    this.gameQueues.set(gameId, tail);
+    void tail.then(() => { if (this.gameQueues.get(gameId) === tail) this.gameQueues.delete(gameId); });
+    return result;
+  }
+
+  private positionKey(g: ActiveGame, board: Board): string {
+    return `${g.instance}:${g.botEpoch}:${g.engine instanceof BughouseGame ? g.engine.engineFen(board) : g.engine.fen()}`;
+  }
+
+  private botMayMove(g: ActiveGame, board: Board): boolean {
+    return !g.pacing || (!g.pacing.paused && (board !== g.pacing.board || g.pacing.credits > 0));
+  }
+
+  setPaused(gameId: number, uid: number, paused: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
+    return this.serialize(gameId, async () => {
+      const g = this.games.get(gameId);
+      const humans = g?.participants.filter(p => !p.isBot) ?? [];
+      if (!g || g.status !== 'active' || !g.pacing || humans.length !== 1 || humans[0].uid !== uid) {
+        return { ok: false, error: 'Пауза доступна только единственному игроку в партии с ботами' };
+      }
+      if (!paused && g.disconnected.has(uid)) return { ok: false, error: 'Сначала вернитесь в партию' };
+      if (g.pacing.paused !== paused) {
+        g.pacing.paused = paused;
+        g.botEpoch++;
+        this.cancelBotTimers(gameId);
+        this.io?.to(this.gameRoom(gameId)).emit('game:state', this.toGameState(g));
+        if (!paused) this.triggerBotTurn(gameId);
+      }
+      return { ok: true };
+    });
+  }
+
+  pauseForDisconnect(gameId: number, uid: number): void {
+    const g = this.games.get(gameId);
+    if (g?.pacing && g.participants.filter(p => !p.isBot).length === 1 && !presence.isOnline(uid)) {
+      void this.setPaused(gameId, uid, true);
+    }
+  }
 
   cancelBotTimers(gameId: number): void {
     for (const [key, timer] of this.botTimers.entries()) {
@@ -102,50 +153,42 @@ export class GamesManager {
   triggerBotTurn(gameId: number): void {
     const g = this.games.get(gameId);
     if (!g || g.status !== 'active') return;
-    // Багхаус — только для людей: боты не умеют играть с карманами и парной координацией
-    if (g.mode === 'bughouse') return;
-
     const state = this.toGameState(g);
-    const boardsCount = 1; // боты играют только team (одна доска); багхаус отсечён выше
-
-    for (let b = 0; b < boardsCount; b++) {
-      const moverUid = state.turnUserIds[b];
-      const participant = g.participants.find((p) => p.uid === moverUid);
-      if (!participant?.isBot) continue;
-
-      const key = `${gameId}:${b}:${participant.uid}`;
-      if (this.botTimers.has(key)) continue;
-
-      const fen = state.fens[b];
+    for (let b = 0; b < (g.mode === 'bughouse' ? 2 : 1); b++) {
+      const board = b as Board;
+      const participant = g.participants.find(p => p.uid === state.turnUserIds[b]);
+      if (!participant?.isBot || !this.botMayMove(g, board)) continue;
+      const key = `${gameId}:${g.instance}:${b}`;
+      if (this.botTimers.has(key) || this.botPending.has(key)) continue;
+      const remaining = g.timeControl.kind === 'clock' ? state.clocks[b][participant.color === 'w' ? 0 : 1] : undefined;
       const teamGame = g.engine instanceof TeamGame ? g.engine : null;
-      const history = teamGame ? teamGame.chess.history({ verbose: true }) : [];
-      const lastMove = history.length > 0 ? history[history.length - 1] : null;
-
-      const delayMs = getBotThinkingDelayMs(fen, lastMove, g.ply, Boolean(g.isDemo));
+      const history = teamGame?.chess.history({ verbose: true }) ?? [];
+      const delay = g.mode === 'bughouse' ? (g.pacing ? 700 + Math.floor(Math.random() * 500) : bughouseThinkingDelay(remaining)) : getBotThinkingDelayMs(state.fens[b], history.at(-1), g.ply, Boolean(g.isDemo));
       const timer = setTimeout(async () => {
         this.botTimers.delete(key);
-        const currentGame = this.games.get(gameId);
-        if (!currentGame || currentGame.status !== 'active') return;
-
-        const curState = this.toGameState(currentGame);
-        if (curState.turnUserIds[b] !== participant.uid) return;
-
-        const fen = curState.fens[b];
-        const move = await chooseBotMove(fen, {
-          username: participant.username,
-          elo: participant.ratingBefore,
-          level: participant.botLevel ?? undefined,
-        }, participant.botJitter);
-        if (!move) return;
-
-        await this.applyMove(gameId, participant.uid, {
-          boardIndex: b as 0 | 1,
-          from: move.from,
-          to: move.to,
-          promotion: move.promotion,
-        });
-      }, delayMs);
-
+        this.botPending.add(key);
+        try {
+          const current = this.games.get(gameId);
+          if (current !== g || current.status !== 'active' || !this.botMayMove(current, board) || this.toGameState(current).turnUserIds[b] !== participant.uid) return;
+          const fingerprint = this.positionKey(current, board);
+          const clocks = this.toGameState(current).clocks[b];
+          const time = current.timeControl.kind === 'clock' ? clocks[participant.color === 'w' ? 0 : 1] : undefined;
+          if (current.engine instanceof BughouseGame) {
+            const move = await chooseBughouseMove(current.engine.snapshot(), board, participant.ratingBefore, time);
+            if (move) await this.applyMove(gameId, participant.uid, {
+              boardIndex: board, from: isDrop(move) ? '-' : move.from, to: move.to,
+              ...(isDrop(move) ? { dropPiece: move.piece } : { promotion: move.promotion }),
+            }, fingerprint);
+          } else {
+            const move = await chooseBotMove(current.engine.fen(), { username: participant.username, elo: participant.ratingBefore, level: participant.botLevel ?? undefined }, participant.botJitter);
+            if (move) await this.applyMove(gameId, participant.uid, { boardIndex: board, from: move.from, to: move.to, promotion: move.promotion }, fingerprint);
+          }
+        } catch (error) { console.warn('[AI] Bot turn failed:', error); }
+        finally {
+          this.botPending.delete(key);
+          if (this.games.get(gameId) === g) this.triggerBotTurn(gameId);
+        }
+      }, delay);
       this.botTimers.set(key, timer);
     }
   }
@@ -197,6 +240,7 @@ export class GamesManager {
       const dbGame = await prisma.game.create({
         data: {
           mode: opts.mode,
+          rulesVersion: opts.mode === 'bughouse' ? 2 : null,
           status: 'active',
           baseMin: opts.timeControl.baseMin,
           incSec: opts.timeControl.incSec,
@@ -221,8 +265,11 @@ export class GamesManager {
     const clocks = Array.from({ length: clockCount }, () => initClock(baseMs, incMs));
 
     const game: ActiveGame = {
+      instance: ++this.instanceSeq,
+      botEpoch: 0,
       id: gameId,
       mode: opts.mode,
+      rulesVersion: opts.mode === 'bughouse' ? 2 : null,
       timeControl: opts.timeControl,
       participants,
       engine,
@@ -237,6 +284,11 @@ export class GamesManager {
       chat: [],
       isDemo: Boolean(opts.isDemo),
     };
+    if (opts.mode === 'bughouse' && noClock && !opts.isDemo && participants.some(p => !p.isBot)) {
+      const board = ([0, 1] as Board[]).find(b => participants.filter(p => p.boardIndex === b).every(p => p.isBot));
+      if (board !== undefined) game.pacing = { board, credits: 0, paused: false };
+    }
+    this.cancelBotTimers(game.id);
     this.games.set(game.id, game);
     this.io?.to('live').emit('live:new', this.liveInfo(game));
     this.triggerBotTurn(game.id);
@@ -245,17 +297,44 @@ export class GamesManager {
 
   // ---------------- Ходы ----------------
 
-  async applyMove(
-    gameId: number,
-    uid: number,
-    data: { boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: PieceType },
+  applyMove(
+    gameId: number, uid: number,
+    data: { boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType },
+    expectedPosition?: string,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    return this.serialize(gameId, () => this.applyMoveNow(gameId, uid, data, expectedPosition));
+  }
+
+  private async applyMoveNow(
+    gameId: number, uid: number,
+    data: { boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType },
+    expectedPosition?: string,
   ): Promise<{ ok: true } | { ok: false; error: string }> {
     const g = this.games.get(gameId);
     if (!g || g.status !== 'active') return { ok: false, error: 'Партия не активна' };
     const p = g.participants.find((x) => x.uid === uid);
     if (!p) return { ok: false, error: 'Вы не участник' };
+    if (g.pacing?.paused) return { ok: false, error: 'Партия на паузе' };
+    if (p.isBot && !this.botMayMove(g, data?.boardIndex)) return { ok: false, error: 'Ожидание хода на доске людей' };
 
+    if (!data || (data.boardIndex !== 0 && data.boardIndex !== 1) || (g.mode === 'team' && data.boardIndex !== 0)
+      || !/^[a-h][1-8]$/.test(data.to) || (data.dropPiece !== undefined && (!['p','n','b','r','q'].includes(data.dropPiece) || g.mode !== 'bughouse' || data.promotion !== undefined))
+      || (data.dropPiece === undefined && !/^[a-h][1-8]$/.test(data.from))
+      || (data.promotion !== undefined && !['q','r','b','n'].includes(data.promotion))) return { ok: false, error: 'Некорректный ход' };
+    if (expectedPosition !== undefined && this.positionKey(g, data.boardIndex) !== expectedPosition) return { ok: false, error: 'Позиция изменилась' };
     const now = Date.now();
+    // Check both boards before mutating either: a flag ends the whole match.
+    if (g.timeControl.kind === 'clock') for (let b = 0; b < g.clocks.length; b++) {
+      const clock = g.clocks[b];
+      const snap = clockSnapshot(clock, now);
+      if (clock.active && (clock.active === 'w' ? snap.whiteMs : snap.blackMs) <= 0) {
+        await this.finishByFlag(g, b as Board, clock.active);
+        return { ok: false, error: 'Время вышло' };
+      }
+    }
+    const before = g.engine instanceof BughouseGame ? g.engine.snapshot() : null;
+    const previousClocks = g.clocks.map(clock => ({ ...clock }));
+    const previousPly = g.ply;
     let fen: string;
     let check = false;
 
@@ -268,7 +347,7 @@ export class GamesManager {
         if (bg.turn(board) !== moverColor) return { ok: false, error: 'Сейчас не ваш ход' };
         const res = bg.apply(
           data.dropPiece
-            ? { board, to: data.to, piece: data.dropPiece }
+            ? { board, to: data.to, piece: data.dropPiece as DropPieceType }
             : { board, from: data.from, to: data.to, ...(data.promotion ? { promotion: data.promotion } : {}) },
         );
         fen = res.fen;
@@ -293,8 +372,8 @@ export class GamesManager {
       g.clocks[data.boardIndex] = r.clock;
       if (r.flagged) {
         // флаг уже упал — завершаем (ход при этом засчитан)
-        await this.persistMove(g, uid, data, fen, null);
         g.ply += 1;
+        await this.persistMove(g, uid, data, fen, null);
         await this.finishByFlag(g, data.boardIndex as Board, r.flagged);
         return { ok: true };
       }
@@ -303,7 +382,20 @@ export class GamesManager {
     }
 
     g.ply += 1;
-    await this.persistMove(g, uid, data, fen, clocksAfter);
+    try { await this.persistMove(g, uid, data, fen, clocksAfter); }
+    catch (error) {
+      if (before) g.engine = BughouseGame.fromSnapshot(before);
+      else (g.engine as TeamGame).undoLastMove();
+      g.clocks = previousClocks;
+      g.ply = previousPly;
+      console.error('[game] Could not save move:', error);
+      return { ok: false, error: 'Не удалось сохранить ход. Попробуйте ещё раз' };
+    }
+
+    if (g.pacing) {
+      if (data.boardIndex === g.pacing.board) g.pacing.credits--;
+      else g.pacing.credits = Math.min(2, g.pacing.credits + 1);
+    }
 
     // Рассылка хода
     this.io?.to(this.gameRoom(g.id)).emit('game:move', {
@@ -330,7 +422,7 @@ export class GamesManager {
   private async persistMove(
     g: ActiveGame,
     uid: number,
-    data: { boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: PieceType },
+    data: { boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType },
     fen: string,
     clocksAfter: [number, number] | null,
   ): Promise<void> {
@@ -339,7 +431,7 @@ export class GamesManager {
       data: {
         gameId: g.id,
         boardIndex: data.boardIndex,
-        ply: g.ply + 1,
+        ply: g.ply,
         userId: uid,
         from: data.dropPiece ? '-' : data.from,
         to: data.to,
@@ -384,20 +476,17 @@ export class GamesManager {
   // ---------------- Часы ----------------
 
   async checkFlags(): Promise<void> {
-    for (const g of [...this.games.values()]) {
-      if (g.status !== 'active' || g.timeControl.kind !== 'clock') continue;
-      if (!Array.isArray(g.clocks)) continue;
+    await Promise.all([...this.games.values()].filter(g => g.status === 'active' && g.timeControl.kind === 'clock').map(g => this.serialize(g.id, async () => {
+      if (g.status !== 'active') return;
       const now = Date.now();
       for (let b = 0; b < g.clocks.length; b++) {
-        const c = g.clocks[b];
-        if (!c || c.active === null) continue;
-        const remaining = (c.active === 'w' ? c.whiteMs : c.blackMs) - (now - c.sinceMs);
-        if (remaining <= 0) {
-          await this.finishByFlag(g, b as Board, c.active);
+        const clock = g.clocks[b];
+        if (clock?.active && (clock.active === 'w' ? clock.whiteMs : clock.blackMs) - (now - clock.sinceMs) <= 0) {
+          await this.finishByFlag(g, b as Board, clock.active);
           break;
         }
       }
-    }
+    })));
   }
 
   private async finishByFlag(g: ActiveGame, board: Board, flaggedColor: SideColor): Promise<void> {
@@ -407,7 +496,11 @@ export class GamesManager {
 
   // ---------------- Завершение / Elo ----------------
 
-  async resign(gameId: number, uid: number): Promise<void> {
+  resign(gameId: number, uid: number): Promise<void> {
+    return this.serialize(gameId, () => this.resignNow(gameId, uid));
+  }
+
+  private async resignNow(gameId: number, uid: number): Promise<void> {
     const g = this.games.get(gameId);
     if (!g || g.status !== 'active') return;
     const p = g.participants.find((x) => x.uid === uid);
@@ -513,7 +606,7 @@ export class GamesManager {
     });
     this.io?.to('live').emit('live:end', { gameId: g.id, result });
 
-    setTimeout(() => this.games.delete(g.id), g.isDemo ? 10_000 : 30 * 60_000);
+    setTimeout(() => { if (this.games.get(g.id) === g) this.games.delete(g.id); }, g.isDemo ? 10_000 : 30 * 60_000);
   }
 
   // ---------------- Отключения ----------------
@@ -524,9 +617,10 @@ export class GamesManager {
     if (!g.participants.some((p) => p.uid === uid)) return;
     if (presence.isOnline(uid)) return; // осталась другая вкладка
     g.disconnected.add(uid);
+    this.pauseForDisconnect(gameId, uid);
     this.broadcastDisconnected(g);
     if (g.disconnected.size >= 4) {
-      void this.abandon(g);
+      void this.serialize(g.id, () => this.abandon(g));
     }
   }
 
@@ -585,7 +679,7 @@ export class GamesManager {
       participants: g.participants.map(toParticipantInfo),
     });
     this.io?.to('live').emit('live:end', { gameId: g.id, result: '*' });
-    setTimeout(() => this.games.delete(g.id), g.isDemo ? 10_000 : 60_000);
+    setTimeout(() => { if (this.games.get(g.id) === g) this.games.delete(g.id); }, g.isDemo ? 10_000 : 60_000);
   }
 
   async cleanupOnBoot(): Promise<void> {
@@ -703,6 +797,9 @@ export class GamesManager {
 
     return {
       gameId: g.id,
+      rulesVersion: g.rulesVersion,
+      ...(g.pacing ? { botPacing: { controlledBoard: g.pacing.board, waiting: g.pacing.credits === 0, paused: g.pacing.paused, pauseAllowed: g.participants.filter(p => !p.isBot).length === 1 } } : {}),
+      ...(isBug ? { legalDrops: [(g.engine as BughouseGame).legalDrops(0), (g.engine as BughouseGame).legalDrops(1)] } : {}),
       mode: g.mode,
       status: g.status,
       result: g.result,
@@ -726,7 +823,7 @@ export class GamesManager {
   /** Данные игроков для реванша */
   async rematchPlayers(
     gameId: number,
-  ): Promise<{ uid: number; username: string; rating: number; isBot?: boolean; botLevel?: number | null }[]> {
+  ): Promise<{ uid: number; username: string; rating: number; isBot?: boolean; botLevel?: number | null; team: number; seat: number }[]> {
     const parts = await prisma.gameParticipant.findMany({
       where: { gameId },
       include: { user: true },
@@ -734,9 +831,11 @@ export class GamesManager {
     return parts.map((p) => ({
       uid: p.userId,
       username: p.user.username,
-      rating: p.user.rating,
+      rating: p.user.isBot ? p.ratingBefore : p.user.rating,
+      team: p.team,
+      seat: p.boardIndex * 2 + p.moveSlot,
       isBot: p.user.isBot,
-      botLevel: p.user.botLevel,
+      botLevel: p.user.isBot ? eloToLevel(p.ratingBefore) : p.user.botLevel,
     }));
   }
 

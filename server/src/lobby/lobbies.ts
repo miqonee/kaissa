@@ -50,6 +50,7 @@ export class Lobby {
   staleWarned = false;
   started = false;
   rematchOf: number | null = null;
+  rematchTeams: [number[], number[]] | null = null;
 
   constructor(
     data: CreateLobbyPayload & { id: string; code: string },
@@ -98,6 +99,7 @@ export class Lobby {
       code: this.code,
       started: this.started,
       isAuto: this.isAuto,
+      rematchOf: this.rematchOf,
       teamMode: this.teamMode,
       autoCountdown: this.autoCountdown,
       pausedBy: [...this.pausedBy],
@@ -210,8 +212,19 @@ export class LobbiesManager {
     return [...this.lobbies.values()].filter((l) => !l.started && !l.private);
   }
 
+  private autoLobbyJobs = new Map<GameMode, Promise<void>>();
   async ensureAutoLobby(): Promise<void> {
-    const existing = [...this.lobbies.values()].find((l) => l.isAuto && !l.started);
+    await Promise.all((['team', 'bughouse'] as const).map(mode => {
+      const existing = this.autoLobbyJobs.get(mode);
+      if (existing) return existing;
+      const job = this.createAutoLobby(mode).finally(() => this.autoLobbyJobs.delete(mode));
+      this.autoLobbyJobs.set(mode, job);
+      return job;
+    }));
+  }
+
+  private async createAutoLobby(mode: GameMode): Promise<void> {
+    const existing = [...this.lobbies.values()].find((l) => l.isAuto && !l.started && l.mode === mode);
     if (existing) return;
 
     const botUsers = await prisma.user.findMany({
@@ -234,9 +247,9 @@ export class LobbiesManager {
       {
         id,
         code,
-        name: 'Быстрый стол 2х2',
-        mode: 'team',
-        timeControl: { kind: 'clock', baseMin: 3, incSec: 0 },
+        name: mode === 'bughouse' ? 'Быстрый багхаус' : 'Быстрый стол 2х2',
+        mode,
+        timeControl: mode === 'bughouse' ? { kind: 'none', baseMin: 0, incSec: 0 } : { kind: 'clock', baseMin: 3, incSec: 0 },
         private: false,
         teamMode: 'auto',
       },
@@ -485,13 +498,14 @@ export class LobbiesManager {
       }
     }
 
+    if (lobby.rematchOf && !lobby.isAuto) lobby.clearCountdown();
     this.broadcastState(lobby);
     this.broadcastList();
     return { ok: true };
   }
 
   resetAutoCountdown(lobby: Lobby): void {
-    if (!lobby.isAuto || lobby.started) return;
+    if ((!lobby.isAuto && !lobby.rematchOf) || lobby.started) return;
     const humans = [...lobby.members.values()].filter((m) => !m.isBot);
     if (!humans.length) {
       lobby.clearCountdown();
@@ -543,7 +557,7 @@ export class LobbiesManager {
 
   pauseToggle(lobbyId: string, uid: number): void {
     const lobby = this.lobbies.get(lobbyId);
-    if (!lobby || !lobby.isAuto || lobby.autoCountdown === null) return;
+    if (!lobby || (!lobby.isAuto && !lobby.rematchOf) || lobby.autoCountdown === null) return;
     const m = lobby.members.get(uid);
     if (!m || m.isBot) return;
 
@@ -568,6 +582,7 @@ export class LobbiesManager {
     if (!m) return;
 
     // Повторный клик снимает выбор
+    lobby.rematchTeams = null;
     if (m.teamChoice === team) {
       m.teamChoice = null;
       this.broadcastState(lobby);
@@ -590,6 +605,7 @@ export class LobbiesManager {
     const m = lobby.members.get(uid);
     if (!m?.host) return;
     lobby.teamMode = teamMode;
+    lobby.rematchTeams = null;
     this.broadcastState(lobby);
   }
 
@@ -610,7 +626,6 @@ export class LobbiesManager {
   async addBot(lobbyId: string, uid: number): Promise<{ ok: boolean; error?: string }> {
     const lobby = this.lobbies.get(lobbyId);
     if (!lobby || lobby.started || lobby.isAuto) return { ok: false, error: 'Нельзя добавить бота' };
-    if (lobby.mode === 'bughouse') return { ok: false, error: 'В багхаус ботов добавлять нельзя — только живые игроки' };
     const caller = lobby.members.get(uid);
     if (!caller?.host) return { ok: false, error: 'Только создатель стола может добавлять ботов' };
     if (lobby.members.size >= MAX_SLOTS) return { ok: false, error: 'Стол уже заполнен' };
@@ -672,7 +687,8 @@ export class LobbiesManager {
       return;
     }
 
-    if (lobby.members.size === 0) {
+    if (lobby.rematchOf) lobby.clearCountdown();
+    if (lobby.members.size === 0 || (lobby.rematchOf && [...lobby.members.values()].every(m => m.isBot))) {
       this.lobbies.delete(lobbyId);
       this.broadcastList();
       return;
@@ -750,14 +766,11 @@ export class LobbiesManager {
   async start(lobbyId: string, uid: number): Promise<{ ok: true; gameId: number } | { ok: false; error: string }> {
     const lobby = this.lobbies.get(lobbyId);
     if (!lobby) return { ok: false, error: 'Лобби не найдено' };
+    if (lobby.started) return { ok: false, error: 'Партия уже начинается' };
     const host = lobby.members.get(uid);
     if (!host?.host && !lobby.isAuto) return { ok: false, error: 'Только хост может начать игру' };
     if (lobby.members.size !== MAX_SLOTS) return { ok: false, error: 'Нужно 4 игрока' };
 
-    // Багхаус — только для людей: боты не умеют играть с карманами и парной координацией
-    if (lobby.mode === 'bughouse' && [...lobby.members.values()].some((m) => m.isBot)) {
-      return { ok: false, error: 'В багхаусе играют только люди (4/4). Уберите ботов со стола' };
-    }
 
     for (const m of lobby.members.values()) {
       if (!m.ready) return { ok: false, error: 'Не все готовы' };
@@ -772,7 +785,10 @@ export class LobbiesManager {
     let team1: LobbyMember[];
     let team2: LobbyMember[];
 
-    if (lobby.teamMode === 'manual') {
+    if (lobby.rematchTeams && lobby.rematchTeams.flat().every(id => lobby.members.has(id))) {
+      team1 = lobby.rematchTeams[0].map(id => lobby.members.get(id)!);
+      team2 = lobby.rematchTeams[1].map(id => lobby.members.get(id)!);
+    } else if (lobby.teamMode === 'manual') {
       const chosenT1 = membersList.filter((m) => m.teamChoice === 1);
       const chosenT2 = membersList.filter((m) => m.teamChoice === 2);
       const unassigned = membersList.filter((m) => !m.teamChoice);
@@ -813,7 +829,9 @@ export class LobbiesManager {
       }
     }
 
-    const gameId = await this.games!.createGame({
+    lobby.started = true;
+    let gameId: number;
+    try { gameId = await this.games!.createGame({
       mode: lobby.mode,
       timeControl: lobby.timeControl,
       team1: team1.map((m) => ({
@@ -830,9 +848,12 @@ export class LobbiesManager {
         isBot: m.isBot,
         botLevel: m.isBot ? eloToLevel(m.rating) : m.botLevel,
       })),
-    });
-
-    lobby.started = true;
+    }); } catch (error) {
+      lobby.started = false;
+      console.error('[lobby] Could not start game:', error);
+      this.broadcastState(lobby);
+      return { ok: false, error: 'Не удалось начать партию. Попробуйте ещё раз' };
+    }
     const gameRoom = this.games!.gameRoom(gameId);
     this.io?.in(this.room(lobbyId)).socketsJoin(gameRoom);
     const activeGame = this.games!.getActive(gameId);
@@ -856,7 +877,7 @@ export class LobbiesManager {
 
   async rematch(
     callerUid: number,
-    players: { uid: number; username: string; rating: number; isBot?: boolean; botLevel?: number | null }[],
+    players: { uid: number; username: string; rating: number; isBot?: boolean; botLevel?: number | null; team?: number; seat?: number }[],
     opts: { gameId: number; mode: GameMode; timeControl: TimeControl; teamMode?: TeamMode },
   ): Promise<{ lobbyId: string; code: string } | null> {
     const me = players.find((p) => p.uid === callerUid);
@@ -904,6 +925,9 @@ export class LobbiesManager {
     );
 
     // Автоматически переносим ботов из предыдущей игры
+    if (players.every(p => p.team === 1 || p.team === 2)) {
+      lobby.rematchTeams = [1, 2].map(team => players.filter(p => p.team === team).sort((a, b) => (a.seat ?? 0) - (b.seat ?? 0)).map(p => p.uid)) as [number[], number[]];
+    }
     for (const p of players) {
       if (p.uid !== me.uid && p.isBot) {
         lobby.members.set(p.uid, {
@@ -920,6 +944,7 @@ export class LobbiesManager {
     }
 
     this.lobbies.set(id, lobby);
+    if (players.filter(p => !p.isBot).length === 1) this.resetAutoCountdown(lobby);
     this.broadcastList();
     return { lobbyId: id, code };
   }

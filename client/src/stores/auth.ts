@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import type { PublicUser } from 'shared';
 import { api } from '../api/rest';
+import { trackGoal } from '../utils/analytics';
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -24,6 +25,7 @@ export const useAuthStore = defineStore('auth', {
     async register(username: string, password: string) {
       const res = await api.post<{ user: PublicUser }>('/api/auth/register', { username, password });
       this.user = res.user;
+      trackGoal('registration_completed');
     },
     async logout() {
       try {

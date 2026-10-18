@@ -26,7 +26,7 @@ const i18n = useI18n();
       </div>
 
       <div class="footer-tech-badges">
-        <span class="badge tiny mono">Stockfish 18 WASM</span>
+        <span class="badge tiny mono">Stockfish · Fairy-Stockfish</span>
         <span class="badge tiny mono">WebSocket Realtime</span>
         <span class="badge tiny mono">Elo Rating</span>
       </div>

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Chess, type Square } from 'chess.js';
-import type { ChatMessage, GameParticipantInfo, GameState, PieceType } from 'shared';
+import type { ChatMessage, GameParticipantInfo, GameState, PieceType, DropPieceType } from 'shared';
 import { detectOpening, getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
 import { getSocket, onSocketResync } from '../api/socket';
 import { useAuthStore } from '../stores/auth';
@@ -25,6 +25,7 @@ import GameReplayModal from '../components/GameReplayModal.vue';
 import BotHoverCard from '../components/BotHoverCard.vue';
 import { usePageSeo } from '../composables/useSeo';
 import { useI18n } from '../stores/i18n';
+import { trackGoal } from '../utils/analytics';
 
 const route = useRoute();
 const router = useRouter();
@@ -100,13 +101,58 @@ const isParticipant = computed(() => state.value?.participants.some((p) => p.use
 const myParticipant = computed(() => state.value?.participants.find((p) => p.userId === myId.value) ?? null);
 
 const isPlaying = computed(() => isParticipant.value && state.value?.status === 'active');
+const pauseBusy = ref(false);
+async function toggleGamePause(): Promise<void> {
+  if (!state.value?.botPacing || pauseBusy.value) return;
+  pauseBusy.value = true;
+  socket.timeout(5000).emit('game:set-paused', { gameId, paused: !state.value.botPacing.paused }, (err, ack) => {
+    pauseBusy.value = false;
+    if (err || !ack?.ok) error.value = ack?.error ?? (i18n.locale === 'en' ? 'Unable to change pause' : 'Не удалось изменить паузу');
+  });
+}
+function boardStatus(board: 0 | 1): string {
+  const st = state.value;
+  if (!st || st.status !== 'active') return '';
+  const en = i18n.locale === 'en';
+  if (st.botPacing?.paused) return en ? 'Paused' : 'Партия на паузе';
+  if (st.botPacing?.controlledBoard === board && st.botPacing.waiting) return en ? 'Waiting for a move on your board' : 'Ожидает хода на вашей доске';
+  if (myTurnOn(board)) return en ? 'Your turn' : 'Ваш ход';
+  const player = st.participants.find(p => p.userId === st.turnUserIds[board]);
+  return player?.isBot ? (en ? 'Bot is thinking' : 'Бот думает') : (en ? 'Player to move' : 'Ход игрока');
+}
 const isViewing = computed(() => !isPlaying.value);
 
 const board0Fen = computed(() => fenOf(0));
 const recognizedOpening = computed(() => detectOpening(movesSanHistory.value));
 const currentAnalysis = computed(() => analyzePosition(board0Fen.value));
 
-const selectedDrop = ref<PieceType | null>(null);
+const selectedDrop = ref<DropPieceType | null>(null);
+const partnerExpanded = ref(false);
+const boardRefs: Record<number, InstanceType<typeof ChessBoard> | null> = {};
+function setBughouseBoard(board: number, el: unknown): void { boardRefs[board] = el as InstanceType<typeof ChessBoard> | null; }
+async function dragPocket(board: 0 | 1, payload: { piece: DropPieceType; event: MouseEvent | TouchEvent }): Promise<void> {
+  if (!myTurnOn(board)) return;
+  selectedDrop.value = payload.piece;
+  await nextTick();
+  boardRefs[board]?.dragPocketPiece(payload.piece, myParticipant.value!.color, payload.event);
+}
+function viewedColor(board: 0 | 1): 'w' | 'b' { return orientationOf(board) === 'white' ? 'w' : 'b'; }
+function otherColor(color: 'w' | 'b'): 'w' | 'b' { return color === 'w' ? 'b' : 'w'; }
+function readHint(key: string): boolean { try { return localStorage.getItem(key) === '1'; } catch { return false; } }
+const introSeen = ref(readHint('kaissa.bughouse.intro.v1'));
+const pocketSeen = ref(readHint('kaissa.bughouse.pocket.v1'));
+const pocketTip = ref(false);
+function dismissHint(kind: 'intro' | 'pocket'): void {
+  if (kind === 'intro') introSeen.value = true;
+  else { pocketSeen.value = true; pocketTip.value = false; }
+  try { localStorage.setItem(`kaissa.bughouse.${kind}.v1`, '1'); } catch {}
+}
+function cancelDrop(event: KeyboardEvent): void { if (event.key === 'Escape') selectedDrop.value = null; }
+watch(() => state.value, (st) => {
+  if (selectedDrop.value && (!st || !myTurnOn(myBoard.value ?? 0) || !pocketOfBoard(myBoard.value ?? 0, myParticipant.value?.color ?? 'w')?.[selectedDrop.value])) selectedDrop.value = null;
+  const pocket = st?.mode === 'bughouse' && myParticipant.value ? pocketOfBoard(myParticipant.value.boardIndex, myParticipant.value.color) : null;
+  if (pocket && !pocketSeen.value && Object.values(pocket).some(count => count > 0)) pocketTip.value = true;
+});
 const promoDialog = ref<{ board: 0 | 1; from: string; to: string } | null>(null);
 const showResult = ref(false);
 const showReplay = ref(false);
@@ -120,7 +166,7 @@ const myBoard = computed<0 | 1 | null>(() => {
 const boardsConfig = computed(() => {
   if (!state.value) return [];
   if (state.value.mode === 'bughouse') {
-    return [{ index: 0 as const }, { index: 1 as const }];
+    return myBoard.value === 1 ? [{ index: 1 as const }, { index: 0 as const }] : [{ index: 0 as const }, { index: 1 as const }];
   }
   return [{ index: 0 as const }];
 });
@@ -131,21 +177,22 @@ function fenOf(b: number): string {
 
 function orientationOf(b: 0 | 1): 'white' | 'black' {
   if (!state.value) return 'white';
-  if (isParticipant.value && myParticipant.value?.boardIndex === b && myParticipant.value.color === 'b') {
-    return 'black';
+  if (isParticipant.value && myParticipant.value) {
+    const color = myParticipant.value.boardIndex === b ? myParticipant.value.color : otherColor(myParticipant.value.color);
+    return color === 'b' ? 'black' : 'white';
   }
   return 'white';
 }
 
 function myTurnOn(b: 0 | 1): boolean {
-  if (!state.value || state.value.status !== 'active') return false;
+  if (!state.value || state.value.status !== 'active' || state.value.botPacing?.paused) return false;
   const idx = state.value.mode === 'bughouse' ? b : 0;
   const uid = state.value.turnUserIds[idx] ?? 0;
   return uid === myId.value;
 }
 
 function canPremoveOn(b: 0 | 1): boolean {
-  if (!state.value || state.value.status !== 'active') return false;
+  if (!state.value || state.value.status !== 'active' || state.value.botPacing?.paused) return false;
   if (!isParticipant.value) return false;
   const p = myParticipant.value;
   if (!p) return false;
@@ -211,6 +258,10 @@ function playerOfBoard(b: number, color: 'w' | 'b'): GameParticipantInfo | undef
   return state.value?.participants.find((x) => x.boardIndex === b && x.color === color);
 }
 
+function boardPlayerName(board: number, color: 'w' | 'b'): string {
+  const player = playerOfBoard(board, color);
+  return player ? displayName(player) : '—';
+}
 function pocketOfBoard(b: 0 | 1, color: 'w' | 'b') {
   if (!state.value || !state.value.pockets) return null;
   const p = state.value.participants.find((x) => x.boardIndex === b && x.color === color);
@@ -361,7 +412,7 @@ function choosePromotion(t: PieceType): void {
   sendMove(board, from, to, t);
 }
 
-function sendMove(b: 0 | 1, from: string, to: string, promotion?: PieceType, dropPiece?: PieceType): void {
+function sendMove(b: 0 | 1, from: string, to: string, promotion?: PieceType, dropPiece?: DropPieceType): void {
   socket.emit('game:move', { gameId, boardIndex: b, from, to, promotion, dropPiece }, (ack) => {
     if (!ack.ok) {
       error.value = ack.error ?? '';
@@ -371,7 +422,7 @@ function sendMove(b: 0 | 1, from: string, to: string, promotion?: PieceType, dro
   });
 }
 
-function onDrop(b: 0 | 1, payload: { piece: PieceType; to: string }): void {
+function onDrop(b: 0 | 1, payload: { piece: DropPieceType; to: string }): void {
   selectedDrop.value = null;
   sendMove(b, '-', payload.to, undefined, payload.piece);
 }
@@ -411,6 +462,7 @@ function requestWatch(retries: number = 3): void {
 }
 
 onMounted(() => {
+  document.addEventListener('keydown', cancelDrop);
   socket.on('game:state', (st) => {
     if (st.gameId !== gameId) return;
     clearTimeout(watchRetryTimer);
@@ -428,11 +480,16 @@ onMounted(() => {
 
   socket.on('game:move', (mv) => {
     if (mv.gameId !== gameId) return;
+    if (mv.userId === myId.value) {
+      const params = { mode: state.value?.mode ?? 'unknown', paced: Boolean(state.value?.botPacing) };
+      trackGoal('game_first_move', params, String(gameId));
+      if (mv.dropPiece) trackGoal('bughouse_first_drop', params, String(gameId));
+    }
     lastMoves.value = {
       ...lastMoves.value,
       [mv.boardIndex]: mv.dropPiece ? [mv.to, mv.to] : [mv.from, mv.to],
     };
-    selectedDrop.value = null;
+    if (mv.boardIndex === myBoard.value) selectedDrop.value = null;
 
     // Звуки ходов
     if (mv.dropPiece) {
@@ -468,6 +525,7 @@ onMounted(() => {
 
   socket.on('game:end', (payload) => {
     if (payload.gameId !== gameId) return;
+    if (isParticipant.value) trackGoal('game_finished', { mode: state.value?.mode ?? 'unknown', reason: payload.reason ?? 'unknown' }, String(gameId));
     if (state.value) {
       state.value.status = 'finished';
       state.value.result = payload.result;
@@ -529,6 +587,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  document.removeEventListener('keydown', cancelDrop);
   socket.emit('game:leave', gameId);
   clearTimeout(watchRetryTimer);
   offResync?.();
@@ -638,12 +697,23 @@ function resultHeadline(): string {
         <button v-if="isParticipant && state.status === 'active'" class="danger small" @click="resign">
           {{ i18n.t.game.resignBtn }}
         </button>
-        <button v-if="state.status !== 'active'" class="small brass" @click="analyzeOnLichess(0)">
+        <button v-if="state.status !== 'active' && state.mode === 'team'" class="small brass" @click="analyzeOnLichess(0)">
           <AppIcon name="external" :size="13" /> {{ i18n.t.game.lichessAnalysis }}
         </button>
       </div>
     </header>
 
+    <aside v-if="state.mode === 'bughouse' && isParticipant && state.status === 'active' && (!introSeen || pocketTip)" class="panel bughouse-help" aria-live="polite">
+      <div><strong>{{ pocketTip && introSeen ? i18n.t.bughouse.yourPocket : i18n.t.bughouse.helpTitle }}</strong>
+        <p>{{ pocketTip && introSeen ? i18n.t.bughouse.firstPocket : i18n.t.bughouse.helpBody }}</p></div>
+      <router-link to="/rules/bughouse" target="_blank">{{ i18n.t.bughouse.rules }}</router-link>
+      <button class="small" @click="dismissHint(pocketTip && introSeen ? 'pocket' : 'intro')">{{ i18n.t.bughouse.dismiss }}</button>
+    </aside>
+    <p v-if="state.botPacing && state.status === 'active'" class="pacing-explanation" role="status">
+      {{ state.botPacing.paused
+        ? (i18n.locale === 'en' ? 'Both boards are paused. Press Resume when ready.' : 'Обе доски на паузе. Нажмите «Продолжить», когда будете готовы.')
+        : (i18n.locale === 'en' ? 'The bots on the other board move in step with your board. Take your time.' : 'Боты на соседней доске ходят вслед за вашей доской. Можно спокойно подумать.') }}
+    </p>
     <!-- Основная сетка игры -->
     <div class="game-layout">
       <!-- Игровая зона (1 или 2 доски) -->
@@ -680,7 +750,7 @@ function resultHeadline(): string {
             </div>
 
             <!-- По центру: Таймер стороны -->
-            <div class="clock-display mono center" :class="{ running: state.clocksActive[0] === teamModeSides.top.color }">
+            <div v-if="state.timeControl.kind === 'clock'" class="clock-display mono center" :class="{ running: state.clocksActive[0] === teamModeSides.top.color }">
               {{ fmtClock(clockMs(0, teamModeSides.top.color)) }}
             </div>
 
@@ -758,7 +828,7 @@ function resultHeadline(): string {
             </div>
 
             <!-- По центру: Таймер стороны -->
-            <div class="clock-display mono center" :class="{ running: state.clocksActive[0] === teamModeSides.bottom.color }">
+            <div v-if="state.timeControl.kind === 'clock'" class="clock-display mono center" :class="{ running: state.clocksActive[0] === teamModeSides.bottom.color }">
               {{ fmtClock(clockMs(0, teamModeSides.bottom.color)) }}
             </div>
 
@@ -791,73 +861,42 @@ function resultHeadline(): string {
           </div>
         </div>
 
-        <!-- ================= РЕЖИМ БАГХАУС (ДВЕ ДОСКИ) ================= -->
-        <div
-          v-else
-          v-for="bc in boardsConfig"
-          :key="bc.index"
-          class="bughouse-board-col"
-          :class="{ 'my-board': isParticipant && myBoard === bc.index }"
-        >
+        <!-- Bughouse: own board first; partner sees their own colour below. -->
+        <div v-else v-for="bc in boardsConfig" :key="bc.index" class="bughouse-board-col"
+          :class="{ 'my-board': isParticipant && myBoard === bc.index, 'partner-board': isParticipant && myBoard !== bc.index, 'partner-collapsed': !partnerExpanded }">
           <div class="board-top-info">
-            <span class="board-number-badge mono">Доска {{ bc.index + 1 }}</span>
-            <span v-if="isParticipant && myBoard === bc.index" class="badge on">Ваша доска</span>
-            <span class="bughouse-board-players dim small">
-              {{ playerOfBoard(bc.index, 'w')?.username ?? 'Белые' }} (Б) vs {{ playerOfBoard(bc.index, 'b')?.username ?? 'Чёрные' }} (Ч)
-            </span>
+            <strong>{{ isParticipant ? (myBoard === bc.index ? i18n.t.bughouse.yourBoard : i18n.t.bughouse.partnerBoard) : `${i18n.t.bughouse.board} ${bc.index + 1}` }}</strong>
+            <span v-if="state.status === 'active'" class="badge board-status" :class="{ on: myTurnOn(bc.index) }" role="status">{{ boardStatus(bc.index) }}</span>
+            <button v-if="myBoard === bc.index && state.status === 'active' && state.botPacing?.pauseAllowed" class="small" :disabled="pauseBusy" @click="toggleGamePause">{{ state.botPacing.paused ? (i18n.locale === 'en' ? 'Resume' : 'Продолжить') : (i18n.locale === 'en' ? 'Pause' : 'Пауза') }}</button>
+            <button v-if="isParticipant && myBoard !== bc.index" class="small ghost partner-toggle" :aria-expanded="partnerExpanded" @click="partnerExpanded = !partnerExpanded">{{ partnerExpanded ? i18n.t.bughouse.collapse : i18n.t.bughouse.expand }}</button>
           </div>
-
-          <!-- Верхний карман соперника -->
-          <PocketBar
-            v-if="pocketOfBoard(bc.index, orientationOf(bc.index) === 'white' ? 'b' : 'w')"
-            :pocket="pocketOfBoard(bc.index, orientationOf(bc.index) === 'white' ? 'b' : 'w')!"
-            :color="orientationOf(bc.index) === 'white' ? 'b' : 'w'"
-            :interactive="false"
-            :selected="null"
-          />
-
-          <!-- Доска -->
+          <div class="bughouse-seat" :class="{ 'seat-active': state.status === 'active' && !state.botPacing?.paused && state.turns[bc.index] === otherColor(viewedColor(bc.index)) }">
+            <span>{{ boardPlayerName(bc.index, otherColor(viewedColor(bc.index))) }}</span>
+            <strong v-if="state.timeControl.kind === 'clock'" class="mono">{{ fmtClock(clockMs(bc.index, otherColor(viewedColor(bc.index)) )) }}</strong>
+          </div>
+          <span class="pocket-label dim">{{ i18n.t.bughouse.opponentPocket }}</span>
+          <PocketBar v-if="pocketOfBoard(bc.index, otherColor(viewedColor(bc.index)))"
+            :pocket="pocketOfBoard(bc.index, otherColor(viewedColor(bc.index)))!" :color="otherColor(viewedColor(bc.index))" :interactive="false" :selected="null" :label="i18n.t.bughouse.opponentPocket" />
           <div class="board-frame">
-            <ChessBoard
-              :fen="fenOf(bc.index)"
-              :orientation="orientationOf(bc.index)"
-              :movable-color="movableOn(bc.index)"
-              :can-premove="canPremoveOn(bc.index)"
-              :dests="destsByBoard[bc.index]"
-              :check-square="checkByBoard[bc.index]"
-              :last-move="lastMoveOf(bc.index)"
+            <ChessBoard :ref="(el) => setBughouseBoard(bc.index, el)" :fen="fenOf(bc.index)" :orientation="orientationOf(bc.index)"
+              :movable-color="movableOn(bc.index)" :can-premove="canPremoveOn(bc.index)" :dests="destsByBoard[bc.index]"
+              :check-square="checkByBoard[bc.index]" :last-move="lastMoveOf(bc.index)"
               :drop-piece="myTurnOn(bc.index) ? selectedDrop : null"
-              :coordinates="true"
-              @move="onMove(bc.index, $event)"
-              @drop="onDrop(bc.index, $event)"
-              @premove-set="playMoveSound"
-            />
+              :drop-dests="myTurnOn(bc.index) && selectedDrop ? state.legalDrops?.[bc.index]?.[selectedDrop] ?? [] : []"
+              :coordinates="true" @move="onMove(bc.index, $event)" @drop="onDrop(bc.index, $event)"
+              @cancel-drop="selectedDrop = null" @premove-set="playMoveSound" />
           </div>
-
-          <!-- Нижний карман игрока (интерактивен, если мой ход) -->
-          <PocketBar
-            v-if="pocketOfBoard(bc.index, orientationOf(bc.index) === 'white' ? 'w' : 'b')"
-            :pocket="pocketOfBoard(bc.index, orientationOf(bc.index) === 'white' ? 'w' : 'b')!"
-            :color="orientationOf(bc.index) === 'white' ? 'w' : 'b'"
-            :interactive="myTurnOn(bc.index)"
-            :selected="selectedDrop"
-            @select="selectedDrop = $event"
-          />
-
-          <!-- Часы игроков этой доски -->
-          <div class="bughouse-clocks-bar">
-            <div class="b-clock-side">
-              <span class="dim">Белые:</span>
-              <span class="mono" :class="{ 'clock-active': state.clocksActive[bc.index] === 'w' }">
-                {{ fmtClock(clockMs(bc.index, 'w')) }}
-              </span>
-            </div>
-            <div class="b-clock-side">
-              <span class="dim">Черные:</span>
-              <span class="mono" :class="{ 'clock-active': state.clocksActive[bc.index] === 'b' }">
-                {{ fmtClock(clockMs(bc.index, 'b')) }}
-              </span>
-            </div>
+          <span class="pocket-label dim">{{ isParticipant ? (myBoard === bc.index ? i18n.t.bughouse.yourPocket : i18n.t.bughouse.partnerPocket) : i18n.t.bughouse.yourPocket }}</span>
+          <PocketBar v-if="pocketOfBoard(bc.index, viewedColor(bc.index))"
+            :pocket="pocketOfBoard(bc.index, viewedColor(bc.index))!" :color="viewedColor(bc.index)"
+            :interactive="myTurnOn(bc.index)" :selected="myBoard === bc.index ? selectedDrop : null" :label="myBoard === bc.index ? i18n.t.bughouse.yourPocket : i18n.t.bughouse.partnerPocket"
+            @select="selectedDrop = $event" @drag="dragPocket(bc.index, $event)" />
+          <div v-if="myBoard === bc.index && selectedDrop" class="drop-hint" role="status">
+            <span>{{ i18n.t.bughouse.dropHint }}</span><button class="small ghost" @click="selectedDrop = null">{{ i18n.t.bughouse.cancel }}</button>
+          </div>
+          <div class="bughouse-seat" :class="{ 'seat-active': state.status === 'active' && !state.botPacing?.paused && state.turns[bc.index] === viewedColor(bc.index) }">
+            <span>{{ boardPlayerName(bc.index, viewedColor(bc.index)) }}</span>
+            <strong v-if="state.timeControl.kind === 'clock'" class="mono">{{ fmtClock(clockMs(bc.index, viewedColor(bc.index))) }}</strong>
           </div>
         </div>
       </section>
@@ -896,7 +935,9 @@ function resultHeadline(): string {
 
             <div v-else class="queue-bughouse-hint">
               <p class="small-hint dim">
-                Обе доски играют одновременно. Кликните по фигуре в кармане и затем по пустой клетке для дропа.
+                {{ state.botPacing
+                  ? (i18n.locale === 'en' ? 'The other board follows your moves. Select a pocket piece, then a highlighted square.' : 'Соседняя доска следует за вашими ходами. Выберите фигуру в кармане, затем подсвеченное поле.')
+                  : (i18n.locale === 'en' ? 'Both boards play simultaneously. Select a pocket piece, then a highlighted square.' : 'Обе доски играют одновременно. Выберите фигуру в кармане, затем подсвеченное поле.') }}
               </p>
             </div>
 
@@ -1164,7 +1205,7 @@ function resultHeadline(): string {
         <div class="modal-body">
           <div class="headline-box">
             <h3>{{ resultHeadline() }}</h3>
-            <p v-if="!isParticipant" class="dim next-game-hint">{{ i18n.locale === 'en' ? 'Next auto-game starts automatically…' : 'Следующая автопартия начнётся автоматически…' }}</p>
+            <p v-if="gameId < 0 && !isParticipant" class="dim next-game-hint">{{ i18n.locale === 'en' ? 'Next auto-game starts automatically…' : 'Следующая автопартия начнётся автоматически…' }}</p>
           </div>
 
           <!-- Таблица изменений рейтинга -->
@@ -1208,7 +1249,7 @@ function resultHeadline(): string {
             <div class="analysis-text">
               <h4>{{ i18n.locale === 'en' ? 'Game Analysis' : 'Анализ партии' }}</h4>
               <p class="dim small-hint">
-                {{ i18n.locale === 'en' ? 'Review the game in player, download PGN or open Stockfish analysis on Lichess.' : 'Пересмотрите партию в плеере, скачайте PGN или откройте разбор в движке на Lichess.' }}
+                {{ state.mode === 'bughouse' ? i18n.t.bughouse.replayHint : (i18n.locale === 'en' ? 'Review the game, download PGN or open Lichess analysis.' : 'Пересмотрите партию, скачайте PGN или откройте анализ на Lichess.') }}
               </p>
             </div>
             <div class="analysis-buttons">
@@ -1219,20 +1260,15 @@ function resultHeadline(): string {
                 <AppIcon name="download" :size="15" /> {{ i18n.t.game.downloadPgn }}
               </a>
               <button
+                v-if="state.mode === 'team'"
                 class="brass"
                 :disabled="lichessBusy"
                 @click="analyzeOnLichess(0)"
               >
                 <AppIcon name="external" :size="14" />
-                {{ lichessBusy ? (i18n.locale === 'en' ? 'Opening…' : 'Открываем…') : (state.mode === 'bughouse' ? 'Lichess · Board 1' : i18n.t.game.lichessAnalysis) }}
+                {{ lichessBusy ? (i18n.locale === 'en' ? 'Opening…' : 'Открываем…') : i18n.t.game.lichessAnalysis }}
               </button>
-              <button
-                v-if="state.mode === 'bughouse'"
-                class="small ghost"
-                @click="analyzeOnLichess(1)"
-              >
-                <AppIcon name="external" :size="13" /> Lichess · {{ i18n.locale === 'en' ? 'Board 2' : 'доска 2' }}
-              </button>
+
             </div>
           </div>
         </div>
@@ -1270,6 +1306,26 @@ function resultHeadline(): string {
 </template>
 
 <style scoped>
+.pacing-explanation { margin: 0 0 12px; color: var(--text-muted, #959595); font-size: 0.9rem; }
+.board-status { white-space: normal; text-align: center; font-size: 0.75rem; max-width: 220px; }
+.bughouse-help { display: flex; align-items: center; gap: 16px; padding: 14px 18px; margin: 12px 0; }
+.bughouse-help p { margin: 4px 0 0; font-size: 14px; }
+.bughouse-help a, .bughouse-help button { flex-shrink: 0; }
+.bughouse-seat { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 36px; padding: 5px 10px; background: var(--surface-2); border-radius: var(--r-s); }
+.bughouse-seat span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bughouse-seat strong { font-size: 21px; }
+.bughouse-seat.seat-active { background: var(--accent-soft); box-shadow: inset 3px 0 var(--accent); }
+.pocket-label { font-size: 12px; padding: 0 5px; }
+.drop-hint { font-size: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.partner-toggle { display: none; }
+@media (max-width: 900px) {
+  .partner-toggle { display: inline-flex; }
+  .partner-collapsed.partner-board .board-frame { max-width: 190px; }
+  .partner-collapsed.partner-board { opacity: .92; }
+  .bughouse-help { flex-wrap: wrap; gap: 8px; }
+  .bughouse-help > div { flex-basis: 100%; }
+}
+
 .game-loading-wrap {
   display: flex;
   justify-content: center;
@@ -1373,7 +1429,8 @@ function resultHeadline(): string {
   width: 100%;
 }
 @media (max-width: 1024px) {
-  .game-layout {
+  .game-layout,
+  .game-page.bughouse .game-layout {
     grid-template-columns: 1fr;
   }
 }

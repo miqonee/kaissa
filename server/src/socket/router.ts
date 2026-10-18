@@ -1,6 +1,8 @@
 import type { Server, Socket } from 'socket.io';
 import type { Ack, ClientToServerEvents, ServerToClientEvents } from 'shared';
 import { Chess } from 'chess.js';
+import { BughouseGame } from 'shared/bughouse';
+import type { Pocket, DropPieceType, PieceType } from 'shared';
 import { gamesManager, lobbies } from '../state.js';
 import { presence } from './presence.js';
 import { socketAuth } from './authSocket.js';
@@ -150,6 +152,14 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
 
     // ---------- GAME ----------
 
+    socket.on('game:set-paused', async (data, cb) => {
+      if (!ctx || !Number.isInteger(data?.gameId) || typeof data?.paused !== 'boolean') {
+        cb?.({ ok: false, error: 'Некорректный запрос' });
+        return;
+      }
+      cb?.(await gamesManager.setPaused(data.gameId, ctx.uid, data.paused));
+    });
+
     socket.on('game:move', async (data, cb) => {
       if (!ctx) {
         cb({ ok: false, error: 'Требуется авторизация' });
@@ -215,18 +225,32 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
             moves = [];
           }
         }
+        let pockets: Pocket[] | null = null;
+        if (dbGame.mode === 'bughouse' && (dbGame.rulesVersion ?? 0) >= 2) {
+          try {
+            const replay = new BughouseGame();
+            for (const move of dbGame.moves.slice().sort((a, b) => a.ply - b.ply)) {
+              const board = move.boardIndex as 0 | 1;
+              replay.apply(move.dropPiece ? { board, to: move.to, piece: move.dropPiece as DropPieceType } : { board, from: move.from, to: move.to, ...(move.promotion ? { promotion: move.promotion as PieceType } : {}) });
+            }
+            pockets = dbGame.participants.map(p => replay.pocketOf(p.boardIndex as 0 | 1, p.color as 'w' | 'b'));
+          } catch { /* An incomplete old record still opens in the replay player. */ }
+        }
         socket.emit('game:state', {
           gameId: dbGame.id,
+          rulesVersion: dbGame.rulesVersion,
           mode: dbGame.mode as any,
           timeControl: { kind: dbGame.noClock ? 'none' : 'clock', baseMin: dbGame.baseMin, incSec: dbGame.incSec },
           fens: dbGame.mode === 'bughouse' ? [lastFen0, lastFen1] : [lastFen0],
-          turns: ['w'],
-          clocks: [[0, 0]],
-          clocksActive: [null],
-          turnUserIds: [0],
+          turns: dbGame.mode === 'bughouse' ? [lastFen0.split(' ')[1] as 'w' | 'b', lastFen1.split(' ')[1] as 'w' | 'b'] : [lastFen0.split(' ')[1] as 'w' | 'b'],
+          clocks: dbGame.mode === 'bughouse' ? [[0, 0], [0, 0]] : [[0, 0]],
+          clocksActive: dbGame.mode === 'bughouse' ? [null, null] : [null],
+          turnUserIds: dbGame.mode === 'bughouse' ? [0, 0] : [0],
           participants: dbGame.participants.map((p: any) => ({
             userId: p.userId,
             username: p.user.username,
+            isBot: p.user.isBot,
+            botLevel: p.user.botLevel,
             team: p.team as any,
             color: p.color as any,
             boardIndex: p.boardIndex as any,
@@ -234,7 +258,7 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
             ratingBefore: p.ratingBefore,
             ratingAfter: p.ratingAfter,
           })),
-          pockets: null,
+          pockets,
           status: dbGame.status as any,
           result: dbGame.result as any,
           reason: dbGame.reason as any,
@@ -268,6 +292,9 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
       if (!ctx) return;
       presence.onDisconnect(ctx.uid, socket.id);
       if (presence.isOnline(ctx.uid)) return; // осталась другая вкладка
+
+      const activeId = gamesManager.activeGameOf(ctx.uid);
+      if (activeId !== null) gamesManager.pauseForDisconnect(activeId, ctx.uid);
 
       cancelGrace(ctx.uid);
       const timer = setTimeout(() => {

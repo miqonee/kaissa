@@ -1,5 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Lobby, LobbiesManager } from '../src/lobby/lobbies.js';
+import { prisma } from '../src/prisma.js';
+afterEach(() => { vi.restoreAllMocks(); });
 
 describe('Auto Lobby and Team Modes', () => {
   it('creates auto lobby with correct attributes', () => {
@@ -224,7 +226,7 @@ describe('Auto Lobby and Team Modes', () => {
     expect(botHigh.rating).toBeGreaterThan(botLow.rating);
   });
 
-  it('rejects addBot in bughouse lobby (bots disabled)', async () => {
+  it('allows adding a bot in a bughouse lobby', async () => {
     const mgr = new LobbiesManager();
     const lobby = new Lobby(
       {
@@ -240,12 +242,14 @@ describe('Auto Lobby and Team Modes', () => {
     );
     (mgr as any).lobbies.set(lobby.id, lobby);
 
+    vi.spyOn(prisma.user, 'findMany').mockResolvedValue([{ id: 101, username: 'bot_tal', isBot: true }] as any);
     const res = await mgr.addBot(lobby.id, 1);
-    expect(res.ok).toBe(false);
-    expect(lobby.members.size).toBe(1);
+    expect(res.ok).toBe(true);
+    expect(lobby.members.size).toBe(2);
+    expect([...lobby.members.values()].some(m => m.isBot)).toBe(true);
   });
 
-  it('rejects start of bughouse lobby with bots in lineup', async () => {
+  it('starts a bughouse lobby with humans and bots', async () => {
     const mgr = new LobbiesManager();
     const lobby = new Lobby(
       {
@@ -264,8 +268,11 @@ describe('Auto Lobby and Team Modes', () => {
     lobby.members.set(4, { uid: 4, username: 'bot_x', rating: 1200, ready: true, host: false, joinedAt: Date.now(), isBot: true, botLevel: 4 });
     (mgr as any).lobbies.set(lobby.id, lobby);
 
+    const createGame = vi.fn().mockResolvedValue(123);
+    (mgr as any).games = { createGame, gameRoom: () => 'game:123', getActive: () => undefined };
     const res = await mgr.start(lobby.id, 1);
-    expect(res.ok).toBe(false);
+    expect(res).toEqual({ ok: true, gameId: 123 });
+    expect(createGame.mock.calls[0][0].mode).toBe('bughouse');
   });
 
   it('allows human to change time control in auto lobby', () => {
@@ -454,6 +461,7 @@ describe('Auto Lobby and Team Modes', () => {
       stalledAuto.createdAt = Date.now() - 25 * 60 * 1000;
       (mgr as any).lobbies.set(stalledAuto.id, stalledAuto);
 
+      vi.spyOn(mgr, 'ensureAutoLobby').mockResolvedValue();
       const dropped = mgr.cleanupStaleLobbies();
       expect(dropped).toContain('STALLED_AUTO');
       expect((mgr as any).lobbies.has('STALLED_AUTO')).toBe(false);

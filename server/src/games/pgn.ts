@@ -1,13 +1,15 @@
 import { Chess, type Square } from 'chess.js';
+import { BughouseGame } from 'shared/bughouse';
+import type { DropPieceType } from 'shared';
 import type { GameMode } from 'shared';
 
 // ============================================================
 // Экспорт партий в PGN.
 //
 // team-режим  → обычный PGN (открывается в lichess «как есть»).
-// bughouse    → две партии в одном файле, вариант Crazyhouse:
-//               дропы записываются как P@h6 — lichess понимает такую
-//               нотацию для crazyhouse-анализа каждой доски отдельно.
+// bughouse    → запись обеих досок с Variant "Bughouse".
+//               Внешние поступления фигур требуют встроенного плеера;
+//               этот файл не предназначен для Crazyhouse-импорта Lichess.
 // ============================================================
 
 export interface PgnMove {
@@ -21,6 +23,7 @@ export interface PgnMove {
 
 export interface PgnGame {
   id: number;
+  rulesVersion?: number | null;
   mode: GameMode;
   result: string;
   reason: string | null;
@@ -89,8 +92,22 @@ const REASON_RU: Record<string, string> = {
 function boardPgn(g: PgnGame, boardIndex: number, moves: PgnMove[]): string {
   const chess = new Chess();
   const sanList: string[] = [];
+  const variantSans = new Map<number, string>();
+  if (g.mode === 'bughouse' && (g.rulesVersion ?? 0) >= 2) {
+    const bg = new BughouseGame();
+    for (const mv of moves.slice().sort((a, b) => a.ply - b.ply)) {
+      const board = mv.boardIndex as 0 | 1;
+      try {
+        let san = mv.dropPiece ? `${mv.dropPiece.toUpperCase()}@${mv.to}` : bg.boards[board].moves({ verbose: true }).find(m => m.from === mv.from && m.to === mv.to && (m.promotion ?? null) === mv.promotion)?.san.replace(/[+#]$/, '') ?? `${mv.from}-${mv.to}`;
+        bg.apply(mv.dropPiece ? { board, to: mv.to, piece: mv.dropPiece as DropPieceType } : { board, from: mv.from, to: mv.to, ...(mv.promotion ? { promotion: mv.promotion as 'q' } : {}) });
+        if (bg.isCheck(board)) san += bg.isBughouseCheckmate(board) ? '#' : '+';
+        variantSans.set(mv.ply, san);
+      } catch { variantSans.set(mv.ply, `{invalid move ${mv.from}-${mv.to}}`); }
+    }
+  }
 
   for (const mv of moves.filter((m) => m.boardIndex === boardIndex).sort((a, b) => a.ply - b.ply)) {
+    if (variantSans.has(mv.ply)) { sanList.push(variantSans.get(mv.ply)!); continue; }
     if (mv.dropPiece) {
       // Дроп: chess.js его не умеет — ставим фигуру руками, SAN пишем как P@h6
       const color = chess.turn();
@@ -130,7 +147,7 @@ function boardPgn(g: PgnGame, boardIndex: number, moves: PgnMove[]): string {
     tag('Result', result),
     tag('TimeControl', g.noClock ? '-' : `${g.baseMin * 60}+${g.incSec}`),
   ];
-  if (g.mode === 'bughouse') tags.push(tag('Variant', 'Crazyhouse'));
+  if (g.mode === 'bughouse') tags.push(tag('Variant', 'Bughouse'));
   if (g.reason) tags.push(tag('Termination', REASON_RU[g.reason] ?? g.reason));
 
   // Тело: 1. e4 e5 2. Nf3 ...

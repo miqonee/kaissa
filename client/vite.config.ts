@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import path from 'node:path';
+const apiTarget = process.env.API_PROXY_TARGET || 'http://localhost:4000';
 
 export default defineConfig({
   plugins: [
@@ -49,10 +50,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: 'http://localhost:4000', changeOrigin: true },
-      '/socket.io': { target: 'http://localhost:4000', ws: true },
-      '/sitemap.xml': { target: 'http://localhost:4000', changeOrigin: true },
-      '/robots.txt': { target: 'http://localhost:4000', changeOrigin: true },
+      '/api': { target: apiTarget, changeOrigin: true },
+      '/socket.io': { target: apiTarget, ws: true },
+      '/sitemap.xml': { target: apiTarget, changeOrigin: true },
+      '/robots.txt': { target: apiTarget, changeOrigin: true },
     },
   },
 });

@@ -2,6 +2,16 @@
 import type { TranslationSchema } from './types';
 
 export const en: TranslationSchema = {
+  resources: { title: 'Resources', bughouse: 'Bughouse rules', duo: '2v2 rules', repository: 'Source code on GitHub' },
+  bughouse: {
+    board: 'Board', yourBoard: 'Your board', partnerBoard: 'Partner’s board', yourPocket: 'Your pocket', opponentPocket: 'Opponent’s pocket',
+    partnerPocket: 'Partner’s pocket', yourTurn: 'Your turn', waiting: 'Opponent’s turn', expand: 'Expand', collapse: 'Collapse',
+    helpTitle: 'Two boards, one team', helpBody: 'Play on your board. Your captures go to your partner; their captures fill your pocket. On your turn, you can drop a pocket piece instead of making a normal move.',
+    firstPocket: 'Your partner sent a piece! Select it in your pocket and tap a highlighted square, or drag it onto the board.',
+    dismiss: 'Got it', rules: 'Rules', cancel: 'Cancel selection', dropHint: 'Choose a highlighted square or drag the piece. Esc cancels.',
+    replayHint: 'Review both boards in the player or download the record. Lichess imports do not support incoming pieces from another board.',
+    pieces: { p: 'Pawn', n: 'Knight', b: 'Bishop', r: 'Rook', q: 'Queen', k: 'King' },
+  },
   nav: {
     brand: 'Kaissa',
     lobbies: 'Lobbies',
@@ -34,7 +44,7 @@ export const en: TranslationSchema = {
     loadingTables: 'Loading tables…',
     noTables: 'No active games right now.',
     createFirstPrompt: 'Create a lobby and start the first battle!',
-    quickStartChip: 'Quick 3+0',
+    quickStartChip: 'Quick start',
     quickStartHint: 'Bots replaced by human',
     playersCount: 'players',
     sitAtTable: 'Sit at Table',
@@ -103,7 +113,7 @@ export const en: TranslationSchema = {
     middlegameStage: 'Middlegame',
     resignBtn: 'Resign',
     drawBtn: 'Draw',
-    rematchBtn: 'Rematch',
+    rematchBtn: 'Play again',
     backToLobby: 'Lobby',
     lichessAnalysis: 'Analysis on Lichess ↗',
     downloadPgn: 'Download PGN',

@@ -49,9 +49,9 @@ const lobbies = ref<LobbySummary[]>([]);
 const liveGames = ref<LiveGameInfo[]>([]);
 const loadingLobbies = ref(true);
 
-const autoLobby = computed(() => lobbies.value.find((l) => l.isAuto));
+const autoLobbies = computed(() => lobbies.value.filter((l) => l.isAuto).sort((a, b) => a.mode.localeCompare(b.mode)));
 const userLobbies = computed(() => lobbies.value.filter((l) => !l.isAuto));
-const autoLobbyHumanCount = computed(() => autoLobby.value?.players.filter((p) => !p.isBot).length ?? 0);
+const humanCount = (lobby: LobbySummary) => lobby.players.filter(p => !p.isBot).length;
 
 const sortedLiveGames = computed(() => {
   return liveGames.value.slice().sort((a, b) => {
@@ -156,7 +156,7 @@ function openCreateModal(): void {
   showCreateModal.value = true;
 }
 
-async function handleCreate(payload: { name: string; mode: GameMode; timeControl: TimeControl; isPrivate: boolean; teamMode?: TeamMode }) {
+async function handleCreate(payload: { name: string; mode: GameMode; timeControl: TimeControl; private: boolean; teamMode?: TeamMode }) {
   if (!auth.user) {
     router.push({ name: 'login', query: { redirect: '/' } });
     return;
@@ -213,8 +213,9 @@ function enterLobby(l: LobbySummary): void {
 
 function handleCtaAction(action: unknown): void {
   if (action === 'quick') {
-    if (autoLobby.value) {
-      enterLobby(autoLobby.value);
+    const target = autoLobbies.value.find(l => l.mode === (route.query.mode === 'bughouse' ? 'bughouse' : 'team'));
+    if (target) {
+      enterLobby(target);
     } else {
       openCreateModal();
     }
@@ -415,7 +416,8 @@ function lobbyRosterTitle(l: LobbySummary): string {
           <div v-else-if="lobbies.length" class="panel-body lobby-rows">
             <!-- Быстрый стол 2х2 (ультракомпактная карточка во главе) -->
             <article
-              v-if="autoLobby"
+              v-for="autoLobby in autoLobbies"
+              :key="autoLobby.id"
               class="lobby-card auto-lobby-card compact-card single-line-card"
               role="button"
               tabindex="0"
@@ -430,6 +432,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
                     {{ i18n.t.home.quickStartChip }}
                   </span>
                   <span class="badge">{{ modeLabel(autoLobby.mode) }}</span>
+                  <span class="badge mono">{{ timeControlLabel(autoLobby.timeControl) }}</span>
                   <span
                     class="badge auto-hint-chip"
                     :title="i18n.t.home.quickStartHint"
@@ -438,14 +441,14 @@ function lobbyRosterTitle(l: LobbySummary): string {
               </div>
 
               <div class="lobby-card-meta">
-                <span class="seats-indicator" :title="`${autoLobbyHumanCount} ${i18n.locale === 'en' ? 'humans' : 'чел.'}, ${4 - autoLobbyHumanCount} ${i18n.locale === 'en' ? 'bots' : 'ботов'}`">
+                <span class="seats-indicator" :title="`${humanCount(autoLobby)} ${i18n.locale === 'en' ? 'humans' : 'чел.'}, ${4 - humanCount(autoLobby)} ${i18n.locale === 'en' ? 'bots' : 'ботов'}`">
                   <span
                     v-for="s in 4"
                     :key="s"
                     class="seat-pip"
-                    :class="{ filled: s <= autoLobbyHumanCount, bot: s > autoLobbyHumanCount }"
+                    :class="{ filled: s <= humanCount(autoLobby), bot: s > humanCount(autoLobby) }"
                   ></span>
-                  <span class="seats mono">{{ autoLobbyHumanCount }}/4 {{ i18n.t.home.playersCount }}</span>
+                  <span class="seats mono">{{ humanCount(autoLobby) }}/4 {{ i18n.t.home.playersCount }}</span>
                 </span>
                 <button class="brass small" @click.stop="enterLobby(autoLobby)">
                   <AppIcon name="bolt" :size="13" /> {{ i18n.t.home.sitAtTable }}
@@ -498,6 +501,15 @@ function lobbyRosterTitle(l: LobbySummary): string {
       </section>
     </div>
 
+    <section class="panel home-resources" :aria-label="i18n.t.resources.title">
+      <h2>{{ i18n.t.resources.title }}</h2>
+      <nav>
+        <router-link to="/rules/bughouse">{{ i18n.t.resources.bughouse }}</router-link>
+        <router-link to="/rules/duo">{{ i18n.t.resources.duo }}</router-link>
+        <a href="https://github.com/miqonee/kaissa" target="_blank" rel="noopener noreferrer">{{ i18n.t.resources.repository }} ↗</a>
+      </nav>
+    </section>
+
     <!-- Модальное окно создания стола -->
     <CreateLobbyModal
       v-if="showCreateModal"
@@ -517,6 +529,9 @@ function lobbyRosterTitle(l: LobbySummary): string {
 </template>
 
 <style scoped>
+.home-resources { margin-top: 20px; padding: 18px; }
+.home-resources h2 { margin: 0 0 12px; font-size: 17px; }
+.home-resources nav { display: flex; flex-wrap: wrap; gap: 12px 24px; }
 .home {
   display: flex;
   flex-direction: column;

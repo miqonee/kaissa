@@ -14,6 +14,7 @@ export interface TimeControl {
 }
 
 export type PieceType = 'p' | 'n' | 'b' | 'r' | 'q' | 'k';
+export type DropPieceType = Exclude<PieceType, 'k'>;
 
 /** Карманы в багхаусе: 0 — пусто, иначе число фигур, доступных к дропу */
 export type Pocket = Record<PieceType, number>;
@@ -63,6 +64,7 @@ export interface LobbyPlayer {
 export type TeamMode = 'auto' | 'random' | 'manual';
 
 export interface LobbySummary {
+  rematchOf?: number | null;
   id: string;
   name: string;
   mode: GameMode;
@@ -105,6 +107,7 @@ export interface GameParticipantInfo {
 
 export interface GameSummary {
   id: number;
+  rulesVersion?: number | null;
   mode: GameMode;
   status: GameStatus;
   result: GameResult;
@@ -122,7 +125,7 @@ export interface MoveRecord {
   from: string;
   to: string;
   promotion?: PieceType;
-  dropPiece?: PieceType;
+  dropPiece?: DropPieceType;
   fenAfter: string;
   /** часы после хода: [белые, чёрные] в мс */
   clocksAfter: [number, number] | null;
@@ -144,6 +147,7 @@ export interface CreateLobbyPayload {
 
 // --- Клиент -> Сервер ---
 export type ClientToServerEvents = {
+  'game:set-paused': (data: { gameId: number; paused: boolean }, cb: (res: Ack<null>) => void) => void;
   // Лобби
   'lobby:join': (code: string, cb: (res: Ack<{ lobby: LobbySummary } | null>) => void) => void;
   'lobby:leave': () => void;
@@ -160,7 +164,7 @@ export type ClientToServerEvents = {
   'lobby:add-bot': (cb?: (res: Ack<null>) => void) => void;
 
   // Игра
-  'game:move': (data: { gameId: number; boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: PieceType }, cb: (res: Ack<null>) => void) => void;
+  'game:move': (data: { gameId: number; boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType }, cb: (res: Ack<null>) => void) => void;
   'game:resign': (gameId: number) => void;
   'game:chat': (gameId: number, text: string) => void;
 
@@ -184,7 +188,7 @@ export type ServerToClientEvents = {
 
   // Игра
   'game:state': (state: GameState) => void;
-  'game:move': (mv: { gameId: number; boardIndex: 0 | 1; ply: number; userId: number; from: string; to: string; promotion?: PieceType; dropPiece?: PieceType; clocksAfter: [number, number] | null }) => void;
+  'game:move': (mv: { gameId: number; boardIndex: 0 | 1; ply: number; userId: number; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType; clocksAfter: [number, number] | null }) => void;
   'game:clock': (payload: { gameId: number; clocks: [number, number][]; running: boolean }) => void;
   'game:end': (payload: { gameId: number; result: GameResult; reason: EndReason; participants: GameParticipantInfo[] }) => void;
   'game:chat': (msg: ChatMessage & { gameId: number }) => void;
@@ -221,7 +225,12 @@ export interface ChatMessage {
 // ---------- Игровое состояние (полная синхронизация) ----------
 
 export interface GameState {
+  /** Server-owned pacing for a clock-free bughouse board occupied by bots. */
+  botPacing?: { controlledBoard: 0 | 1; waiting: boolean; paused: boolean; pauseAllowed: boolean };
   gameId: number;
+  rulesVersion?: number | null;
+  /** Server-authoritative destinations for each board's side to move. */
+  legalDrops?: Partial<Record<DropPieceType, string[]>>[];
   mode: GameMode;
   status: GameStatus;
   result: GameResult;
@@ -356,10 +365,10 @@ export const MODE_INFO: ModeInfo[] = [
     short: 'Две доски. Сбитые фигуры переходят партнёру и ставятся на его доску.',
     rules: [
       'Играют две доски одновременно: партнёры по команде всегда разного цвета.',
-      'Сбитая фигура меняет цвет и попадает в «карман» партнёра.',
+      'Взятая фигура попадает в карман партнёра на другой доске.',
       'Вместо обычного хода можно поставить фигуру из кармана на любое пустое поле.',
       'Пешку нельзя ставить на первую и восьмую горизонтали.',
-      'Мат, сдача или флаг на любой из досок завершают весь матч.',
+      'Мат, пат, сдача или флаг на любой из досок завершают весь матч.',
       'Ничьих нет: партия всегда заканчивается результатом.',
     ],
   },

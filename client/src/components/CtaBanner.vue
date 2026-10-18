@@ -29,7 +29,7 @@ const displaySubtitle = computed(() => {
 });
 
 function play2x2(): void {
-  router.push({ path: '/', query: { action: 'quick' } });
+  router.push({ path: '/', query: { action: 'quick', mode: props.currentMode ?? 'team' } });
 }
 </script>
 
@@ -40,7 +40,7 @@ function play2x2(): void {
     <div class="cta-buttons">
       <button type="button" class="primary big" @click="play2x2">
         <AppIcon name="bolt" :size="16" />
-        {{ i18n.locale === 'en' ? 'Play 2v2 Match' : 'Сыграть партию 2х2' }}
+        {{ props.currentMode === 'bughouse' ? (i18n.locale === 'en' ? 'Play Bughouse' : 'Играть в багхаус') : (i18n.locale === 'en' ? 'Play 2v2 Match' : 'Сыграть партию 2×2') }}
       </button>
       <router-link to="/leaderboard" class="button ghost">
         <AppIcon name="crown" :size="14" />

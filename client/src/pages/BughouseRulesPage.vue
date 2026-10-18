@@ -93,6 +93,7 @@ usePageSeo({
             On Kaissa, standard international rules apply: <strong>checkmate by drop is completely legal</strong>. You can drop a knight, queen, or pawn directly in front of the enemy king to deliver check or inescapable checkmate.
           </p>
 
+          <p>Kaissa counts pieces already in the pocket. A legal defensive drop prevents mate. With no legal moves, checkmate or stalemate immediately loses the whole match; there is no automatic wait for a future piece. Fairy-Stockfish bots can calculate pocket drops.</p>
           <h3>4. Pawn Demotion Rule</h3>
           <p>
             When a pawn advances to the 8th rank and promotes to queen, rook, knight, or bishop, it functions with full piece power. However, if that promoted piece is subsequently captured by the opponent, it enters the partner's pocket <strong>demoted back to an ordinary pawn</strong>. This prevents excessive queen inflation!
@@ -249,6 +250,7 @@ usePageSeo({
             с объявлением шаха или неотразимого мата.
           </p>
 
+          <p>На Каиссе учитываются фигуры, уже находящиеся в кармане. Если закрыться дропом можно, мата нет. Если легальных ходов нет совсем, мат или пат сразу проигрывает весь матч; автоматического ожидания фигуры от напарника нет.</p>
           <h3>4. Правило превращения и «разжалования» пешек</h3>
           <p>
             Если пешка доходит до последней горизонтали и превращается в ферзя, ладью, коня или слона, на доске она действует с полной силой этой фигуры.
@@ -382,7 +384,7 @@ usePageSeo({
               </summary>
               <div class="faq-answer">
                 <p>
-                  Да, платформа Каисса оснащена интеллектуальными ботами Stockfish 18 WASM различного уровня силы.
+                  Да, платформа Каисса оснащена ботами Fairy-Stockfish WASM различного уровня силы, которые рассчитывают карманы и дропы.
                   Вы можете играть как в паре с ботом против людей, так и тренироваться с ИИ в любое удобное время.
                 </p>
               </div>

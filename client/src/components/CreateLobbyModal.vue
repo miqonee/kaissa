@@ -8,7 +8,7 @@ const i18n = useI18n();
 
 const emit = defineEmits<{
   (e: 'close'): void;
-  (e: 'create', payload: { name: string; mode: GameMode; timeControl: TimeControl; isPrivate: boolean; teamMode: TeamMode }): void;
+  (e: 'create', payload: { name: string; mode: GameMode; timeControl: TimeControl; private: boolean; teamMode: TeamMode }): void;
 }>();
 
 defineProps<{
@@ -30,13 +30,15 @@ function toggleRules(mode: GameMode) {
 }
 
 const tcPresets = computed<{ label: string; tc: TimeControl }[]>(() => [
+  { label: '3+0', tc: { kind: 'clock', baseMin: 3, incSec: 0 } },
   { label: i18n.t.createModal.tc3plus2, tc: { kind: 'clock', baseMin: 3, incSec: 2 } },
   { label: i18n.t.createModal.tc5plus0, tc: { kind: 'clock', baseMin: 5, incSec: 0 } },
   { label: i18n.t.createModal.tc5plus3, tc: { kind: 'clock', baseMin: 5, incSec: 3 } },
   { label: i18n.t.createModal.tc10plus5, tc: { kind: 'clock', baseMin: 10, incSec: 5 } },
   { label: i18n.t.createModal.tcNoClock, tc: { kind: 'none', baseMin: 0, incSec: 0 } },
 ]);
-const selectedTcIdx = ref(2); // 5+3 по умолчанию
+const modeTc = ref<Record<GameMode, number>>({ team: 0, bughouse: 5 });
+const selectedTcIdx = computed({ get: () => modeTc.value[selectedMode.value], set: value => { modeTc.value[selectedMode.value] = value; } });
 
 function submit() {
   const tc = tcPresets.value[selectedTcIdx.value].tc;
@@ -46,7 +48,7 @@ function submit() {
     name,
     mode: selectedMode.value,
     timeControl: tc,
-    isPrivate: isPrivate.value,
+    private: isPrivate.value,
     teamMode: selectedTeamMode.value,
   });
 }
@@ -101,7 +103,7 @@ function submit() {
               </button>
               <ul v-if="expandedRules[info.mode]" class="mode-rules">
                 <li v-for="(r, i) in info.rules" :key="i">{{ r }}</li>
-                <li v-if="info.mode === 'bughouse'">{{ i18n.locale === 'en' ? 'Humans only — bots disabled' : 'Только живые игроки — боты отключены' }}</li>
+                <li v-if="info.mode === 'bughouse'">{{ i18n.locale === 'en' ? 'Play with people or bots' : 'Играйте с людьми или ботами' }}</li>
               </ul>
             </div>
           </div>

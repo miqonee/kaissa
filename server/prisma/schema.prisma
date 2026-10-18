@@ -43,6 +43,7 @@ model RatingHistory {
 
 model Game {
   id             Int       @id @default(autoincrement())
+  rulesVersion   Int?
   mode           String    // 'team' | 'bughouse'
   status         String    @default("active") // active | finished | abandoned
   result         String    @default("*")     // '1-0' | '0-1' | '*'

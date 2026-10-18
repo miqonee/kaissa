@@ -2,6 +2,16 @@
 import type { TranslationSchema } from './types';
 
 export const ru: TranslationSchema = {
+  resources: { title: 'Ресурсы', bughouse: 'Правила багхауса', duo: 'Правила 2×2', repository: 'Код проекта на GitHub' },
+  bughouse: {
+    board: 'Доска', yourBoard: 'Ваша доска', partnerBoard: 'Доска напарника', yourPocket: 'Ваш карман', opponentPocket: 'Карман соперника',
+    partnerPocket: 'Карман напарника', yourTurn: 'Ваш ход', waiting: 'Ход соперника', expand: 'Увеличить', collapse: 'Уменьшить',
+    helpTitle: 'Две доски — одна команда', helpBody: 'Вы играете на своей доске. Взятые вами фигуры попадают напарнику, а его взятия пополняют ваш карман. В свой ход можно выставить фигуру из кармана вместо обычного хода.',
+    firstPocket: 'Пришла фигура от напарника! Выберите её в кармане и нажмите на подсвеченное поле или перетащите на доску.',
+    dismiss: 'Понятно', rules: 'Правила', cancel: 'Отменить выбор', dropHint: 'Выберите подсвеченное поле или перетащите фигуру. Esc — отмена.',
+    replayHint: 'Пересмотрите обе доски в плеере или скачайте запись. Поступления фигур со второй доски не поддерживаются импортом Lichess.',
+    pieces: { p: 'Пешка', n: 'Конь', b: 'Слон', r: 'Ладья', q: 'Ферзь', k: 'Король' },
+  },
   nav: {
     brand: 'Каисса',
     lobbies: 'Лобби',
@@ -34,7 +44,7 @@ export const ru: TranslationSchema = {
     loadingTables: 'Загрузка столов…',
     noTables: 'Сейчас партий нет.',
     createFirstPrompt: 'Создайте лобби и начните первую встречу!',
-    quickStartChip: 'Быстрый 3+0',
+    quickStartChip: 'Быстрый старт',
     quickStartHint: 'Боты замещаются людьми',
     playersCount: 'игроков',
     sitAtTable: 'Сесть за стол',
@@ -103,7 +113,7 @@ export const ru: TranslationSchema = {
     middlegameStage: 'Миттельшпиль',
     resignBtn: 'Сдаться',
     drawBtn: 'Ничья',
-    rematchBtn: 'Реванш',
+    rematchBtn: 'Ещё партия',
     backToLobby: 'В лобби',
     lichessAnalysis: 'Анализ на Lichess ↗',
     downloadPgn: 'Скачать PGN',

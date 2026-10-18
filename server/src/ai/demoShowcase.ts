@@ -1,5 +1,5 @@
 // server/src/ai/demoShowcase.ts
-// Фоновая демо-витрина партий ботов на главной странице (in-memory TV с ID 1 и 2)
+// Фоновая демо-витрина партий ботов на главной странице (in-memory TV с ID -1 и -2)
 import { eloToLevel, levelToElo } from 'shared';
 import { prisma } from '../prisma.js';
 import type { GamesManager } from '../game/manager.js';
@@ -43,7 +43,7 @@ export async function cleanupPureBotGames(): Promise<void> {
 export class DemoShowcase {
   private games: GamesManager | null = null;
   private currentDemoGameId: number | null = null;
-  private nextSlot: 1 | 2 = 1;
+  private nextSlot: -1 | -2 = -1;
   private checkInterval: NodeJS.Timeout | null = null;
   private running = false;
   private isTransitioning = false;
@@ -179,9 +179,9 @@ export class DemoShowcase {
       const team1 = Math.random() < 0.5 ? best.t1 : best.t2;
       const team2 = team1 === best.t1 ? best.t2 : best.t1;
 
-      // Ротируем между фиксированными GameID 1 и 2
-      const targetId: 1 | 2 = this.nextSlot;
-      this.nextSlot = targetId === 1 ? 2 : 1;
+      // Negative IDs cannot collide with persisted games.
+      const targetId: -1 | -2 = this.nextSlot;
+      this.nextSlot = targetId === -1 ? -2 : -1;
 
       const gameId = await this.games!.createGame({
         mode: 'team',

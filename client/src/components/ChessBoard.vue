@@ -3,7 +3,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Chessground } from '@lichess-org/chessground';
 import type { Api as CgApi, Color as CgColor, Key } from 'chessground-types';
 import { Chess } from 'chess.js';
-import type { PieceType } from 'shared';
+import type { PieceType, DropPieceType } from 'shared';
 
 const props = withDefaults(
   defineProps<{
@@ -21,7 +21,8 @@ const props = withDefaults(
     /** клетка короля под шахом */
     checkSquare?: string | null;
     /** выбранная в кармане фигура — клик по пустой клетке сделает дроп */
-    dropPiece?: PieceType | null;
+    dropPiece?: DropPieceType | null;
+    dropDests?: string[];
   }>(),
   {
     orientation: 'white',
@@ -33,14 +34,16 @@ const props = withDefaults(
     lastMove: null,
     checkSquare: null,
     dropPiece: null,
+    dropDests: () => [],
   },
 );
 
 const emit = defineEmits<{
   (e: 'move', payload: { from: string; to: string; premove?: boolean }): void;
-  (e: 'drop', payload: { piece: PieceType; to: string }): void;
+  (e: 'drop', payload: { piece: DropPieceType; to: string }): void;
   (e: 'premoveSet', payload: { from: string; to: string }): void;
   (e: 'premoveUnset'): void;
+  (e: 'cancelDrop'): void;
 }>();
 
 const el = ref<HTMLElement | null>(null);
@@ -66,8 +69,7 @@ function emptySquares(fen: string): Set<string> {
 
 function canDropOn(sq: string): boolean {
   if (!props.dropPiece) return false;
-  if (props.dropPiece === 'p' && (sq[1] === '1' || sq[1] === '8')) return false;
-  return emptySquares(props.fen).has(sq);
+  return props.dropDests.includes(sq) && emptySquares(props.fen).has(sq);
 }
 
 function destsMap(): Map<Key, Key[]> {
@@ -126,6 +128,10 @@ function config() {
       events: {
         after: (orig: Key, dest: Key, meta?: { premove?: boolean }) =>
           emit('move', { from: orig, to: dest, premove: !!meta?.premove }),
+        afterNewPiece: (_role: string, key: Key) => {
+          if (props.dropPiece && canDropOn(key)) emit('drop', { piece: props.dropPiece, to: key });
+          cg?.set({ fen: props.fen });
+        },
       },
     },
     premovable: {
@@ -158,7 +164,7 @@ function config() {
     // Плавное скольжение фигур: 200 мс — чётко читается ход и не затягивается
     animation: { enabled: !props.mini, duration: 200 },
     highlight: { lastMove: true, check: true },
-    drawable: { enabled: false, visible: false },
+    drawable: { enabled: false, visible: true },
   };
 }
 
@@ -206,9 +212,10 @@ watch(
 );
 
 watch(
-  () => [props.movableColor, props.canPremove, props.dests, props.dropPiece],
+  () => [props.movableColor, props.canPremove, props.dests, props.dropPiece, props.dropDests],
   () => {
     if (!cg) return;
+    cg.setAutoShapes(props.dropPiece ? props.dropDests.map(orig => ({ orig, brush: 'green' })) : []);
     const interactive = props.movableColor !== null;
     cg.set({
       movable: {
@@ -264,13 +271,18 @@ onBeforeUnmount(() => {
 
 function onRightClick(): void {
   cg?.cancelPremove();
+  emit('cancelDrop');
+}
+function dragPocketPiece(piece: PieceType, color: 'w' | 'b', event: MouseEvent | TouchEvent): void {
+  const roles = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' } as const;
+  cg?.dragNewPiece({ role: roles[piece], color: color === 'w' ? 'white' : 'black' }, event, true);
 }
 
 function cancelPremove(): void {
   cg?.cancelPremove();
 }
 
-defineExpose({ cancelPremove });
+defineExpose({ cancelPremove, dragPocketPiece });
 </script>
 
 <template>

@@ -273,19 +273,28 @@ function pocketOfBoard(b: 0 | 1, color: 'w' | 'b') {
 
 // ---------- Часы ----------
 const localClocks = ref<[number, number][]>([]);
+const nowTs = ref(Date.now());
 let ticker: number | undefined;
 let lastTickAt = Date.now();
+
+const firstMoveSec = computed(() => {
+  if (!state.value || state.value.status !== 'active' || state.value.moveNumber > 0) return null;
+  const elapsed = nowTs.value - (state.value.startedAt || nowTs.value);
+  return Math.max(0, Math.ceil((30_000 - elapsed) / 1000));
+});
 
 function rebuildLocalClocks(): void {
   if (!state.value) return;
   localClocks.value = state.value.clocks.map((c) => [c[0], c[1]] as [number, number]);
   lastTickAt = Date.now();
+  nowTs.value = lastTickAt;
 }
 
 watch(() => state.value?.clocks, rebuildLocalClocks, { deep: true });
 
 function tickClocks(): void {
   const now = Date.now();
+  nowTs.value = now;
   const elapsed = now - lastTickAt;
   lastTickAt = now;
 
@@ -663,7 +672,14 @@ function resultHeadline(): string {
   const s = state.value;
   const isEn = i18n.locale === 'en';
   const reason = getReasonText(s.reason);
-  if (s.status === 'abandoned') return isEn ? `Game abandoned (${reason || 'players left'})` : `Партия брошена (${reason || 'выход игроков'})`;
+  if (s.status === 'abandoned' || s.reason === 'abandoned') {
+    if (s.moveNumber === 0) {
+      return isEn
+        ? 'Match aborted: first move was not made (unrated)'
+        : 'Матч отменён: первый ход не был сделан (рейтинг сохранён)';
+    }
+    return isEn ? `Game abandoned (${reason || 'players left'})` : `Партия брошена (${reason || 'выход игроков'})`;
+  }
   if (s.result === '*' || s.result === '1/2-1/2') return isEn ? `Draw (${reason || 'by rules'})` : `Ничья (${reason || 'по правилам'})`;
   const winnerTeam = s.result === '1-0' ? 1 : (s.result === '0-1' ? 2 : null);
   if (!winnerTeam) return reason ? (isEn ? `Game over (${reason})` : `Партия завершена (${reason})`) : (isEn ? 'Game over' : 'Партия завершена');
@@ -690,6 +706,9 @@ function resultHeadline(): string {
         <span v-if="state.status === 'active'" class="badge on">{{ i18n.locale === 'en' ? 'Live' : 'В игре' }}</span>
         <span v-else class="badge">{{ state.result }}</span>
         <span v-if="!isParticipant" class="badge dim">{{ i18n.locale === 'en' ? 'Spectating' : 'Режим зрителя' }}</span>
+        <span v-if="state.status === 'active' && firstMoveSec !== null" class="badge first-move-chip" :class="{ urgent: firstMoveSec <= 10 }">
+          ⏱ {{ i18n.locale === 'en' ? `First move: ${firstMoveSec}s` : `Первый ход: ${firstMoveSec} с` }}
+        </span>
       </div>
 
       <div class="game-topbar-actions">
@@ -704,6 +723,15 @@ function resultHeadline(): string {
         </button>
       </div>
     </header>
+
+    <div v-if="state.status === 'active' && firstMoveSec !== null" class="first-move-banner panel">
+      <AppIcon name="clock" :size="16" />
+      <span>
+        {{ i18n.locale === 'en'
+          ? `30 seconds for the first move: ${firstMoveSec}s left before the game is cancelled.`
+          : `На первый ход даётся 30 секунд: осталось ${firstMoveSec} с до отмены партии без изменения рейтинга.` }}
+      </span>
+    </div>
 
     <aside v-if="state.mode === 'bughouse' && isParticipant && state.status === 'active' && (!introSeen || pocketTip)" class="panel bughouse-help" aria-live="polite">
       <div><strong>{{ pocketTip && introSeen ? i18n.t.bughouse.yourPocket : i18n.t.bughouse.helpTitle }}</strong>
@@ -1442,6 +1470,40 @@ function resultHeadline(): string {
 .game-title-group h1 {
   font-size: 17px;
   margin: 0;
+}
+
+.first-move-chip {
+  background: color-mix(in srgb, var(--accent) 15%, var(--surface-2));
+  color: var(--accent-2);
+  border: 1px solid var(--accent-2);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.first-move-chip.urgent {
+  background: color-mix(in srgb, var(--warn, #e5a50a) 18%, var(--surface-2));
+  color: var(--warn, #e5a50a);
+  border-color: var(--warn, #e5a50a);
+  animation: pulse-warn 1s ease-in-out infinite alternate;
+}
+
+.first-move-banner {
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-inset));
+  border: 1px solid var(--accent-2);
+  color: var(--ink);
+  font-size: 13px;
+  border-radius: var(--r-m);
+}
+
+@keyframes pulse-warn {
+  from { opacity: 0.8; }
+  to { opacity: 1; }
 }
 
 .game-topbar-actions {

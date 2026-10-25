@@ -507,5 +507,93 @@ describe('Auto Lobby and Team Modes', () => {
       expect(emitted.find((e) => e.event === 'lobby:closed')?.payload).toContain('Стол закрыт');
       expect(leftRooms).toContain('lobby:CLOSE_TEST');
     });
+
+    it('beginCountdown starts 5-second countdown, emits lobby:countdown and triggers start on 0', async () => {
+      vi.useFakeTimers();
+      const mgr = new LobbiesManager();
+      const emitted: { event: string; payload: any }[] = [];
+      const mockIo = {
+        to: vi.fn(() => ({
+          emit: vi.fn((event: string, payload: any) => {
+            emitted.push({ event, payload });
+          }),
+        })),
+        in: vi.fn(() => ({ socketsJoin: vi.fn() })),
+      };
+      (mgr as any).io = mockIo;
+
+      const lobby = new Lobby(
+        {
+          id: 'COUNTDOWN_TEST',
+          code: 'CD001',
+          name: 'Стол с отсчётом',
+          mode: 'crazyhouse',
+          timeControl: { kind: 'clock', baseMin: 3, incSec: 0 },
+          private: false,
+          teamMode: 'auto',
+        },
+        { uid: 1, username: 'host_player', rating: 1200, ready: true, host: true, joinedAt: Date.now() },
+      );
+      lobby.members.set(2, { uid: 2, username: 'player_2', rating: 1200, ready: true, host: false, joinedAt: Date.now() });
+      (mgr as any).lobbies.set(lobby.id, lobby);
+
+      const startSpy = vi.spyOn(mgr, 'start').mockResolvedValue({ ok: true, gameId: 999 });
+
+      const res = mgr.beginCountdown(lobby.id, 1, 5);
+      expect(res.ok).toBe(true);
+      expect(lobby.autoCountdown).toBe(5);
+
+      const firstEmit = emitted.find((e) => e.event === 'lobby:countdown');
+      expect(firstEmit?.payload.seconds).toBe(5);
+
+      // Advance by 5 seconds
+      await vi.advanceTimersByTimeAsync(5000);
+
+      expect(startSpy).toHaveBeenCalledWith(lobby.id, 1);
+      vi.useRealTimers();
+    });
+
+    it('cancelCountdown stops countdown and unready cancels it too', () => {
+      const mgr = new LobbiesManager();
+      const emitted: { event: string; payload: any }[] = [];
+      (mgr as any).io = {
+        to: vi.fn(() => ({
+          emit: vi.fn((event: string, payload: any) => {
+            emitted.push({ event, payload });
+          }),
+        })),
+      };
+
+      const lobby = new Lobby(
+        {
+          id: 'CANCEL_TEST',
+          code: 'CN001',
+          name: 'Стол для отмены',
+          mode: 'crazyhouse',
+          timeControl: { kind: 'clock', baseMin: 3, incSec: 0 },
+          private: false,
+          teamMode: 'auto',
+        },
+        { uid: 1, username: 'host_player', rating: 1200, ready: true, host: true, joinedAt: Date.now() },
+      );
+      lobby.members.set(2, { uid: 2, username: 'p2', rating: 1200, ready: true, host: false, joinedAt: Date.now() });
+      (mgr as any).lobbies.set(lobby.id, lobby);
+
+      mgr.beginCountdown(lobby.id, 1, 5);
+      expect(lobby.autoCountdown).toBe(5);
+
+      // Host cancels
+      const cancelRes = mgr.cancelCountdown(lobby.id, 1);
+      expect(cancelRes.ok).toBe(true);
+      expect(lobby.autoCountdown).toBeNull();
+      expect(lobby.countdownTimer).toBeNull();
+
+      // Restart countdown and then player 2 unreadies
+      mgr.beginCountdown(lobby.id, 1, 5);
+      expect(lobby.autoCountdown).toBe(5);
+      mgr.setReady(lobby.id, 2, false);
+      expect(lobby.autoCountdown).toBeNull();
+      expect(lobby.countdownTimer).toBeNull();
+    });
   });
 });

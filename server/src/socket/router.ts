@@ -148,14 +148,20 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
 
     socket.on('lobby:start', async (cb) => {
       if (!ctx?.lobbyId) {
-        cb({ ok: false, error: 'Вы не в лобби' });
+        cb?.({ ok: false, error: 'Вы не в лобби' });
         return;
       }
-      const r = await lobbies.start(ctx.lobbyId, ctx.uid);
-      if (r.ok) {
-        ctx.lobbyId = null;
+      const r = lobbies.beginCountdown(ctx.lobbyId, ctx.uid, 5);
+      cb?.(r.ok ? { ok: true, data: null } : { ok: false, error: r.error });
+    });
+
+    socket.on('lobby:cancel-start', (cb) => {
+      if (!ctx?.lobbyId) {
+        cb?.({ ok: false, error: 'Вы не в лобби' });
+        return;
       }
-      cb(r.ok ? { ok: true, data: { gameId: r.gameId } } : { ok: false, error: r.error });
+      const r = lobbies.cancelCountdown(ctx.lobbyId, ctx.uid);
+      cb?.(r.ok ? { ok: true, data: null } : { ok: false, error: r.error });
     });
 
     // ---------- GAME ----------
@@ -278,7 +284,11 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
     });
 
     socket.on('game:leave', (gameId: number) => {
-      socket.leave(gamesManager.gameRoom(Number(gameId)));
+      const id = Number(gameId);
+      socket.leave(gamesManager.gameRoom(id));
+      if (ctx) {
+        gamesManager.onPlayerLeave(id, ctx.uid);
+      }
     });
 
     socket.on('live:subscribe', () => {

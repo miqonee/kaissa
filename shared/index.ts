@@ -165,7 +165,8 @@ export type ClientToServerEvents = {
   'lobby:kick': (userId: number) => void;
   'lobby:chat': (text: string) => void;
   'lobby:summon': () => void;
-  'lobby:start': (cb: (res: Ack<{ gameId: number } | null>) => void) => void;
+  'lobby:start': (cb: (res: Ack<{ gameId?: number } | null>) => void) => void;
+  'lobby:cancel-start': (cb?: (res: Ack<null>) => void) => void;
   'lobby:rematch': (cb: (res: Ack<{ lobbyId: string } | null>) => void) => void;
   'lobby:set-team': (team: 1 | 2 | null) => void;
   'lobby:pause-toggle': () => void;

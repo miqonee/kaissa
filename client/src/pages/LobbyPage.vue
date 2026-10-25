@@ -10,6 +10,7 @@ import { useI18n } from '../stores/i18n';
 import AppIcon from '../components/AppIcon.vue';
 import BotHoverCard from '../components/BotHoverCard.vue';
 import { usePageSeo } from '../composables/useSeo';
+import { playMoveSound } from '../audio/sounds';
 
 const route = useRoute();
 const router = useRouter();
@@ -141,6 +142,9 @@ onMounted(() => {
   });
   socket.on('lobby:countdown', (payload) => {
     if (payload.lobbyId === lobbyId.value) {
+      if (payload.seconds !== null && payload.seconds > 0 && !payload.paused && payload.seconds !== countdown.value?.seconds) {
+        try { playMoveSound(); } catch {}
+      }
       countdown.value = payload;
     }
   });
@@ -226,6 +230,15 @@ function start(): void {
   });
 }
 
+function cancelStart(): void {
+  socket.emit('lobby:cancel-start', (ack) => {
+    if (ack && !ack.ok) {
+      const err = ack.error ?? (i18n.locale === 'en' ? 'Failed to cancel' : 'Не удалось отменить старт');
+      showNotification(err);
+    }
+  });
+}
+
 function sendChat(): void {
   const t = chatText.value.trim();
   if (!t) return;
@@ -295,12 +308,12 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
         </div>
 
         <div class="panel-body">
-          <!-- Баннер Быстрого стола (Автолобби) -->
-          <div v-if="quick || countdown !== null" class="auto-lobby-banner">
+          <!-- Баннер Быстрого стола (Автолобби или обратный отсчет) -->
+          <div v-if="quick || (countdown !== null && countdown.seconds !== null)" class="auto-lobby-banner">
             <div class="auto-banner-info">
               <span class="countdown-chip" :class="{ paused: countdown?.paused }">
                 <span v-if="countdown?.paused">{{ i18n.locale === 'en' ? 'Paused' : 'Пауза' }} ({{ countdown?.pausedCount }}/{{ countdown?.neededCount }})</span>
-                <span v-else>{{ i18n.locale === 'en' ? `Auto-start in ${countdown?.seconds ?? 10}s` : `Автостарт через ${countdown?.seconds ?? 10} с` }}</span>
+                <span v-else>{{ i18n.locale === 'en' ? `Auto-start in ${countdown?.seconds ?? 5}s` : `Автостарт через ${countdown?.seconds ?? 5} с` }}</span>
               </span>
               <p class="dim tiny auto-hint">
                 {{ lobby.rematchOf
@@ -311,6 +324,7 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
               </p>
             </div>
             <button
+              v-if="quick"
               class="small brass pause-btn"
               :class="{ active: isPausedByMe }"
               @click="togglePause"
@@ -510,6 +524,9 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
         <p v-if="error" class="error-text start-error">
           {{ error }}
         </p>
+        <p v-else-if="countdown?.seconds !== null && countdown?.seconds !== undefined && countdown.seconds > 0 && !countdown.paused" class="ok-hint countdown-live-hint">
+          ⏱ {{ i18n.locale === 'en' ? `Match starts in ${countdown.seconds}s…` : `Старт матча через ${countdown.seconds} с…` }}
+        </p>
         <p v-else-if="lobby.players.length < capacity" class="dim">
           {{ i18n.locale === 'en' ? `${capacity} players needed to start. Current: ${lobby.players.length}/${capacity}.` : `Для начала матча нужно ${capacity} игрока. Сейчас: ${lobby.players.length}/${capacity}.` }}
         </p>
@@ -532,7 +549,16 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
         </button>
 
         <button
-          v-if="isHost"
+          v-if="isHost && countdown?.seconds !== null && countdown?.seconds !== undefined && countdown.seconds > 0 && !countdown.paused"
+          class="cancel-start-btn big"
+          @click="cancelStart"
+        >
+          <AppIcon name="close" :size="14" />
+          {{ i18n.locale === 'en' ? `Cancel (${countdown.seconds}s)` : `Отмена (${countdown.seconds} с)` }}
+        </button>
+
+        <button
+          v-else-if="isHost"
           class="primary big"
           :disabled="!allReady"
           @click="start"
@@ -892,6 +918,32 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
   background: color-mix(in srgb, var(--ok) 16%, var(--surface-2));
   color: var(--ok);
   border-color: var(--ok);
+}
+
+.cancel-start-btn {
+  background: color-mix(in srgb, var(--danger, #ef4444) 16%, var(--surface-2));
+  color: var(--danger, #ef4444);
+  border: 1px solid var(--danger, #ef4444);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.cancel-start-btn:hover {
+  background: color-mix(in srgb, var(--danger, #ef4444) 26%, var(--surface-2));
+}
+
+.countdown-live-hint {
+  color: var(--accent-2);
+  font-weight: 700;
+  animation: pulse-countdown 1s ease-in-out infinite alternate;
+}
+
+@keyframes pulse-countdown {
+  from { opacity: 0.75; }
+  to { opacity: 1; }
 }
 
 .auto-lobby-banner {

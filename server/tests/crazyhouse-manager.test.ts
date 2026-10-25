@@ -62,4 +62,55 @@ describe('Crazyhouse manager', () => {
     expect((await m.applyMove(id, 1, { boardIndex: 0, from: '-', to: 'f7', dropPiece: 'n' })).ok).toBe(true);
     expect(states).toHaveLength(1); expect(states[0].status).toBe('finished'); expect(states[0].turnUserIds).toEqual([0]);
   });
+  it('aborts game unrated if 30 seconds pass without a first move', async () => {
+    const m = new GamesManager();
+    const emitted: { event: string; payload: any }[] = [];
+    (m as any).io = {
+      to: () => ({
+        emit: (event: string, payload: any) => {
+          emitted.push({ event, payload });
+        },
+      }),
+    };
+    m.attach((m as any).io);
+    const id = await m.createGame(setup);
+    const g = m.getActive(id)!;
+    expect(g.status).toBe('active');
+    expect(g.ply).toBe(0);
+
+    // Fast-forward 30 seconds
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(g.status).toBe('abandoned');
+    expect(g.reason).toBe('abandoned');
+    expect(g.result).toBe('*');
+
+    const endEvent = emitted.find(e => e.event === 'game:end');
+    expect(endEvent).toBeDefined();
+    expect(endEvent?.payload.result).toBe('*');
+    const liveEnd = emitted.find(e => e.event === 'live:end');
+    expect(liveEnd).toBeDefined();
+  });
+  it('aborts game immediately if player leaves or disconnects before the first move', async () => {
+    const m = new GamesManager();
+    const emitted: { event: string; payload: any }[] = [];
+    (m as any).io = {
+      to: () => ({
+        emit: (event: string, payload: any) => {
+          emitted.push({ event, payload });
+        },
+      }),
+    };
+    const id = await m.createGame(setup);
+    const g = m.getActive(id)!;
+    expect(g.status).toBe('active');
+
+    // Player 1 leaves explicitly
+    m.onPlayerLeave(id, 1);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(g.status).toBe('abandoned');
+    expect(g.result).toBe('*');
+    expect(emitted.some(e => e.event === 'live:end')).toBe(true);
+  });
 });

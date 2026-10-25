@@ -548,6 +548,64 @@ export class LobbiesManager {
     }, 1000);
   }
 
+  beginCountdown(lobbyId: string, uid: number, seconds = 5): { ok: true } | { ok: false; error: string } {
+    const lobby = this.lobbies.get(lobbyId);
+    if (!lobby) return { ok: false, error: 'Лобби не найдено' };
+    if (lobby.started) return { ok: false, error: 'Партия уже начинается' };
+    const host = lobby.members.get(uid);
+    if (!host?.host && !lobby.isQuick) return { ok: false, error: 'Только хост может начать игру' };
+    if (lobby.members.size !== lobbyCapacity(lobby.mode)) return { ok: false, error: `Нужно ${lobbyCapacity(lobby.mode)} игрока` };
+
+    for (const m of lobby.members.values()) {
+      if (!m.ready) return { ok: false, error: 'Не все готовы' };
+    }
+
+    if (lobby.countdownTimer) {
+      clearInterval(lobby.countdownTimer);
+      lobby.countdownTimer = null;
+    }
+
+    lobby.autoCountdown = seconds;
+    this.broadcastCountdown(lobby);
+
+    lobby.countdownTimer = setInterval(async () => {
+      const current = this.lobbies.get(lobby.id);
+      if (!current || current !== lobby || lobby.started) {
+        if (lobby.countdownTimer) clearInterval(lobby.countdownTimer);
+        lobby.countdownTimer = null;
+        return;
+      }
+      if (lobby.isPaused) return;
+
+      if (lobby.autoCountdown !== null && lobby.autoCountdown > 0) {
+        lobby.autoCountdown -= 1;
+        this.broadcastCountdown(lobby);
+      }
+
+      if (lobby.autoCountdown === 0) {
+        lobby.clearCountdown();
+        const hostMember = [...lobby.members.values()].find((m) => m.host) || lobby.members.values().next().value;
+        if (hostMember) {
+          await this.start(lobby.id, hostMember.uid);
+        }
+      }
+    }, 1000);
+
+    return { ok: true };
+  }
+
+  cancelCountdown(lobbyId: string, uid: number): { ok: true } | { ok: false; error: string } {
+    const lobby = this.lobbies.get(lobbyId);
+    if (!lobby) return { ok: false, error: 'Лобби не найдено' };
+    const host = lobby.members.get(uid);
+    if (!host?.host && !lobby.isQuick) return { ok: false, error: 'Только хост может отменить отсчёт' };
+    if (lobby.countdownTimer || lobby.autoCountdown !== null) {
+      lobby.clearCountdown();
+      this.broadcastCountdown(lobby);
+    }
+    return { ok: true };
+  }
+
   broadcastCountdown(lobby: Lobby): void {
     const humans = [...lobby.members.values()].filter((m) => !m.isBot);
     this.io?.to(this.room(lobby.id)).emit('lobby:countdown', {
@@ -729,7 +787,10 @@ export class LobbiesManager {
       return;
     }
 
-    if (lobby.rematchOf) lobby.clearCountdown();
+    if (lobby.rematchOf || lobby.countdownTimer || lobby.autoCountdown !== null) {
+      lobby.clearCountdown();
+      this.broadcastCountdown(lobby);
+    }
     if (lobby.members.size === 0 || (lobby.rematchOf && [...lobby.members.values()].every(m => m.isBot))) {
       this.lobbies.delete(lobbyId);
       this.broadcastList();
@@ -750,6 +811,10 @@ export class LobbiesManager {
     const m = lobby.members.get(uid);
     if (!m) return;
     m.ready = ready;
+    if (!ready && (lobby.countdownTimer || lobby.autoCountdown !== null)) {
+      lobby.clearCountdown();
+      this.broadcastCountdown(lobby);
+    }
     this.broadcastState(lobby);
   }
 

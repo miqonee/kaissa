@@ -35,6 +35,7 @@ export type IconName =
   | 'trash'
   | 'bolt'
   | 'flag'
+  | 'clock'
   | 'log-out';
 
 /** Иконки, которые рисуются заливкой, а не обводкой */
@@ -98,5 +99,6 @@ export const ICON_PATHS: Record<IconName, string[]> = {
   ],
   bolt: ['M13 2L3 14h9l-1 8 10-12h-9l1-8z'],
   flag: ['M4 3v18', 'M4 4h12l-2 4 2 4H4z'],
+  clock: ['M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z', 'M12 6v6l4 2'],
   'log-out': ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'M16 17l5-5-5-5', 'M21 12H9'],
 };

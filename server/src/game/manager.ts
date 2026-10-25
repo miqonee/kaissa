@@ -32,6 +32,9 @@ import { botStatsTracker } from '../ai/botStats.js';
 // Team 2v2: одна доска, члены команды чередуются (moveSlot).
 // ============================================================
 
+export const PREMOVE_LAG_COMPENSATION_MS = 100;
+export const FIRST_MOVE_TIMEOUT_MS = 30_000;
+
 export interface ParticipantSetup {
   uid: number;
   username: string;
@@ -484,17 +487,43 @@ export class GamesManager {
     }
   }
 
-  // ---------------- Часы ----------------
+  // ---------------- Часы и первый ход ----------------
+
+  isFirstMovePending(g: ActiveGame): boolean {
+    if (g.status !== 'active') return false;
+    if (g.ply === 0) return true;
+    if (g.engine instanceof BughouseGame) {
+      const bg = g.engine as BughouseGame;
+      for (let b = 0; b < 2; b++) {
+        const boardHasHumans = g.participants.some((p) => p.boardIndex === b && !p.isBot);
+        if (boardHasHumans && bg.boards[b as Board].history().length === 0) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
 
   async checkFlags(): Promise<void> {
-    await Promise.all([...this.games.values()].filter(g => g.status === 'active' && g.timeControl.kind === 'clock').map(g => this.serialize(g.id, async () => {
+    const now = Date.now();
+    await Promise.all([...this.games.values()].filter(g => g.status === 'active').map(g => this.serialize(g.id, async () => {
       if (g.status !== 'active') return;
-      const now = Date.now();
-      for (let b = 0; b < g.clocks.length; b++) {
-        const clock = g.clocks[b];
-        if (clock?.active && (clock.active === 'w' ? clock.whiteMs : clock.blackMs) - (now - clock.sinceMs) <= 0) {
-          await this.finishByFlag(g, b as Board, clock.active);
-          break;
+
+      // 30 секунд на первый ход (если ход не сделан, матч отменяется без изменения рейтинга)
+      if (!g.isDemo && this.isFirstMovePending(g)) {
+        if (now - g.startedAt >= FIRST_MOVE_TIMEOUT_MS) {
+          await this.abortUnrated(g, 'Время на первый ход вышло (30 с). Матч отменён.');
+          return;
+        }
+      }
+
+      if (g.timeControl.kind === 'clock') {
+        for (let b = 0; b < g.clocks.length; b++) {
+          const clock = g.clocks[b];
+          if (clock?.active && (clock.active === 'w' ? clock.whiteMs : clock.blackMs) - (now - clock.sinceMs) <= 0) {
+            await this.finishByFlag(g, b as Board, clock.active);
+            break;
+          }
         }
       }
     })));
@@ -630,8 +659,22 @@ export class GamesManager {
     g.disconnected.add(uid);
     this.pauseForDisconnect(gameId, uid);
     this.broadcastDisconnected(g);
+    if (!g.isDemo && this.isFirstMovePending(g)) {
+      void this.serialize(g.id, () => this.abortUnrated(g, `${this.usernameOf(g, uid)} отключился до первого хода. Матч отменён.`));
+      return;
+    }
     if (g.disconnected.size >= g.participants.length) {
       void this.serialize(g.id, () => this.abandon(g));
+    }
+  }
+
+  onPlayerLeave(gameId: number, uid: number): void {
+    const g = this.games.get(gameId);
+    if (!g || g.status !== 'active') return;
+    const p = g.participants.find((x) => x.uid === uid);
+    if (!p || p.isBot) return;
+    if (!g.isDemo && this.isFirstMovePending(g)) {
+      void this.serialize(g.id, () => this.abortUnrated(g, `${p.username} покинул партию до первого хода. Матч отменён.`));
     }
   }
 
@@ -691,6 +734,30 @@ export class GamesManager {
     });
     this.io?.to('live').emit('live:end', { gameId: g.id, result: '*' });
     setTimeout(() => { if (this.games.get(g.id) === g) this.games.delete(g.id); }, g.isDemo ? 10_000 : 60_000);
+  }
+
+  async abortUnrated(g: ActiveGame, message?: string): Promise<void> {
+    if (g.status !== 'active') return;
+    this.cancelBotTimers(g.id);
+    g.status = 'abandoned';
+    g.reason = 'abandoned';
+    if (!g.isDemo) {
+      await prisma.game.update({
+        where: { id: g.id },
+        data: { status: 'abandoned', reason: 'abandoned', endedAt: new Date() },
+      });
+    }
+    if (message) {
+      this.systemMessage(g, message);
+    }
+    this.io?.to(this.gameRoom(g.id)).emit('game:end', {
+      gameId: g.id,
+      result: '*',
+      reason: 'abandoned',
+      participants: g.participants.map(toParticipantInfo),
+    });
+    this.io?.to('live').emit('live:end', { gameId: g.id, result: '*' });
+    setTimeout(() => { if (this.games.get(g.id) === g) this.games.delete(g.id); }, g.isDemo ? 10_000 : 30_000);
   }
 
   async cleanupOnBoot(): Promise<void> {

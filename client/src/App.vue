@@ -25,10 +25,13 @@ onMounted(async () => {
 });
 
 watch(
-  () => auth.user,
-  () => {
-    resetSocket();
-    getSocket();
+  () => auth.user?.id,
+  (newId, oldId) => {
+    // Сбрасываем сокет только при реальной смене аккаунта, а не при стартовой проверке null -> user
+    if (oldId && newId && oldId !== newId) {
+      resetSocket();
+      getSocket();
+    }
   },
 );
 

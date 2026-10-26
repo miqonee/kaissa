@@ -78,6 +78,30 @@ function destsMap(): Map<Key, Key[]> {
   return m;
 }
 
+function computeLegalDests(fen: string): Map<Key, Key[]> {
+  const m = new Map<Key, Key[]>();
+  try {
+    const c = new Chess(fen);
+    for (const move of c.moves({ verbose: true })) {
+      const existing = m.get(move.from as Key) ?? [];
+      existing.push(move.to as Key);
+      m.set(move.from as Key, existing);
+    }
+  } catch {}
+  return m;
+}
+
+function currentDests(fen: string): Map<Key, Key[]> {
+  if (props.dests && Object.keys(props.dests).length > 0) {
+    return destsMap();
+  }
+  const turnColor = fen.split(' ')[1] === 'b' ? 'black' : 'white';
+  if (props.movableColor && turnColor === props.movableColor) {
+    return computeLegalDests(fen);
+  }
+  return new Map();
+}
+
 function lastMoveKeys(): Key[] | undefined {
   if (!props.lastMove) return undefined;
   const m = props.lastMove.filter((x): x is string => !!x);
@@ -194,7 +218,7 @@ watch(
       lastMove: lastMoveKeys(),
       movable: {
         color: interactive ? (props.movableColor as CgColor) : undefined,
-        dests: destsMap(),
+        dests: currentDests(newFen),
       },
       premovable: {
         enabled: props.canPremove,
@@ -222,7 +246,7 @@ watch(
     cg.set({
       movable: {
         color: interactive ? (props.movableColor as CgColor) : undefined,
-        dests: destsMap(),
+        dests: currentDests(props.fen),
       },
       premovable: {
         enabled: props.canPremove,
@@ -232,7 +256,9 @@ watch(
         enabled: interactive,
       },
     } as never);
-    if (!props.canPremove) {
+    // Сбрасывать премув только если сейчас не наш ход и премув отключен
+    const turnColor = props.fen.split(' ')[1] === 'b' ? 'black' : 'white';
+    if (!props.canPremove && props.movableColor !== turnColor) {
       cg.cancelPremove();
     }
   },
@@ -284,7 +310,20 @@ function cancelPremove(): void {
   cg?.cancelPremove();
 }
 
-defineExpose({ cancelPremove, dragPocketPiece });
+function resetView(): void {
+  if (!cg) return;
+  cg.set({
+    fen: props.fen,
+    turnColor: (props.fen.split(' ')[1] === 'b' ? 'black' : 'white') as CgColor,
+    lastMove: lastMoveKeys(),
+    movable: {
+      color: props.movableColor !== null ? (props.movableColor as CgColor) : undefined,
+      dests: currentDests(props.fen),
+    },
+  } as never);
+}
+
+defineExpose({ cancelPremove, dragPocketPiece, resetView });
 </script>
 
 <template>

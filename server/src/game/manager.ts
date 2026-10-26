@@ -409,6 +409,7 @@ export class GamesManager {
     }
 
     // Рассылка хода
+    const moveState = this.toGameState(g);
     this.io?.to(this.gameRoom(g.id)).emit('game:move', {
       gameId: g.id,
       boardIndex: data.boardIndex,
@@ -420,6 +421,10 @@ export class GamesManager {
       ...(data.dropPiece ? { dropPiece: data.dropPiece } : {}),
       clocksAfter,
       fenAfter: fen,
+      turnUserIds: moveState.turnUserIds,
+      turnSlots: moveState.turnSlots,
+      pockets: moveState.pockets,
+      legalDrops: moveState.legalDrops,
     });
     await this.checkEndAfterMove(g, data.boardIndex as Board);
     this.io?.to(this.gameRoom(g.id)).emit('game:state', this.toGameState(g));

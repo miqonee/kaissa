@@ -428,6 +428,8 @@ function sendMove(b: 0 | 1, from: string, to: string, promotion?: PieceType, dro
     if (!ack.ok) {
       error.value = ack.error ?? '';
       setTimeout(() => (error.value = ''), 2500);
+      // При ошибке хода немедленно возвращаем фигуру на доске в исходную позицию
+      boardRefs[b]?.resetView();
       socket.emit('game:watch', gameId);
     }
   });
@@ -536,11 +538,23 @@ onMounted(() => {
     if (mv.fenAfter && state.value) {
       state.value.fens[mv.boardIndex] = mv.fenAfter;
       state.value.turns[mv.boardIndex] = mv.fenAfter.split(' ')[1] as 'w' | 'b';
-      if (state.value.mode === 'bughouse') {
+      if (mv.turnUserIds) {
+        state.value.turnUserIds = mv.turnUserIds;
+      } else if (state.value.mode === 'bughouse') {
         const turnColor = mv.fenAfter.split(' ')[1] as 'w' | 'b';
         const nextP = state.value.participants.find((p) => p.boardIndex === mv.boardIndex && p.color === turnColor);
         if (nextP) state.value.turnUserIds[mv.boardIndex] = nextP.userId;
+      } else {
+        // Командный режим 2х2 (на одной доске) или Crazyhouse 2х2
+        const turnColor = mv.fenAfter.split(' ')[1] as 'w' | 'b';
+        const team: 1 | 2 = turnColor === 'w' ? 1 : 2;
+        const currentSlot = state.value.turnSlots ? state.value.turnSlots[turnColor] : 0;
+        const nextP = state.value.participants.find((p) => p.team === team && p.moveSlot === currentSlot);
+        if (nextP) state.value.turnUserIds[0] = nextP.userId;
       }
+      if (mv.turnSlots && state.value) state.value.turnSlots = mv.turnSlots;
+      if (mv.pockets !== undefined && state.value) state.value.pockets = mv.pockets;
+      if (mv.legalDrops !== undefined && state.value) state.value.legalDrops = mv.legalDrops;
     }
   });
 

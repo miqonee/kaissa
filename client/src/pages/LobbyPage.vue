@@ -37,7 +37,7 @@ const error = ref('');
 const chat = ref<ChatMessage[]>([]);
 const chatText = ref('');
 const chatBox = ref<HTMLElement | null>(null);
-const lobbyId = computed(() => String(route.params.id));
+const lobbyId = computed(() => lobby.value?.id ?? String(route.params.id));
 
 const me = computed(() => auth.user);
 const isHost = computed(() => lobby.value?.players.find((p) => p.userId === auth.user?.id)?.host ?? false);
@@ -85,7 +85,8 @@ function setTimeControl(tc: TimeControl): void {
 }
 
 function addBot(): void {
-  socket.emit('lobby:add-bot', (ack) => {
+  socket.timeout(8000).emit('lobby:add-bot', (timeout, ack) => {
+    if (timeout) { showNotification(i18n.locale === 'en' ? 'Server did not respond. Try again.' : 'Сервер не ответил. Попробуйте ещё раз.'); return; }
     if (!ack?.ok && ack?.error) {
       showNotification(ack.error);
     }
@@ -108,8 +109,11 @@ function scrollChat(): void {
 }
 
 function joinLobby(): void {
-  socket.emit('lobby:join', lobbyId.value, (ack) => {
+  socket.timeout(8000).emit('lobby:join', lobbyId.value, (timeout, ack) => {
+    if (timeout || !ack) { error.value = i18n.locale === 'en' ? 'Could not connect. Check your connection and try again.' : 'Не удалось подключиться. Проверьте связь и повторите попытку.'; return; }
+    if (ack.activeGameId) { gameStarting = true; void router.replace(`/game/${ack.activeGameId}`); return; }
     if (ack.ok && ack.data) {
+      error.value = '';
       lobby.value = ack.data.lobby;
       trackGoal('lobby_joined', { mode: ack.data.lobby.mode }, String(lobbyId.value));
     } else if (!lobby.value) {
@@ -219,7 +223,8 @@ function summon(): void {
 }
 
 function start(): void {
-  socket.emit('lobby:start', (ack) => {
+  socket.timeout(8000).emit('lobby:start', (timeout, ack) => {
+    if (timeout || !ack) { showNotification(i18n.locale === 'en' ? 'Server did not respond. Try again.' : 'Сервер не ответил. Попробуйте ещё раз.'); return; }
     if (!ack.ok) {
       const err = ack.error ?? (i18n.locale === 'en' ? 'Failed to start game' : 'Не удалось начать игру');
       error.value = err;
@@ -250,15 +255,20 @@ function sendChat(): void {
   chatText.value = '';
 }
 
-function copyLink(): void {
-  void navigator.clipboard.writeText(link.value);
+async function copyLink(): Promise<void> {
+  try { await navigator.clipboard.writeText(link.value); } catch { showNotification(i18n.locale === 'en' ? 'Could not copy. Copy the address from your browser.' : 'Не удалось скопировать. Скопируйте адрес из строки браузера.'); return; }
   showNotification(i18n.locale === 'en' ? 'Direct table link copied' : 'Прямая ссылка скопирована');
 }
 
-function copyCode(): void {
+async function copyCode(): Promise<void> {
   if (!lobby.value?.code) return;
-  void navigator.clipboard.writeText(lobby.value.code);
+  try { await navigator.clipboard.writeText(lobby.value.code); } catch { showNotification(i18n.locale === 'en' ? 'Could not copy. Select the code manually.' : 'Не удалось скопировать. Выделите код вручную.'); return; }
   showNotification(i18n.locale === 'en' ? `Code ${lobby.value.code} copied` : `Код ${lobby.value.code} скопирован`);
+}
+
+async function shareTable(): Promise<void> {
+  if (!navigator.share) return copyLink();
+  try { await navigator.share({ title: 'Каисса', url: link.value }); } catch(e) { if (!(e instanceof Error && e.name === 'AbortError')) await copyLink(); }
 }
 
 function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale); }
@@ -266,7 +276,8 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
 
 <template>
   <div v-if="error && !lobby" class="empty">
-    <p>{{ error }}</p>
+    <p role="alert">{{ error }}</p>
+    <button @click="joinLobby">{{ i18n.locale === 'en' ? 'Try again' : 'Повторить' }}</button>
     <router-link to="/" class="primary">{{ i18n.locale === 'en' ? 'Back to Home' : 'На главную' }}</router-link>
   </div>
 
@@ -295,6 +306,7 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
           <span class="copy-icon"><AppIcon name="copy" :size="16" /></span>
         </div>
         <div class="code-actions">
+          <button class="small ghost" @click="shareTable">{{ i18n.locale === 'en' ? 'Share' : 'Поделиться' }}</button>
           <button class="small ghost" @click="copyLink">
             <AppIcon name="copy" :size="14" /> {{ i18n.locale === 'en' ? 'Copy table link' : 'Скопировать ссылку' }}
           </button>
@@ -419,7 +431,7 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
                     :disabled="p.userId !== me?.id || (p.teamChoice !== 1 && team1Count >= capacity / 2)"
                     @click="chooseTeam(p.teamChoice === 1 ? null : 1)"
                   >
-                    {{ i18n.locale === 'en' ? 'White' : 'Белые' }} ({{ team1Count }}/{{ capacity / 2 }})
+                    {{ lobby.mode === 'bughouse' ? (i18n.locale === 'en' ? 'Team 1' : 'Команда 1') : (i18n.locale === 'en' ? 'White' : 'Белые') }} ({{ team1Count }}/{{ capacity / 2 }})
                   </button>
                   <button
                     type="button"
@@ -428,10 +440,10 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
                     :disabled="p.userId !== me?.id || (p.teamChoice !== 2 && team2Count >= capacity / 2)"
                     @click="chooseTeam(p.teamChoice === 2 ? null : 2)"
                   >
-                    {{ i18n.locale === 'en' ? 'Black' : 'Чёрные' }} ({{ team2Count }}/{{ capacity / 2 }})
+                    {{ lobby.mode === 'bughouse' ? (i18n.locale === 'en' ? 'Team 2' : 'Команда 2') : (i18n.locale === 'en' ? 'Black' : 'Чёрные') }} ({{ team2Count }}/{{ capacity / 2 }})
                   </button>
                 </div>
-                <span class="slot-rating mono dim">{{ i18n.locale === 'en' ? 'Rating' : 'Рейтинг' }}: {{ p.rating }}</span>
+                <span class="slot-rating mono dim">{{ p.isGuest ? (i18n.locale === 'en' ? 'Guest · training games' : 'Гость · тренировочные партии') : p.isBot ? (i18n.locale === 'en' ? `Bot strength: ${p.rating}` : `Уровень бота: ${p.rating}`) : `Elo · ${modeLabel(lobby.mode)}: ${p.rating}` }}</span>
               </div>
 
               <div class="slot-status">
@@ -543,10 +555,11 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
         <button
           class="ready-toggle-btn"
           :class="{ active: iAmReady }"
+          :aria-pressed="iAmReady"
           @click="setReady"
         >
           <AppIcon v-if="iAmReady" name="check" :size="14" />
-          {{ iAmReady ? (i18n.locale === 'en' ? 'Ready!' : 'Я готов') : (i18n.locale === 'en' ? 'Ready' : 'Готов') }}
+          {{ iAmReady ? (i18n.locale === 'en' ? 'Cancel readiness' : 'Отменить готовность') : (i18n.locale === 'en' ? 'I am ready' : 'Я готов') }}
         </button>
 
         <button

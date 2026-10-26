@@ -1,23 +1,21 @@
 import dotenv from 'dotenv';
+import { randomBytes } from 'node:crypto';
 dotenv.config();
 
 const rawSecret = process.env.JWT_SECRET || '';
-const jwtSecret = (rawSecret && rawSecret !== 'dev-secret' && rawSecret.length >= 32)
-  ? rawSecret
-  : (rawSecret ? rawSecret.padEnd(32, '_kaissa_jwt_secret_salt_padding') : 'change-me-to-a-long-random-secret-key-for-kaissa-jwt-auth-32-chars');
-
-if (process.env.NODE_ENV === 'production' && (!rawSecret || rawSecret === 'dev-secret' || rawSecret.length < 32)) {
-  console.warn('[env] Предупреждение: JWT_SECRET не задан или короче 32 символов в production. Применён безопасный fallback.');
-}
+const validSecret = rawSecret.length >= 32 && !/^(change-me|dev-secret|replace-with)/i.test(rawSecret);
+if (process.env.NODE_ENV === 'production' && !validSecret) throw new Error('JWT_SECRET must be a private random secret of at least 32 characters');
+const jwtSecret = validSecret ? rawSecret : randomBytes(48).toString('hex');
 
 export const env = {
+  demoEnabled: process.env.DEMO_ENABLED === 'true' || (process.env.DEMO_ENABLED !== 'false' && process.env.NODE_ENV !== 'test'),
   port: parseInt(process.env.PORT || '4000', 10),
   databaseUrl: process.env.DATABASE_URL || 'postgresql://kaissa:kaissa@localhost:5432/kaissa?schema=public',
   jwtSecret,
   abandonSeconds: parseInt(process.env.ABANDON_SECONDS || '20', 10),
   corsOrigin: process.env.CORS_ORIGIN || '*',
   /** Кому автоматически выдать права администратора (через запятую) */
-  adminUsernames: (process.env.ADMIN_USERNAMES || '').split(',').map((s) => s.trim()).filter(Boolean),
+  adminUserIds: (process.env.ADMIN_USER_IDS || '').split(',').map(Number).filter(n => Number.isSafeInteger(n) && n > 0),
   /** Время жизни нестартовавшего стола (в минутах) до автоматического закрытия */
   lobbyTtlMinutes: parseInt(process.env.LOBBY_TTL_MINUTES || '20', 10),
   /** За сколько минут до закрытия стола отправлять предупреждение в лобби */

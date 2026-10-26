@@ -1,3 +1,4 @@
+import { asyncRoute } from '../http/asyncRoute.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import type { CreateLobbyPayload, GameMode } from 'shared';
@@ -19,55 +20,55 @@ const createSchema = z.object({
 export const lobbyRouter = Router();
 
 /** Список открытых лобби */
-lobbyRouter.get('/', (_req, res) => {
+lobbyRouter.get('/', asyncRoute((_req, res) => {
   const list = lobbies
     .publicList()
     .map((l) => l.summary());
   res.json({ lobbies: list });
-});
+}));
 
 /** Создать лобби */
-lobbyRouter.post('/', requireAuth, async (req, res) => {
+lobbyRouter.post('/', requireAuth, asyncRoute(async (req, res) => {
   const user = await currentUser(req);
   if (!user) return void res.status(401).json({ error: 'Не авторизован' });
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return void res.status(400).json({ error: 'Некорректные данные' });
   const payload = parsed.data as CreateLobbyPayload;
   const { lobby, code } = lobbies.create(
-    { uid: user.id, username: user.username, rating: user.rating },
+    { uid: user.id, username: user.username, rating: user.modeRatings.find(r => r.mode === payload.mode)?.rating ?? 1200, isGuest: user.isGuest },
     payload,
   );
   res.status(201).json({ lobby: lobby.summary(), code });
-});
+}));
 
 /** Войти по коду (получить lobbyId) */
-lobbyRouter.post('/join', requireAuth, async (req, res) => {
+lobbyRouter.post('/join', requireAuth, asyncRoute(async (req, res) => {
   const user = await currentUser(req);
   if (!user) return void res.status(401).json({ error: 'Не авторизован' });
   const code = String(req.body?.code ?? '').trim().toUpperCase();
   if (!code) return void res.status(400).json({ error: 'Укажите код' });
   const lobby = lobbies.getByCode(code);
   if (!lobby) return void res.status(404).json({ error: 'Лобби с таким кодом не найдено' });
-  const r = lobbies.join(lobby, { uid: user.id, username: user.username, rating: user.rating });
+  const r = lobbies.join(lobby, { uid: user.id, username: user.username, rating: user.modeRatings.find(r => r.mode === lobby.mode)?.rating ?? 1200, isGuest: user.isGuest });
   if (!r.ok) return void res.status(409).json({ error: r.error });
   res.json({ lobby: lobby.summary() });
-});
+}));
 
 /** Инфо о лобби по id (только чтение) */
-lobbyRouter.get('/:id', (req, res) => {
+lobbyRouter.get('/:id', asyncRoute((req, res) => {
   const lobby = lobbies.getById(String(req.params.id));
   if (!lobby || lobby.started) return void res.status(404).json({ error: 'Лобби не найдено' });
   res.json({ lobby: lobby.summary() });
-});
+}));
 
 /** Войти в лобби по id */
-lobbyRouter.post('/:id/join', requireAuth, async (req, res) => {
+lobbyRouter.post('/:id/join', requireAuth, asyncRoute(async (req, res) => {
   const lobby = lobbies.getById(String(req.params.id));
   if (!lobby || lobby.started) return void res.status(404).json({ error: 'Лобби не найдено' });
   const user = await currentUser(req);
   if (!user) return void res.status(401).json({ error: 'Не авторизован' });
-  const r = lobbies.join(lobby, { uid: user.id, username: user.username, rating: user.rating });
+  const r = lobbies.join(lobby, { uid: user.id, username: user.username, rating: user.modeRatings.find(r => r.mode === lobby.mode)?.rating ?? 1200, isGuest: user.isGuest });
   if (!r.ok) return void res.status(409).json({ error: r.error });
   res.json({ lobby: lobby.summary() });
-});
+}));
 

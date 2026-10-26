@@ -69,7 +69,7 @@ describe('SEO & Sitemap Specification', () => {
   });
 
   describe('generateSitemapXml with static and dynamic pages', () => {
-    it('includes all 4 static pages: /, /leaderboard, /history, /login with proper attributes', async () => {
+    it('includes public pages and excludes the sign-in page', async () => {
       vi.spyOn(prisma.user, 'findMany').mockResolvedValue([] as any);
       vi.spyOn(prisma.game, 'findFirst').mockResolvedValue(null as any);
       vi.spyOn(prisma.ratingHistory, 'findFirst').mockResolvedValue(null as any);
@@ -79,7 +79,7 @@ describe('SEO & Sitemap Specification', () => {
       expect(xml).toContain('<loc>https://duochess.ru/</loc>');
       expect(xml).toContain('<loc>https://duochess.ru/leaderboard</loc>');
       expect(xml).toContain('<loc>https://duochess.ru/history</loc>');
-      expect(xml).toContain('<loc>https://duochess.ru/login</loc>');
+      expect(xml).not.toContain('<loc>https://duochess.ru/login</loc>');
       expect(xml).toContain('<loc>https://duochess.ru/rules/crazyhouse</loc>');
       expect(xml).toContain('href="https://duochess.ru/rules/crazyhouse?lang=en"');
 
@@ -87,7 +87,7 @@ describe('SEO & Sitemap Specification', () => {
       expect(xml).toContain('<priority>1.0</priority>'); // Home
       expect(xml).toContain('<priority>0.8</priority>'); // Leaderboard
       expect(xml).toContain('<priority>0.7</priority>'); // History
-      expect(xml).toContain('<priority>0.5</priority>'); // Login
+      expect(xml).not.toContain('<priority>0.5</priority>'); // Login is noindex.
 
       // Check changefreqs
       expect(xml).toContain('<changefreq>daily</changefreq>');
@@ -149,6 +149,7 @@ describe('SEO & Sitemap Specification', () => {
 
       expect(capturedWhere).toBeDefined();
       expect(capturedWhere.isBot).toBe(false);
+      expect(capturedWhere.isGuest).toBe(false);
       expect(capturedWhere.OR).toEqual(
         expect.arrayContaining([
           { participations: { some: {} } },
@@ -165,8 +166,8 @@ describe('SEO & Sitemap Specification', () => {
 
       expect(robots).toContain('User-agent: *');
       expect(robots).toContain('Allow: /');
-      expect(robots).toContain('Disallow: /admin');
-      expect(robots).toContain('Disallow: /lobby/*');
+      expect(robots).not.toContain('Disallow: /admin');
+      expect(robots).not.toContain('Disallow: /lobby/*');
       expect(robots).toContain('Disallow: /api/');
       expect(robots).toContain('Host: duochess.ru');
       expect(robots).toContain('Sitemap: https://duochess.ru/sitemap.xml');
@@ -350,7 +351,7 @@ describe('SEO & Sitemap Specification', () => {
 
       expect(robotsHeaders['Content-Type']).toContain('text/plain');
       expect(robotsBody).toContain('Host: duochess.ru');
-      expect(robotsBody).toContain('Disallow: /lobby/*');
+      expect(robotsBody).not.toContain('Disallow: /lobby/*');
     });
   });
 

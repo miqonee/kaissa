@@ -1,7 +1,9 @@
 import { io, type Socket } from 'socket.io-client';
 import type { ClientToServerEvents, ServerToClientEvents } from 'shared';
+import { useAuthStore } from '../stores/auth';
 import { useConnectionStore } from '../stores/connection';
 
+let onPageShow: ((event: PageTransitionEvent) => void) | null = null;
 let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
 
 /** Переподписка на реконнекте: страницы регистрируют свой resync здесь. */
@@ -26,6 +28,7 @@ export function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> 
 
     socket.on('connect', () => {
       conn.set('connected');
+      void useAuthStore().check();
       // Прошлый сокет умер: комнаты потеряны — восстановить подписки страниц.
       for (const fn of resyncers) {
         try {
@@ -33,15 +36,16 @@ export function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> 
         } catch {}
       }
     });
-    socket.on('disconnect', () => conn.set('reconnecting'));
+    socket.on('disconnect', (reason) => { conn.set('reconnecting'); if (reason === 'io server disconnect') { const current = socket; window.setTimeout(() => { if (current === socket) current?.connect(); }, 700); } });
     socket.on('connect_error', () => conn.set('reconnecting'));
 
     if (typeof window !== 'undefined') {
-      window.addEventListener('pageshow', (event) => {
+      onPageShow = (event) => {
         if (event.persisted && socket && !socket.connected) {
           socket.connect();
         }
-      });
+      };
+      window.addEventListener('pageshow', onPageShow);
     }
   }
   return socket;
@@ -49,6 +53,7 @@ export function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> 
 
 /** Сброс/закрытие сокета (после логина/логаута) */
 export function resetSocket(): void {
+  if (onPageShow) { window.removeEventListener('pageshow', onPageShow); onPageShow = null; }
   if (socket) {
     socket.removeAllListeners();
     socket.disconnect();

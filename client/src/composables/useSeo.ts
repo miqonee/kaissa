@@ -1,16 +1,18 @@
 import { computed, toValue, watchEffect, type ComputedRef, type MaybeRefOrGetter } from 'vue';
 import { useRoute } from 'vue-router';
+import { getActivePinia } from 'pinia';
+import publicPages from '../content/seo-pages.json' with { type: 'json' };
 
 export const SITE_NAME = 'Каисса';
 export const SITE_NAME_EN = 'Kaissa';
 export const BASE_CANONICAL_DOMAIN = 'https://duochess.ru';
 export const DEFAULT_OG_IMAGE = `${BASE_CANONICAL_DOMAIN}/og-image.png`;
-export const DEFAULT_TITLE = 'Шахматы на двоих онлайн: играть 2 на 2 и в Багхаус | Каисса';
-export const DEFAULT_TITLE_EN = 'Team Chess Online: 2v2 and Bughouse | Kaissa';
+export const DEFAULT_TITLE = publicPages['/'].ru.title;
+export const DEFAULT_TITLE_EN = publicPages['/'].en.title;
 export const DEFAULT_DESCRIPTION =
-  'Играйте в шахматы на двоих онлайн бесплатно. Командные шахматы 2х2 на одной доске и шведские шахматы (багхаус) с фигурами из резерва. Игра с друзьями и ботами.';
+  publicPages['/'].ru.description;
 export const DEFAULT_DESCRIPTION_EN =
-  'Play team chess online in pairs on one board or Bughouse with live piece drops and Stockfish AI bots.';
+  publicPages['/'].en.description;
 export const DEFAULT_KEYWORDS =
   'шахматы на двоих, шахматы на двоих онлайн, играть в шахматы на двоих, шахматы 2 на 2, командные шахматы, шахматы 2х2, багхаус, шведские шахматы, шахматы вдвоем, каисса';
 export const DEFAULT_KEYWORDS_EN =
@@ -120,16 +122,20 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
     // Вне контекста vue-router
   }
 
+  const locale = computed(() => toValue(options.canonicalLocale) ?? (getActivePinia()?.state.value.i18n?.locale as 'ru' | 'en' | undefined) ?? getCurrentLocale());
+  const pagePath = computed(() => toValue(options.path) ?? toValue(options.canonical) ?? route?.path ?? (typeof window !== 'undefined' ? window.location.pathname : '/'));
+  const content = computed(() => publicPages[pagePath.value as keyof typeof publicPages]?.[locale.value]);
+
   const resolvedTitle = computed(() => {
     const val = toValue(options.title);
     if (val?.trim()) return val.trim();
-    return getCurrentLocale() === 'en' ? DEFAULT_TITLE_EN : DEFAULT_TITLE;
+    return content.value?.title ?? (locale.value === 'en' ? DEFAULT_TITLE_EN : DEFAULT_TITLE);
   });
 
   const resolvedDescription = computed(() => {
     const val = toValue(options.description);
     if (val?.trim()) return val.trim();
-    return getCurrentLocale() === 'en' ? DEFAULT_DESCRIPTION_EN : DEFAULT_DESCRIPTION;
+    return content.value?.description ?? (locale.value === 'en' ? DEFAULT_DESCRIPTION_EN : DEFAULT_DESCRIPTION);
   });
 
   const resolvedKeywords = computed(() => {
@@ -159,7 +165,7 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
     return `${BASE_CANONICAL_DOMAIN}/`;
   });
 
-  const resolvedCanonical = computed(() => canonicalBase.value + (toValue(options.canonicalLocale) === 'en' ? '?lang=en' : ''));
+  const resolvedCanonical = computed(() => canonicalBase.value + (locale.value === 'en' ? '?lang=en' : ''));
 
   const resolvedOgTitle = computed(() => {
     const val = toValue(options.ogTitle);
@@ -205,7 +211,8 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
   });
 
   const resolvedRobots = computed(() => {
-    return toValue(options.noindex) ? 'noindex, nofollow' : undefined;
+    const privatePath = /^\/(?:login|admin|lobby|game|replay)(?:\/|$)/.test(pagePath.value);
+    return toValue(options.noindex) || privatePath ? 'noindex, follow' : 'index, follow';
   });
 
   function setMetaTag(attrName: 'name' | 'property', attrValue: string, content?: string | null) {
@@ -269,8 +276,8 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
       setHreflangTag('en', enHref);
       setHreflangTag('x-default', ruHref);
 
-      const locale = getCurrentLocale();
-      const isEn = locale === 'en';
+      const isEn = locale.value === 'en';
+      document.documentElement.lang = locale.value;
 
       setMetaTag('property', 'og:title', resolvedOgTitle.value);
       setMetaTag('property', 'og:description', resolvedOgDescription.value);
@@ -286,6 +293,11 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
       setMetaTag('name', 'twitter:description', resolvedTwitterDescription.value);
       setMetaTag('name', 'twitter:image', resolvedTwitterImage.value);
       setMetaTag('name', 'robots', resolvedRobots.value);
+      let schema = document.getElementById('kaissa-schema');
+      if (!schema) { schema = document.createElement('script'); schema.id = 'kaissa-schema'; schema.setAttribute('type','application/ld+json'); document.head.appendChild(schema); }
+      const structured: Record<string, unknown>[] = [{ '@context':'https://schema.org', '@type':pagePath.value === '/'?'WebSite':'WebPage', name:resolvedTitle.value, description:resolvedDescription.value, url:canonicalUrl, inLanguage:locale.value }];
+      if (pagePath.value === '/') structured.push({ '@context':'https://schema.org', '@type':'WebApplication', name:isEn?'Kaissa':'Каисса', url:canonicalUrl, description:resolvedDescription.value, applicationCategory:'GameApplication', operatingSystem:'Any', browserRequirements:'Requires JavaScript', offers:{ '@type':'Offer',price:'0',priceCurrency:'RUB' }, inLanguage:locale.value,image:resolvedOgImage.value });
+      schema.textContent = JSON.stringify(structured).replace(/</g, '\\u003c');
     });
   }
 

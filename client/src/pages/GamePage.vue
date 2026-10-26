@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { applyMoveUpdate, applyEndUpdate } from '../game/sync';
+import { ratingLabel } from '../utils/match';
+import MatchCard from '../components/MatchCard.vue';
+import GuestNotice from '../components/GuestNotice.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Chess, type Square } from 'chess.js';
@@ -187,14 +191,14 @@ function orientationOf(b: 0 | 1): 'white' | 'black' {
 }
 
 function myTurnOn(b: 0 | 1): boolean {
-  if (!state.value || state.value.status !== 'active' || state.value.botPacing?.paused) return false;
+  if (!state.value || state.value.status !== 'active' || state.value.savingResult || state.value.botPacing?.paused) return false;
   const idx = state.value.mode === 'bughouse' ? b : 0;
   const uid = state.value.turnUserIds[idx] ?? 0;
   return uid === myId.value;
 }
 
 function canPremoveOn(b: 0 | 1): boolean {
-  if (!state.value || state.value.status !== 'active' || state.value.botPacing?.paused) return false;
+  if (!state.value || state.value.status !== 'active' || state.value.savingResult || state.value.botPacing?.paused) return false;
   if (!isParticipant.value) return false;
   const p = myParticipant.value;
   if (!p) return false;
@@ -424,7 +428,9 @@ function choosePromotion(t: PieceType): void {
 }
 
 function sendMove(b: 0 | 1, from: string, to: string, promotion?: PieceType, dropPiece?: DropPieceType): void {
-  socket.emit('game:move', { gameId, boardIndex: b, from, to, promotion, dropPiece }, (ack) => {
+  if (!socket.connected) { error.value = i18n.locale === 'en' ? 'Connection lost. Wait for reconnection.' : 'Связь потеряна. Дождитесь подключения.'; boardRefs[b]?.resetView(); return; }
+  socket.timeout(8000).emit('game:move', { gameId, boardIndex: b, from, to, promotion, dropPiece }, (timeout, ack) => {
+    if (timeout || !ack) { error.value = i18n.locale === 'en' ? 'Move confirmation missing. Synchronizing…' : 'Нет подтверждения хода. Восстанавливаем позицию…'; boardRefs[b]?.resetView(); socket.emit('game:watch', gameId); return; }
     if (!ack.ok) {
       error.value = ack.error ?? '';
       setTimeout(() => (error.value = ''), 2500);
@@ -440,11 +446,18 @@ function onDrop(b: 0 | 1, payload: { piece: DropPieceType; to: string }): void {
   sendMove(b, '-', payload.to, undefined, payload.piece);
 }
 
+const resignPending = ref(false);
+let resignTimer: ReturnType<typeof setTimeout> | undefined;
 function resign(): void {
-  if (confirm('Сдаться всей командой?')) {
-    socket.emit('game:resign', gameId);
+  if (!resignPending.value) {
+    resignPending.value = true;
+    resignTimer = setTimeout(() => { resignPending.value = false; }, 3000);
+    return;
   }
+  clearTimeout(resignTimer); resignPending.value = false;
+  socket.emit('game:resign', gameId);
 }
+onBeforeUnmount(() => clearTimeout(resignTimer));
 
 function sendChat(): void {
   const t = chatText.value.trim();
@@ -476,10 +489,12 @@ function requestWatch(retries: number = 3): void {
 
 onMounted(() => {
   document.addEventListener('keydown', cancelDrop);
+  socket.on('game:unavailable', payload => { if (payload.gameId === gameId) { clearTimeout(watchRetryTimer); error.value = i18n.locale === 'en' ? 'Game not found' : payload.error; } });
   socket.on('game:state', (st) => {
     if (st.gameId !== gameId) return;
     clearTimeout(watchRetryTimer);
     state.value = st;
+    error.value = '';
     if (st.moves && Array.isArray(st.moves)) {
       movesSanHistory.value = [...st.moves];
     }
@@ -535,37 +550,16 @@ onMounted(() => {
       }
     }
 
-    if (mv.fenAfter && state.value) {
-      state.value.fens[mv.boardIndex] = mv.fenAfter;
-      state.value.turns[mv.boardIndex] = mv.fenAfter.split(' ')[1] as 'w' | 'b';
-      if (mv.turnUserIds) {
-        state.value.turnUserIds = mv.turnUserIds;
-      } else if (state.value.mode === 'bughouse') {
-        const turnColor = mv.fenAfter.split(' ')[1] as 'w' | 'b';
-        const nextP = state.value.participants.find((p) => p.boardIndex === mv.boardIndex && p.color === turnColor);
-        if (nextP) state.value.turnUserIds[mv.boardIndex] = nextP.userId;
-      } else {
-        // Командный режим 2х2 (на одной доске) или Crazyhouse 2х2
-        const turnColor = mv.fenAfter.split(' ')[1] as 'w' | 'b';
-        const team: 1 | 2 = turnColor === 'w' ? 1 : 2;
-        const currentSlot = state.value.turnSlots ? state.value.turnSlots[turnColor] : 0;
-        const nextP = state.value.participants.find((p) => p.team === team && p.moveSlot === currentSlot);
-        if (nextP) state.value.turnUserIds[0] = nextP.userId;
-      }
-      if (mv.turnSlots && state.value) state.value.turnSlots = mv.turnSlots;
-      if (mv.pockets !== undefined && state.value) state.value.pockets = mv.pockets;
-      if (mv.legalDrops !== undefined && state.value) state.value.legalDrops = mv.legalDrops;
-    }
+    if (state.value) applyMoveUpdate(state.value, mv);
   });
 
   socket.on('game:end', (payload) => {
     if (payload.gameId !== gameId) return;
     if (isParticipant.value) trackGoal('game_finished', { mode: state.value?.mode ?? 'unknown', reason: payload.reason ?? 'unknown' }, String(gameId));
     if (state.value) {
-      state.value.status = 'finished';
-      state.value.result = payload.result;
-      state.value.reason = payload.reason;
-      state.value.participants = payload.participants;
+      applyEndUpdate(state.value, payload);
+      rebuildLocalClocks();
+      void auth.check();
       showResult.value = true;
     }
     const myTeam = myParticipant.value?.team;
@@ -588,8 +582,8 @@ onMounted(() => {
   });
 
   socket.on('game:rematch', (payload) => {
-    if (payload.gameId !== gameId) return;
-    router.push(`/lobby/${payload.lobbyId}`);
+    if (payload.gameId !== gameId || !isParticipant.value) return;
+    rematchInvite.value = payload.lobbyId;
   });
 
   socket.on('game:next', (payload) => {
@@ -600,8 +594,8 @@ onMounted(() => {
 
   // REST-запрос параллельно сокету для мгновенной загрузки стола
   api.get<{ state: GameState }>(`/api/games/${gameId}/state`).then((res) => {
-    if (res.state) {
-      if (!state.value) state.value = res.state;
+    if (res.state && !state.value) {
+      state.value = res.state;
       if (res.state.moves && Array.isArray(res.state.moves)) {
         movesSanHistory.value = [...res.state.moves];
       }
@@ -627,6 +621,7 @@ onBeforeUnmount(() => {
   clearTimeout(watchRetryTimer);
   offResync?.();
   offResync = null;
+  socket.off('game:unavailable');
   socket.off('game:state');
   socket.off('game:move');
   socket.off('game:end');
@@ -640,6 +635,7 @@ onBeforeUnmount(() => {
 // ---------- Реванш и Анализ Lichess ----------
 
 const rematchBusy = ref(false);
+const rematchInvite = ref<string | null>(null);
 const lichessBusy = ref(false);
 
 async function rematch(): Promise<void> {
@@ -708,7 +704,7 @@ function resultHeadline(): string {
   const winnerTeam = s.result === '1-0' ? 1 : (s.result === '0-1' ? 2 : null);
   if (!winnerTeam) return reason ? (isEn ? `Game over (${reason})` : `Партия завершена (${reason})`) : (isEn ? 'Game over' : 'Партия завершена');
   const winners = s.participants.filter((p) => p.team === winnerTeam).map((p) => p.username);
-  const sideColor = winnerTeam === 1 ? (isEn ? 'White' : 'Белые') : (isEn ? 'Black' : 'Чёрные');
+  const sideColor = s.mode === 'bughouse' ? (isEn ? `Team ${winnerTeam}` : `Команда ${winnerTeam}`) : winnerTeam === 1 ? (isEn ? 'White' : 'Белые') : (isEn ? 'Black' : 'Чёрные');
   const reasonSuffix = reason ? ` (${reason})` : '';
   const prefix = isEn ? 'Victory' : 'Победа';
   return `${prefix} (${sideColor}): ${winners.join(' / ')}${reasonSuffix}`;
@@ -717,6 +713,11 @@ function resultHeadline(): string {
 
 <template>
   <div v-if="state" class="game-page" :class="state.mode">
+    <aside v-if="rematchInvite" class="panel rematch-invite" role="status">
+      <span>{{ i18n.locale === 'en' ? 'Your opponents are inviting you to a rematch.' : 'Участники приглашают вас на реванш.' }}</span>
+      <router-link class="button primary small" :to="`/lobby/${rematchInvite}`">{{ i18n.locale === 'en' ? 'Join' : 'Присоединиться' }}</router-link>
+      <button class="small ghost" @click="rematchInvite = null">{{ i18n.locale === 'en' ? 'Dismiss' : 'Не сейчас' }}</button>
+    </aside>
     <!-- Верхняя информационная плашка -->
     <header class="game-topbar panel">
       <div class="game-title-group">
@@ -727,6 +728,8 @@ function resultHeadline(): string {
           {{ modeLabel(state.mode, i18n.locale) }}
         </h1>
         <span class="badge mono">{{ timeControlLabel(state.timeControl) }}</span>
+        <span class="badge">{{ ratingLabel(state, i18n.locale) }}</span>
+        <span v-if="state.savingResult" class="badge" role="status">{{ i18n.locale === 'en' ? 'Saving result…' : 'Сохраняем результат…' }}</span>
         <span v-if="state.status === 'active'" class="badge on">{{ i18n.locale === 'en' ? 'Live' : 'В игре' }}</span>
         <span v-else class="badge">{{ state.result }}</span>
         <span v-if="!isParticipant" class="badge dim">{{ i18n.locale === 'en' ? 'Spectating' : 'Режим зрителя' }}</span>
@@ -740,8 +743,9 @@ function resultHeadline(): string {
           <AppIcon name="play" :size="13" /> {{ i18n.locale === 'en' ? 'Replay Game' : 'Смотреть партию' }}
         </button>
         <button v-if="isParticipant && state.status === 'active'" class="danger small" @click="resign">
-          {{ i18n.t.game.resignBtn }}
+          {{ resignPending ? (i18n.locale === 'en' ? 'Confirm team resignation' : 'Подтвердить сдачу команды') : i18n.t.game.resignBtn }}
         </button>
+        <button v-if="resignPending && state.status === 'active'" class="small ghost" @click="resignPending = false">{{ i18n.locale === 'en' ? 'Cancel' : 'Отмена' }}</button>
         <button v-if="state.status !== 'active' && state.mode === 'team'" class="small brass" @click="analyzeOnLichess(0)">
           <AppIcon name="external" :size="13" /> {{ i18n.t.game.lichessAnalysis }}
         </button>
@@ -798,7 +802,7 @@ function resultHeadline(): string {
                     {{ displayName(teamModeSides.top.players[0]) }}
                   </span>
                 </BotHoverCard>
-                <span class="member-rating mono">({{ teamModeSides.top.players[0].ratingBefore }})</span>
+                <span v-if="!teamModeSides.top.players[0].isGuest" class="member-rating mono">({{ teamModeSides.top.players[0].ratingBefore }})</span><span v-else class="badge">{{ i18n.locale === 'en' ? 'Guest' : 'Гость' }}</span>
                 <span v-if="roleOf(teamModeSides.top.players[0]) === 'me'" class="member-role me">{{ i18n.locale === 'en' ? 'You' : 'Вы' }}</span>
                 <span v-else-if="roleOf(teamModeSides.top.players[0]) === 'partner'" class="member-role partner">{{ i18n.locale === 'en' ? 'Partner' : 'Напарник' }}</span>
                 <span v-if="isPlayerTurn(teamModeSides.top.players[0].userId)" class="turn-chip">
@@ -813,7 +817,7 @@ function resultHeadline(): string {
             </div>
 
             <!-- Справа: Игрок 2 (слот 2, ходит вторым) -->
-            <div class="team-slot right">
+            <div v-if="state.mode !== 'crazyhouse'" class="team-slot right">
               <div
                 v-if="teamModeSides.top.players[1]"
                 class="member-pill compact"
@@ -830,7 +834,7 @@ function resultHeadline(): string {
                     {{ displayName(teamModeSides.top.players[1]) }}
                   </span>
                 </BotHoverCard>
-                <span class="member-rating mono">({{ teamModeSides.top.players[1].ratingBefore }})</span>
+                <span v-if="!teamModeSides.top.players[1].isGuest" class="member-rating mono">({{ teamModeSides.top.players[1].ratingBefore }})</span><span v-else class="badge">{{ i18n.locale === 'en' ? 'Guest' : 'Гость' }}</span>
                 <span v-if="roleOf(teamModeSides.top.players[1]) === 'me'" class="member-role me">{{ i18n.locale === 'en' ? 'You' : 'Вы' }}</span>
                 <span v-else-if="roleOf(teamModeSides.top.players[1]) === 'partner'" class="member-role partner">{{ i18n.locale === 'en' ? 'Partner' : 'Напарник' }}</span>
                 <span v-if="isPlayerTurn(teamModeSides.top.players[1].userId)" class="turn-chip">
@@ -893,7 +897,7 @@ function resultHeadline(): string {
                     {{ displayName(teamModeSides.bottom.players[0]) }}
                   </span>
                 </BotHoverCard>
-                <span class="member-rating mono">({{ teamModeSides.bottom.players[0].ratingBefore }})</span>
+                <span v-if="!teamModeSides.bottom.players[0].isGuest" class="member-rating mono">({{ teamModeSides.bottom.players[0].ratingBefore }})</span><span v-else class="badge">{{ i18n.locale === 'en' ? 'Guest' : 'Гость' }}</span>
                 <span v-if="roleOf(teamModeSides.bottom.players[0]) === 'me'" class="member-role me">{{ i18n.locale === 'en' ? 'You' : 'Вы' }}</span>
                 <span v-else-if="roleOf(teamModeSides.bottom.players[0]) === 'partner'" class="member-role partner">{{ i18n.locale === 'en' ? 'Partner' : 'Напарник' }}</span>
                 <span v-if="isPlayerTurn(teamModeSides.bottom.players[0].userId)" class="turn-chip">
@@ -908,7 +912,7 @@ function resultHeadline(): string {
             </div>
 
             <!-- Справа: Игрок 2 (слот 2, ходит вторым) -->
-            <div class="team-slot right">
+            <div v-if="state.mode !== 'crazyhouse'" class="team-slot right">
               <div
                 v-if="teamModeSides.bottom.players[1]"
                 class="member-pill compact"
@@ -925,7 +929,7 @@ function resultHeadline(): string {
                     {{ displayName(teamModeSides.bottom.players[1]) }}
                   </span>
                 </BotHoverCard>
-                <span class="member-rating mono">({{ teamModeSides.bottom.players[1].ratingBefore }})</span>
+                <span v-if="!teamModeSides.bottom.players[1].isGuest" class="member-rating mono">({{ teamModeSides.bottom.players[1].ratingBefore }})</span><span v-else class="badge">{{ i18n.locale === 'en' ? 'Guest' : 'Гость' }}</span>
                 <span v-if="roleOf(teamModeSides.bottom.players[1]) === 'me'" class="member-role me">{{ i18n.locale === 'en' ? 'You' : 'Вы' }}</span>
                 <span v-else-if="roleOf(teamModeSides.bottom.players[1]) === 'partner'" class="member-role partner">{{ i18n.locale === 'en' ? 'Partner' : 'Напарник' }}</span>
                 <span v-if="isPlayerTurn(teamModeSides.bottom.players[1].userId)" class="turn-chip">
@@ -1289,41 +1293,8 @@ function resultHeadline(): string {
             <p v-if="gameId < 0 && !isParticipant" class="dim next-game-hint">{{ i18n.locale === 'en' ? 'Next auto-game starts automatically…' : 'Следующая автопартия начнётся автоматически…' }}</p>
           </div>
 
-          <!-- Таблица изменений рейтинга -->
-          <table class="club result-table">
-            <thead>
-              <tr>
-                <th>{{ i18n.locale === 'en' ? 'Player' : 'Игрок' }}</th>
-                <th>{{ i18n.locale === 'en' ? 'Team' : 'Команда' }}</th>
-                <th class="num">{{ i18n.locale === 'en' ? 'Before' : 'Было' }}</th>
-                <th class="num">±</th>
-                <th class="num">{{ i18n.locale === 'en' ? 'Result' : 'Итог' }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="p in state.participants" :key="p.userId">
-                <td>
-                  <strong class="player-name" :title="p.isBot ? getBotTooltip(p.username, p.ratingBefore, i18n.locale) : undefined">{{ p.username }}</strong>
-                  <span v-if="p.isBot" class="bot-badge tiny" style="margin-left: 6px;" :title="getBotTooltip(p.username, p.ratingBefore, i18n.locale)">
-                    {{ displayName(p) }}
-                  </span>
-                </td>
-                <td class="dim">{{ i18n.locale === 'en' ? `Team ${p.team} (${p.color === 'w' ? 'white' : 'black'})` : `Команда ${p.team} (${p.color === 'w' ? 'белые' : 'черные'})` }}</td>
-                <td class="mono dim num">{{ p.ratingBefore }}</td>
-                <td class="num">
-                  <span
-                    v-if="p.ratingAfter !== null && (p.ratingAfter - p.ratingBefore) !== 0"
-                    class="rating-delta"
-                    :class="{ plus: p.ratingAfter > p.ratingBefore, minus: p.ratingAfter < p.ratingBefore }"
-                  >
-                    {{ p.ratingAfter - p.ratingBefore > 0 ? '+' : '' }}{{ p.ratingAfter - p.ratingBefore }}
-                  </span>
-                  <span v-else class="rating-delta mono dim">±0</span>
-                </td>
-                <td class="mono num" style="font-weight: 700;">{{ p.ratingAfter ?? p.ratingBefore }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <MatchCard :game="{ ...state, id: state.gameId, startedAt: new Date(state.startedAt).toISOString(), endedAt: null }" :viewer-id="auth.user?.id" compact />
+          <GuestNotice v-if="isParticipant" />
 
           <!-- Блок анализа партии -->
           <div class="analysis-box">
@@ -1355,7 +1326,8 @@ function resultHeadline(): string {
         </div>
 
         <div class="modal-foot">
-          <button v-if="isParticipant" class="primary big" :disabled="rematchBusy" @click="rematch">
+          <router-link v-if="rematchInvite && isParticipant" class="button primary" :to="`/lobby/${rematchInvite}`">{{ i18n.locale === 'en' ? 'Accept rematch invitation' : 'Принять приглашение на реванш' }}</router-link>
+          <button v-else-if="isParticipant" class="primary big" :disabled="rematchBusy" @click="rematch">
             <AppIcon name="rematch" :size="16" />
             {{ rematchBusy ? (i18n.locale === 'en' ? 'Creating…' : 'Создаём…') : i18n.t.game.rematchBtn }}
           </button>
@@ -1377,16 +1349,18 @@ function resultHeadline(): string {
 
   <div v-else class="game-loading-wrap">
     <div class="panel game-loading-panel">
-      <h2>Подключение к столу #{{ gameId }}…</h2>
-      <p class="hint">Синхронизация состояния доски с сервером</p>
+      <h2>{{ error || (i18n.locale === 'en' ? `Connecting to game #${gameId}…` : `Подключение к партии #${gameId}…`) }}</h2>
+      <p class="hint">{{ i18n.locale === 'en' ? (error ? 'Check the link or return to the tables.' : 'Waiting for the server. If it takes too long, try again or return to the tables.') : (error ? 'Проверьте ссылку или вернитесь к списку столов.' : 'Ожидаем ответ сервера. Если ожидание затянулось, повторите попытку или вернитесь к столам.') }}</p>
+      <router-link class="button ghost small" to="/">{{ i18n.locale === 'en' ? 'Tables' : 'К столам' }}</router-link>
       <button class="brass small" @click="requestWatch(3)">
-        <AppIcon name="refresh" :size="14" /> Обновить
+        <AppIcon name="refresh" :size="14" /> {{ i18n.locale === 'en' ? 'Try again' : 'Повторить' }}
       </button>
     </div>
   </div>
 </template>
 
 <style scoped>
+.rematch-invite { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:14px; margin-bottom:12px; }
 .pacing-explanation { margin: 0 0 12px; color: var(--text-muted, #959595); font-size: 0.9rem; }
 .board-status { white-space: normal; text-align: center; font-size: 0.75rem; max-width: 220px; }
 .bughouse-help { display: flex; align-items: center; gap: 16px; padding: 14px 18px; margin: 12px 0; }
@@ -1565,6 +1539,14 @@ function resultHeadline(): string {
   max-width: min(100%, max(300px, calc(100dvh - 400px)));
 }
 @media (max-width: 1024px) { .team-board-wrapper.with-reserve { max-width: 100%; } }
+/* 1×1: the grid follows the board size instead of leaving empty gutters
+   around a board capped at viewport height minus 400 px. */
+.game-page.crazyhouse .team-board-wrapper.with-reserve { max-width: 100%; margin: 0; }
+.game-page.crazyhouse .team-players-bar { grid-template-columns: minmax(0, 1fr) auto; padding-inline: 6px; border: 0; border-radius: 4px; }
+@media (min-width: 1025px) {
+  .game-page.crazyhouse { max-width: calc(max(440px, 100dvh - 250px) + 274px); margin-inline: auto; }
+  .game-page.crazyhouse .game-layout { grid-template-columns: minmax(0, 1fr) 260px; }
+}
 @container (max-width: 440px) {
   .member-rating, .slot-num, .turn-chip { display: none; }
 }

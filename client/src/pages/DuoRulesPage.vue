@@ -7,12 +7,7 @@ import { useI18n } from '../stores/i18n';
 
 const i18n = useI18n();
 
-usePageSeo({
-  title: computed(() => (i18n.locale === 'en' ? '2v2 Team Chess on One Board: Rules | Kaissa' : 'Командные шахматы 2 на 2 на одной доске: правила игры | Каисса')),
-  description: computed(() => (i18n.locale === 'en' ? 'Official rules for 2v2 team chess on a single board. Strict move rotation, team clocks, tactics on Kaissa.' : 'Официальные правила командных шахмат 2 на 2 на одной доске. Поочерёдные ходы напарников, командные часы, тактика игры в паре на платформе Каисса.')),
-  canonical: '/rules/duo',
-  keywords: ['командные шахматы 2 на 2', 'шахматы 2х2 правила', '2v2 chess rules', 'duo chess'],
-});
+usePageSeo({ canonical: '/rules/duo' });
 </script>
 
 <template>

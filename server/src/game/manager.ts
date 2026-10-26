@@ -12,6 +12,7 @@ import type {
   TimeControl,
 } from 'shared';
 import { DEFAULT_POCKET, hasPockets, isCrazyhouse, lobbyCapacity, eloDelta, eloToLevel, type DropPieceType } from 'shared';
+import { loadPlayerRatings, ratingKind, saveGameResult } from '../ratings/service.js';
 import { prisma } from '../prisma.js';
 import { presence } from '../socket/presence.js';
 import { BughouseGame, isDrop, type Board, type SideColor } from './bughouse.js';
@@ -39,6 +40,7 @@ export interface ParticipantSetup {
   uid: number;
   username: string;
   rating: number;
+  isGuest?: boolean;
   isBot?: boolean;
   botLevel?: number | null;
 }
@@ -61,12 +63,16 @@ interface ActiveParticipant {
   moveSlot: 0 | 1;
   ratingBefore: number;
   ratingAfter: number | null;
+  isGuest?: boolean;
   isBot?: boolean;
   botLevel?: number | null;
   botJitter?: number;
 }
 
 interface ActiveGame {
+  ratingKind: import('shared').RatingKind;
+  endBoardIndex?: number;
+  pendingFinish?: { result: GameResult; reason: EndReason; board?: number };
   instance: number;
   botEpoch: number;
   pacing?: { board: Board; credits: number; paused: boolean };
@@ -95,6 +101,13 @@ const TEAM_COLORS_BUGHOUSE: Record<Team, Record<Board, SideColor>> = {
 };
 
 export class GamesManager {
+  renamePlayer(uid: number, username: string): void {
+    for (const g of this.games.values()) {
+      const p = g.participants.find(p => p.uid === uid);
+      if (p) { p.username = username; this.io?.to(this.gameRoom(g.id)).emit('game:state', this.toGameState(g)); }
+    }
+  }
+  private startingUsers = new Set<number>();
   private instanceSeq = 0;
   private games = new Map<number, ActiveGame>();
   private io: SocketServer | null = null;
@@ -118,6 +131,7 @@ export class GamesManager {
   }
 
   private botMayMove(g: ActiveGame, board: Board): boolean {
+    if (g.pendingFinish) return false;
     return !g.pacing || (!g.pacing.paused && (board !== g.pacing.board || g.pacing.credits > 0));
   }
 
@@ -231,77 +245,86 @@ export class GamesManager {
   // ---------------- Создание ----------------
 
   async createGame(opts: CreateGameOpts): Promise<number> {
-    const team1 = opts.team1.slice(0, lobbyCapacity(opts.mode) / 2);
-    const team2 = opts.team2.slice(0, lobbyCapacity(opts.mode) / 2);
-    if (team1.length !== lobbyCapacity(opts.mode) / 2 || team2.length !== team1.length || new Set([...team1, ...team2].map(p => p.uid)).size !== lobbyCapacity(opts.mode)) throw new Error('Неверный состав игроков');
+    const humans = [...opts.team1, ...opts.team2].filter(p => !p.isBot).map(p => p.uid);
+    if (humans.some(uid => this.startingUsers.has(uid) || this.activeGameOf(uid) !== null)) throw new Error('Участник уже играет другую партию');
+    humans.forEach(uid => this.startingUsers.add(uid));
+    try {
+      const team1 = opts.team1.slice(0, lobbyCapacity(opts.mode) / 2);
+      const team2 = opts.team2.slice(0, lobbyCapacity(opts.mode) / 2);
+      if (team1.length !== lobbyCapacity(opts.mode) / 2 || team2.length !== team1.length || new Set([...team1, ...team2].map(p => p.uid)).size !== lobbyCapacity(opts.mode)) throw new Error('Неверный состав игроков');
 
-    const noClock = opts.timeControl.kind === 'none';
-    const baseMs = opts.timeControl.baseMin * 60_000;
-    const incMs = opts.timeControl.incSec * 1000;
+      const noClock = opts.timeControl.kind === 'none';
+      const baseMs = opts.timeControl.baseMin * 60_000;
+      const incMs = opts.timeControl.incSec * 1000;
 
-    const participants = buildParticipants(opts.mode, team1, team2);
-    let gameId: number;
+      const participants = buildParticipants(opts.mode, await loadPlayerRatings(team1, opts.mode), await loadPlayerRatings(team2, opts.mode));
+      const kind = ratingKind(participants);
+      let gameId: number;
 
-    if (opts.isDemo && opts.fixedId) {
-      gameId = opts.fixedId;
-    } else {
-      const dbGame = await prisma.game.create({
-        data: {
-          mode: opts.mode,
-          rulesVersion: hasPockets(opts.mode) ? 2 : null,
-          status: 'active',
-          baseMin: opts.timeControl.baseMin,
-          incSec: opts.timeControl.incSec,
-          noClock,
-          participants: {
-            create: participants.map((p) => ({
-              userId: p.uid,
-              team: p.team,
-              color: p.color,
-              boardIndex: p.boardIndex,
-              moveSlot: p.moveSlot,
-              ratingBefore: p.ratingBefore,
-            })),
+      if (opts.isDemo && opts.fixedId) {
+        gameId = opts.fixedId;
+      } else {
+        const dbGame = await prisma.game.create({
+          data: {
+            mode: opts.mode,
+            ratingKind: kind,
+            rulesVersion: hasPockets(opts.mode) ? 2 : null,
+            status: 'active',
+            baseMin: opts.timeControl.baseMin,
+            incSec: opts.timeControl.incSec,
+            noClock,
+            participants: {
+              create: participants.map((p) => ({
+                userId: p.uid,
+                team: p.team,
+                color: p.color,
+                boardIndex: p.boardIndex,
+                moveSlot: p.moveSlot,
+                ratingBefore: p.ratingBefore,
+                wasGuest: Boolean(p.isGuest),
+              })),
+            },
           },
-        },
-      });
-      gameId = dbGame.id;
-    }
+        });
+        gameId = dbGame.id;
+      }
 
-    const engine = opts.mode === 'bughouse' ? new BughouseGame() : isCrazyhouse(opts.mode) ? new CrazyhouseGame(opts.mode === 'crazyhouse-team') : new TeamGame();
-    const clockCount = opts.mode === 'bughouse' ? 2 : 1;
-    const clocks = Array.from({ length: clockCount }, () => initClock(baseMs, incMs));
+      const engine = opts.mode === 'bughouse' ? new BughouseGame() : isCrazyhouse(opts.mode) ? new CrazyhouseGame(opts.mode === 'crazyhouse-team') : new TeamGame();
+      const clockCount = opts.mode === 'bughouse' ? 2 : 1;
+      const clocks = Array.from({ length: clockCount }, () => initClock(baseMs, incMs));
 
-    const game: ActiveGame = {
-      instance: ++this.instanceSeq,
-      botEpoch: 0,
-      id: gameId,
-      mode: opts.mode,
-      rulesVersion: hasPockets(opts.mode) ? 2 : null,
-      timeControl: opts.timeControl,
-      participants,
-      engine,
-      clocks,
-      ply: 0,
-      startedAt: Date.now(),
-      status: 'active',
-      result: '*',
-      reason: null,
-      disconnected: new Set(),
-      chatIdSeq: 1,
-      chat: [],
-      isDemo: Boolean(opts.isDemo),
-      boardsStarted: [false, false],
-    };
-    if (opts.mode === 'bughouse' && noClock && !opts.isDemo && participants.some(p => !p.isBot)) {
-      const board = ([0, 1] as Board[]).find(b => participants.filter(p => p.boardIndex === b).every(p => p.isBot));
-      if (board !== undefined) game.pacing = { board, credits: 0, paused: false };
-    }
-    this.cancelBotTimers(game.id);
-    this.games.set(game.id, game);
-    this.io?.to('live').emit('live:new', this.liveInfo(game));
-    this.triggerBotTurn(game.id);
-    return game.id;
+      const game: ActiveGame = {
+        ratingKind: kind,
+        instance: ++this.instanceSeq,
+        botEpoch: 0,
+        id: gameId,
+        mode: opts.mode,
+        rulesVersion: hasPockets(opts.mode) ? 2 : null,
+        timeControl: opts.timeControl,
+        participants,
+        engine,
+        clocks,
+        ply: 0,
+        startedAt: Date.now(),
+        status: 'active',
+        result: '*',
+        reason: null,
+        disconnected: new Set(),
+        chatIdSeq: 1,
+        chat: [],
+        isDemo: Boolean(opts.isDemo),
+        boardsStarted: [false, false],
+      };
+      if (opts.mode === 'bughouse' && noClock && !opts.isDemo && participants.some(p => !p.isBot)) {
+        const board = ([0, 1] as Board[]).find(b => participants.filter(p => p.boardIndex === b).every(p => p.isBot));
+        if (board !== undefined) game.pacing = { board, credits: 0, paused: false };
+      }
+      this.cancelBotTimers(game.id);
+      this.games.set(game.id, game);
+      this.io?.to('live').emit('live:new', this.liveInfo(game));
+      this.triggerBotTurn(game.id);
+      return game.id;
+    } finally { humans.forEach(uid => this.startingUsers.delete(uid)); }
   }
 
   // ---------------- Ходы ----------------
@@ -320,7 +343,7 @@ export class GamesManager {
     expectedPosition?: string,
   ): Promise<{ ok: true } | { ok: false; error: string }> {
     const g = this.games.get(gameId);
-    if (!g || g.status !== 'active') return { ok: false, error: 'Партия не активна' };
+    if (!g || g.status !== 'active' || g.pendingFinish) return { ok: false, error: 'Партия завершена или сохраняется' };
     const p = g.participants.find((x) => x.uid === uid);
     if (!p) return { ok: false, error: 'Вы не участник' };
     if (g.pacing?.paused) return { ok: false, error: 'Партия на паузе' };
@@ -392,7 +415,6 @@ export class GamesManager {
     }
 
     g.ply += 1;
-    g.boardsStarted[data.boardIndex] = true;
     try { await this.persistMove(g, uid, data, fen, clocksAfter); }
     catch (error) {
       if (before) g.engine = g.engine instanceof CrazyhouseGame ? CrazyhouseGame.fromSnapshot(before) : BughouseGame.fromSnapshot(before);
@@ -402,6 +424,8 @@ export class GamesManager {
       console.error('[game] Could not save move:', error);
       return { ok: false, error: 'Не удалось сохранить ход. Попробуйте ещё раз' };
     }
+
+    g.boardsStarted[data.boardIndex] = true;
 
     if (g.pacing) {
       if (data.boardIndex === g.pacing.board) g.pacing.credits--;
@@ -429,7 +453,7 @@ export class GamesManager {
     await this.checkEndAfterMove(g, data.boardIndex as Board);
     this.io?.to(this.gameRoom(g.id)).emit('game:state', this.toGameState(g));
     if (g.status === 'active') this.io?.to('live').emit('live:update', this.liveInfo(g));
-    if (g.status === 'active') {
+    if (g.status === 'active' && !g.pendingFinish) {
       this.triggerBotTurn(g.id);
     }
     return { ok: true };
@@ -464,9 +488,9 @@ export class GamesManager {
     if (g.status !== 'active') return;
     if (g.engine instanceof CrazyhouseGame) {
       const cg = g.engine;
-      if (cg.isBughouseCheckmate(0)) await this.finish(g, cg.turn(0) === 'w' ? '0-1' : '1-0', 'checkmate');
-      else if (cg.isBughouseStalemate(0)) await this.finish(g, '1/2-1/2', 'stalemate');
-      else if (cg.isThreefoldRepetition()) await this.finish(g, '1/2-1/2', 'repetition');
+      if (cg.isBughouseCheckmate(0)) await this.finish(g, cg.turn(0) === 'w' ? '0-1' : '1-0', 'checkmate', board);
+      else if (cg.isBughouseStalemate(0)) await this.finish(g, '1/2-1/2', 'stalemate', board);
+      else if (cg.isThreefoldRepetition()) await this.finish(g, '1/2-1/2', 'repetition', board);
       return;
     }
     if (g.mode === 'bughouse') {
@@ -474,25 +498,25 @@ export class GamesManager {
       if (bg.isBughouseCheckmate(board)) {
         const loserColor = bg.turn(board);
         const loserTeam = teamOfBoardColor(board, loserColor);
-        await this.finish(g, loserTeam === 1 ? '0-1' : '1-0', 'checkmate');
+        await this.finish(g, loserTeam === 1 ? '0-1' : '1-0', 'checkmate', board);
       } else if (bg.isBughouseStalemate(board)) {
         const loserColor = bg.turn(board);
         const loserTeam = teamOfBoardColor(board, loserColor);
-        await this.finish(g, loserTeam === 1 ? '0-1' : '1-0', 'stalemate');
+        await this.finish(g, loserTeam === 1 ? '0-1' : '1-0', 'stalemate', board);
       }
       return;
     }
     const tg = g.engine as TeamGame;
     if (tg.isCheckmate()) {
-      await this.finish(g, tg.turn() === 'w' ? '0-1' : '1-0', 'checkmate');
+      await this.finish(g, tg.turn() === 'w' ? '0-1' : '1-0', 'checkmate', board);
     } else if (tg.isStalemate()) {
-      await this.finish(g, '*', 'stalemate');
+      await this.finish(g, '1/2-1/2', 'stalemate', board);
     } else if (tg.isInsufficientMaterial()) {
-      await this.finish(g, '*', 'material');
+      await this.finish(g, '1/2-1/2', 'material', board);
     } else if (tg.isThreefoldRepetition()) {
-      await this.finish(g, '*', 'repetition');
+      await this.finish(g, '1/2-1/2', 'repetition', board);
     } else if (tg.isFiftyMoves()) {
-      await this.finish(g, '*', 'fifty');
+      await this.finish(g, '1/2-1/2', 'fifty', board);
     }
   }
 
@@ -513,6 +537,7 @@ export class GamesManager {
   async checkFlags(): Promise<void> {
     const now = Date.now();
     await Promise.all([...this.games.values()].filter(g => g.status === 'active').map(g => this.serialize(g.id, async () => {
+      if (g.pendingFinish) { await this.finish(g, g.pendingFinish.result, g.pendingFinish.reason, g.pendingFinish.board); return; }
       if (g.status !== 'active') return;
 
       // 30 секунд на первый ход (если ход не сделан, матч отменяется без изменения рейтинга)
@@ -537,7 +562,7 @@ export class GamesManager {
 
   private async finishByFlag(g: ActiveGame, board: Board, flaggedColor: SideColor): Promise<void> {
     const flaggedTeam = teamOfBoardColor(board, flaggedColor);
-    await this.finish(g, flaggedTeam === 1 ? '0-1' : '1-0', 'timeout');
+    await this.finish(g, flaggedTeam === 1 ? '0-1' : '1-0', 'timeout', board);
   }
 
   // ---------------- Завершение / Elo ----------------
@@ -551,100 +576,37 @@ export class GamesManager {
     if (!g || g.status !== 'active') return;
     const p = g.participants.find((x) => x.uid === uid);
     if (!p) return;
-    await this.finish(g, p.team === 1 ? '0-1' : '1-0', 'resign');
+    await this.finish(g, p.team === 1 ? '0-1' : '1-0', 'resign', p.boardIndex);
   }
 
-  private async finish(g: ActiveGame, result: GameResult, reason: EndReason): Promise<void> {
+  private async finish(g: ActiveGame, result: GameResult, reason: EndReason, board?: number): Promise<void> {
     if (g.status !== 'active') return;
-    this.cancelBotTimers(g.id);
-    g.status = 'finished';
-    g.result = result;
-    g.reason = reason;
-
-    if (g.participants.every((x) => x.isBot)) {
-      botStatsTracker.recordBotGame(g.participants, result, reason, g.ply);
+    if (!g.pendingFinish) {
+      g.pendingFinish = { result, reason, board };
+      this.cancelBotTimers(g.id);
+      g.clocks = g.clocks.map(c => ({ ...c, ...clockSnapshot(c, Date.now()), active: null }));
     }
-
-    const isDraw = result === '*' || result === '1/2-1/2';
-    const winnerTeam: Team | null = isDraw ? null : (result === '1-0' ? 1 : 2);
-    const winners = winnerTeam ? g.participants.filter((p) => p.team === winnerTeam) : [];
-    const losers = winnerTeam ? g.participants.filter((p) => p.team !== winnerTeam) : [];
-
-    const avg = (arr: ActiveParticipant[]) =>
-      arr.length ? arr.reduce((s, p) => s + p.ratingBefore, 0) / arr.length : 1200;
-
-    for (const p of g.participants) {
-      if (p.isBot) {
-        // У ботов рейтинг зафиксирован на номинале
-        p.ratingAfter = p.ratingBefore;
-        if (!g.isDemo) {
-          await prisma.gameParticipant.update({
-            where: { gameId_userId: { gameId: g.id, userId: p.uid } },
-            data: { ratingAfter: p.ratingBefore },
-          });
-        }
-        continue;
-      }
-
-      const opposingHumans = g.participants.filter((x) => x.team !== p.team && !x.isBot);
-      const isVsHuman = opposingHumans.length > 0;
-
-      if (!isVsHuman) {
-        // Матч только против ботов: рейтинг не меняется
-        p.ratingAfter = p.ratingBefore;
-        if (!g.isDemo) {
-          await prisma.gameParticipant.update({
-            where: { gameId_userId: { gameId: g.id, userId: p.uid } },
-            data: { ratingAfter: p.ratingBefore },
-          });
-        }
-        await prisma.user.update({
-          where: { id: p.uid },
-          data: {
-            wins: { increment: !isDraw && p.team === winnerTeam ? 1 : 0 },
-            losses: { increment: !isDraw && p.team !== winnerTeam ? 1 : 0 },
-            draws: { increment: isDraw ? 1 : 0 },
-          },
-        });
-        continue;
-      }
-
-      // Матч против людей: рейтинг считается против живых соперников
-      const opponent = avg(opposingHumans);
-      const score: 0 | 0.5 | 1 = isDraw ? 0.5 : (p.team === winnerTeam ? 1 : 0);
-      const delta = eloDelta(p.ratingBefore, opponent, score);
-      const after = Math.max(100, p.ratingBefore + delta);
-      p.ratingAfter = after;
-      if (!g.isDemo) {
-        await prisma.gameParticipant.update({
-          where: { gameId_userId: { gameId: g.id, userId: p.uid } },
-          data: { ratingAfter: after },
-        });
-      }
-      await prisma.user.update({
-        where: { id: p.uid },
-        data: {
-          rating: after,
-          wins: { increment: !isDraw && p.team === winnerTeam ? 1 : 0 },
-          losses: { increment: !isDraw && p.team !== winnerTeam ? 1 : 0 },
-          draws: { increment: isDraw ? 1 : 0 },
-        },
-      });
-      if (!g.isDemo) {
-        await prisma.ratingHistory.create({
-          data: { userId: p.uid, delta, value: after, gameId: g.id },
-        });
-      }
-    }
-
+    const pending = g.pendingFinish;
+    result = pending.result; reason = pending.reason;
     if (!g.isDemo) {
-      await prisma.game.update({
-        where: { id: g.id },
-        data: { status: 'finished', result, reason, endedAt: new Date() },
-      });
+      try {
+        const ratings = await saveGameResult(g, result, reason, pending.board);
+        for (const p of g.participants) {
+          const rating = ratings.find(r => r.uid === p.uid);
+          if (rating) { p.ratingBefore = rating.before; p.ratingAfter = rating.after; }
+        }
+      } catch (error) {
+        console.error('[game] Result persistence failed; will retry:', error);
+        return;
+      }
     }
+    g.status = 'finished'; g.result = result; g.reason = reason; g.endBoardIndex = pending.board;
+    g.pendingFinish = undefined;
+    if (g.participants.every(p => p.isBot)) botStatsTracker.recordBotGame(g.participants, result, reason, g.ply);
 
     this.io?.to(this.gameRoom(g.id)).emit('game:end', {
+      ratingKind: g.ratingKind, endBoardIndex: g.endBoardIndex,
+      status: 'finished',
       gameId: g.id,
       result,
       reason,
@@ -669,7 +631,7 @@ export class GamesManager {
       void this.serialize(g.id, () => this.abortUnrated(g, `${this.usernameOf(g, uid)} отключился до первого хода. Матч отменён.`));
       return;
     }
-    if (g.disconnected.size >= g.participants.length) {
+    if (!g.pacing && g.participants.filter(p => !p.isBot).every(p => g.disconnected.has(p.uid))) {
       void this.serialize(g.id, () => this.abandon(g));
     }
   }
@@ -722,6 +684,7 @@ export class GamesManager {
   }
 
   private async abandon(g: ActiveGame): Promise<void> {
+    if (g.pendingFinish) return;
     if (g.status !== 'active') return;
     this.cancelBotTimers(g.id);
     g.status = 'abandoned';
@@ -733,6 +696,8 @@ export class GamesManager {
       });
     }
     this.io?.to(this.gameRoom(g.id)).emit('game:end', {
+      ratingKind: g.ratingKind, endBoardIndex: g.endBoardIndex,
+      status: 'abandoned',
       gameId: g.id,
       result: '*',
       reason: 'abandoned',
@@ -743,6 +708,7 @@ export class GamesManager {
   }
 
   async abortUnrated(g: ActiveGame, message?: string): Promise<void> {
+    if (g.pendingFinish) return;
     if (g.status !== 'active') return;
     this.cancelBotTimers(g.id);
     g.status = 'abandoned';
@@ -757,6 +723,8 @@ export class GamesManager {
       this.systemMessage(g, message);
     }
     this.io?.to(this.gameRoom(g.id)).emit('game:end', {
+      ratingKind: g.ratingKind, endBoardIndex: g.endBoardIndex,
+      status: 'abandoned',
       gameId: g.id,
       result: '*',
       reason: 'abandoned',
@@ -805,6 +773,7 @@ export class GamesManager {
         : [g.engine instanceof BughouseGame ? g.engine.fen(0) : g.engine.fen()];
     return {
       gameId: g.id,
+      isDemo: Boolean(g.isDemo),
       mode: g.mode,
       players: g.participants.map((p) => ({
         userId: p.uid,
@@ -845,7 +814,7 @@ export class GamesManager {
 
     // Кто должен ходить на каждой доске
     const turnUserIds: number[] = [];
-    if (g.status === 'active') {
+    if (g.status === 'active' && !g.pendingFinish) {
       if (isBug) {
         for (const b of [0, 1] as Board[]) {
           const color = (g.engine as BughouseGame).turn(b);
@@ -881,6 +850,9 @@ export class GamesManager {
 
     return {
       gameId: g.id,
+      ratingKind: g.ratingKind,
+      endBoardIndex: g.endBoardIndex,
+      savingResult: Boolean(g.pendingFinish),
       rulesVersion: g.rulesVersion,
       ...(g.pacing ? { botPacing: { controlledBoard: g.pacing.board, waiting: g.pacing.credits === 0, paused: g.pacing.paused, pauseAllowed: g.participants.filter(p => !p.isBot).length === 1 } } : {}),
       ...(g.engine instanceof BughouseGame ? { legalDrops: isBug ? [g.engine.legalDrops(0), g.engine.legalDrops(1)] : [g.engine.legalDrops(0)] } : {}),
@@ -907,15 +879,16 @@ export class GamesManager {
   /** Данные игроков для реванша */
   async rematchPlayers(
     gameId: number,
-  ): Promise<{ uid: number; username: string; rating: number; isBot?: boolean; botLevel?: number | null; team: number; seat: number }[]> {
+  ): Promise<{ uid: number; username: string; rating: number; isGuest?: boolean; isBot?: boolean; botLevel?: number | null; team: number; seat: number }[]> {
     const parts = await prisma.gameParticipant.findMany({
       where: { gameId },
-      include: { user: true },
+      include: { user: { include: { modeRatings: true } }, game: true },
     });
     return parts.map((p) => ({
       uid: p.userId,
       username: p.user.username,
-      rating: p.user.isBot ? p.ratingBefore : p.user.rating,
+      rating: p.user.isBot ? p.ratingBefore : (p.user.modeRatings.find(r => r.mode === p.game.mode)?.rating ?? 1200),
+      isGuest: p.user.isGuest,
       team: p.team,
       seat: p.boardIndex * 2 + p.moveSlot,
       isBot: p.user.isBot,
@@ -946,6 +919,7 @@ function toParticipantInfo(p: ActiveParticipant): import('shared').GameParticipa
     moveSlot: p.moveSlot,
     ratingBefore: p.ratingBefore,
     ratingAfter: p.ratingAfter,
+    isGuest: p.isGuest,
     isBot: p.isBot,
     botLevel: p.botLevel,
   };
@@ -961,6 +935,7 @@ function buildParticipants(mode: GameMode, team1: ParticipantSetup[], team2: Par
     moveSlot,
     ratingBefore: s.rating,
     ratingAfter: null,
+    isGuest: s.isGuest,
     isBot: s.isBot,
     botLevel: s.botLevel,
     botJitter: (Math.random() * 2 - 1) * 0.05,

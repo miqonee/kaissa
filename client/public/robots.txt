@@ -1,8 +1,5 @@
 User-agent: *
 Allow: /
-Disallow: /admin
-Disallow: /lobby/
-Disallow: /lobby/*
 Disallow: /api/
 
 # Clean-param for Yandex search engine

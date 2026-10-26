@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import type { GameSummary, MoveRecord } from 'shared';
 import { api } from '../api/rest';
 import { useI18n } from '../stores/i18n';
+import { useDialog } from '../composables/useDialog';
 import AppIcon from './AppIcon.vue';
 import GameReplayer from './GameReplayer.vue';
 
@@ -35,27 +36,9 @@ async function load(): Promise<void> {
   }
 }
 
-function onKey(e: KeyboardEvent): void {
-  if (e.key === 'Escape') {
-    e.stopPropagation();
-    emit('close');
-  }
-}
-
-// Блокируем прокрутку фона, пока открыта модалка
-const prevOverflow = ref('');
-
-onMounted(() => {
-  prevOverflow.value = document.body.style.overflow;
-  document.body.style.overflow = 'hidden';
-  document.addEventListener('keydown', onKey);
-  void load();
-});
-
-onBeforeUnmount(() => {
-  document.removeEventListener('keydown', onKey);
-  document.body.style.overflow = prevOverflow.value;
-});
+const dialog = ref<HTMLElement | null>(null);
+useDialog(dialog, () => emit('close'));
+onMounted(load);
 
 watch(() => props.gameId, load);
 </script>
@@ -63,6 +46,8 @@ watch(() => props.gameId, load);
 <template>
   <div class="modal-backdrop replay-backdrop" @click.self="emit('close')">
     <div
+      ref="dialog"
+      tabindex="-1"
       class="modal replay-modal"
       :class="{ 'two-boards': game?.mode === 'bughouse' }"
       role="dialog"
@@ -81,7 +66,8 @@ watch(() => props.gameId, load);
       <div class="modal-body">
         <div v-if="loading" class="empty">{{ i18n.locale === 'en' ? 'Loading game…' : 'Загружаем партию…' }}</div>
         <div v-else-if="error" class="empty">
-          <p class="empty-title">{{ error }}</p>
+          <p class="empty-title" role="alert">{{ error }}</p>
+          <button @click="load">{{ i18n.locale === 'en' ? 'Try again' : 'Повторить' }}</button>
         </div>
         <GameReplayer v-else-if="game" :game="game" :moves="moves" compact />
       </div>

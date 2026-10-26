@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 // Самопроверка управления мета-тегами и SEO-параметрами:
 // node --experimental-strip-types client/tests/seo.check.ts
 import {
@@ -15,14 +16,14 @@ import {
 import { ref, computed, createApp } from 'vue';
 
 console.log('=== 1. Проверка базовых констант и домена ===');
-console.assert(BASE_CANONICAL_DOMAIN === 'https://duochess.ru', `BASE_CANONICAL_DOMAIN must be https://duochess.ru`);
-console.assert(DEFAULT_OG_IMAGE === 'https://duochess.ru/og-image.png', `DEFAULT_OG_IMAGE invalid: ${DEFAULT_OG_IMAGE}`);
-console.assert(SITE_NAME === 'Каисса', `SITE_NAME must be Каисса`);
-console.assert(typeof DEFAULT_TITLE === 'string' && DEFAULT_TITLE.includes('Каисса'), 'DEFAULT_TITLE must include Каисса');
-console.assert(typeof DEFAULT_DESCRIPTION === 'string' && DEFAULT_DESCRIPTION.length > 20, 'DEFAULT_DESCRIPTION must be valid');
-console.assert(typeof DEFAULT_KEYWORDS === 'string' && DEFAULT_KEYWORDS.includes('шахматы'), 'DEFAULT_KEYWORDS must include шахматы');
-console.assert(typeof usePageSeo === 'function', 'usePageSeo must be function');
-console.assert(usePageSeo === useSeo, 'useSeo must alias usePageSeo');
+assert(BASE_CANONICAL_DOMAIN === 'https://duochess.ru', `BASE_CANONICAL_DOMAIN must be https://duochess.ru`);
+assert(DEFAULT_OG_IMAGE === 'https://duochess.ru/og-image.png', `DEFAULT_OG_IMAGE invalid: ${DEFAULT_OG_IMAGE}`);
+assert(SITE_NAME === 'Каисса', `SITE_NAME must be Каисса`);
+assert(typeof DEFAULT_TITLE === 'string' && DEFAULT_TITLE.includes('Каисса'), 'DEFAULT_TITLE must include Каисса');
+assert(typeof DEFAULT_DESCRIPTION === 'string' && DEFAULT_DESCRIPTION.length > 20, 'DEFAULT_DESCRIPTION must be valid');
+assert(typeof DEFAULT_KEYWORDS === 'string' && DEFAULT_KEYWORDS.includes('шахматы'), 'DEFAULT_KEYWORDS must include шахматы');
+assert(typeof usePageSeo === 'function', 'usePageSeo must be function');
+assert(usePageSeo === useSeo, 'useSeo must alias usePageSeo');
 
 console.log('=== 2. Проверка формирования канонических ссылок (canonical) ===');
 const canonicalCases: [string | undefined, string][] = [
@@ -50,12 +51,12 @@ const canonicalCases: [string | undefined, string][] = [
 
 for (const [input, expected] of canonicalCases) {
   const actual = createCanonicalUrl(input);
-  console.assert(actual === expected, `createCanonicalUrl(${input}) expected "${expected}", got "${actual}"`);
+  assert(actual === expected, `createCanonicalUrl(${input}) expected "${expected}", got "${actual}"`);
 }
 
 console.log('=== 3. Проверка toAbsoluteUrl ===');
-console.assert(toAbsoluteUrl() === 'https://duochess.ru/og-image.png', 'fallback to default og-image');
-console.assert(toAbsoluteUrl('/custom.png') === 'https://duochess.ru/custom.png', 'resolves relative to https://duochess.ru');
+assert(toAbsoluteUrl() === 'https://duochess.ru/og-image.png', 'fallback to default og-image');
+assert(toAbsoluteUrl('/custom.png') === 'https://duochess.ru/custom.png', 'resolves relative to https://duochess.ru');
 
 console.log('=== 4. Проверка реактивной работы composable usePageSeo ===');
 const app = createApp({});
@@ -82,15 +83,15 @@ app.runWithContext(() => {
     keywords: computed(() => [`игрок ${username.value}`, 'рейтинг']),
   });
 
-  console.assert(
+  assert(
     profileSeo.title.value === 'Профиль игрока alisa: рейтинг и статистика | Каисса',
     `Initial profile title incorrect: ${profileSeo.title.value}`,
   );
-  console.assert(
+  assert(
     profileSeo.canonical.value === 'https://duochess.ru/players/alisa',
     `Initial profile canonical incorrect: ${profileSeo.canonical.value}`,
   );
-  console.assert(
+  assert(
     profileSeo.description.value.includes('alisa'),
     `Initial profile description must mention alisa`,
   );
@@ -100,7 +101,7 @@ app.runWithContext(() => {
     user: { username: 'alisa', rating: 1450, wins: 20, losses: 5, draws: 2 },
   };
 
-  console.assert(
+  assert(
     profileSeo.description.value.includes('1450 Elo') && profileSeo.description.value.includes('побед: 20'),
     `Updated profile description must include personal stats: ${profileSeo.description.value}`,
   );
@@ -109,11 +110,11 @@ app.runWithContext(() => {
   username.value = 'bob';
   profileData.value = null;
 
-  console.assert(
+  assert(
     profileSeo.title.value === 'Профиль игрока bob: рейтинг и статистика | Каисса',
     `Profile title must react to username change: ${profileSeo.title.value}`,
   );
-  console.assert(
+  assert(
     profileSeo.canonical.value === 'https://duochess.ru/players/bob',
     `Canonical must react to username change: ${profileSeo.canonical.value}`,
   );
@@ -153,8 +154,8 @@ app.runWithContext(() => {
     canonical: computed(() => `/game/${gameId.value}`),
   });
 
-  console.assert(gameSeo.title.value === 'Партия #101 | Каисса', `Initial game title: ${gameSeo.title.value}`);
-  console.assert(gameSeo.canonical.value === 'https://duochess.ru/game/101', `Game canonical: ${gameSeo.canonical.value}`);
+  assert(gameSeo.title.value === 'Партия #101 | Каисса', `Initial game title: ${gameSeo.title.value}`);
+  assert(gameSeo.canonical.value === 'https://duochess.ru/game/101', `Game canonical: ${gameSeo.canonical.value}`);
 
   gameState.value = {
     mode: 'bughouse',
@@ -168,11 +169,11 @@ app.runWithContext(() => {
     timeControl: { kind: 'clock', baseMin: 3, incSec: 2 },
   };
 
-  console.assert(
+  assert(
     gameSeo.title.value === 'Партия #101 (Багхаус): Алиса / Боб vs Чарли / Дима | Каисса',
     `Dynamic game title incorrect: ${gameSeo.title.value}`,
   );
-  console.assert(
+  assert(
     gameSeo.ogDescription.value.includes('Алиса / Боб против Чарли / Дима'),
     `Dynamic game ogDescription incorrect: ${gameSeo.ogDescription.value}`,
   );

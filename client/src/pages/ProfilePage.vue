@@ -1,217 +1,268 @@
 <script setup lang="ts">
-import { modeLabel as sharedModeLabel, type GameMode } from 'shared';
-import { computed, onMounted, ref } from 'vue';
-import type { ProfilePayload } from 'shared';
-import { api } from '../api/rest';
-import { useRoute } from 'vue-router';
-import { useAuthStore } from '../stores/auth';
-import { useI18n } from '../stores/i18n';
-import { isMuted, toggleSound } from '../audio/sounds';
-import GameReplayModal from '../components/GameReplayModal.vue';
-import { usePageSeo } from '../composables/useSeo';
-
+import { computed, ref, watch } from "vue";
+import { useRoute } from "vue-router";
+import {
+  GAME_MODES,
+  emptyModeRating,
+  PROVISIONAL_GAMES,
+  modeLabel,
+  type GameMode,
+  type ProfilePayload,
+} from "shared";
+import { api } from "../api/rest";
+import { useAuthStore } from "../stores/auth";
+import { useI18n } from "../stores/i18n";
+import { usePageSeo } from "../composables/useSeo";
+import { isMuted, toggleSound } from "../audio/sounds";
+import ModeTabs from "../components/ModeTabs.vue";
+import MatchCard from "../components/MatchCard.vue";
+import GameReplayModal from "../components/GameReplayModal.vue";
 const route = useRoute();
 const auth = useAuthStore();
 const i18n = useI18n();
+const en = computed(() => i18n.locale === "en");
+const mode = ref<GameMode>(
+  GAME_MODES.includes(route.query.mode as GameMode)
+    ? (route.query.mode as GameMode)
+    : "team",
+);
 const profile = ref<ProfilePayload | null>(null);
-const error = ref('');
+const error = ref("");
+const loading = ref(true);
 const replayId = ref<number | null>(null);
-
-const username = computed(() => (route.params.username as string) || '');
-const pageTitle = computed(() => (i18n.locale === 'en' ? `Player Profile: ${username.value} | ${i18n.t.nav.brand}` : `Профиль игрока ${username.value}: рейтинг и статистика | Каисса`));
-const pageDescription = computed(() => {
-  if (profile.value?.user) {
-    const u = profile.value.user;
-    const total = u.wins + u.losses + (u.draws || 0);
-    return i18n.locale === 'en'
-      ? `Player profile ${u.username} on Kaissa: ${u.rating} Elo, wins: ${u.wins}, losses: ${u.losses}, games played: ${total}.`
-      : `Профиль игрока ${u.username} в Каиссе: рейтинг ${u.rating} Elo, побед: ${u.wins}, поражений: ${u.losses}, сыграно партий: ${total}. Статистика и история матчей.`;
-  }
-  return i18n.locale === 'en'
-    ? `Player profile ${username.value}: rating, game statistics and match history on Kaissa.`
-    : `Профиль игрока ${username.value}: рейтинг, статистика партий и история матчей в Каиссе.`;
-});
-
+let version = 0;
+const stats = computed(
+  () =>
+    profile.value?.user.modeRatings?.find((r) => r.mode === mode.value) ??
+    emptyModeRating(mode.value),
+);
+const ratedGames = computed(
+  () => stats.value.wins + stats.value.losses + stats.value.draws,
+);
 usePageSeo({
-  title: pageTitle,
-  description: pageDescription,
-  canonical: computed(() => `/players/${username.value}`),
+  noindex: computed(() => !!error.value || !!profile.value?.user.isGuest || !!profile.value?.user.isBot),
+  description: computed(() => profile.value ? (en.value ? `Games and ratings of ${profile.value.user.username} in ${modeLabel(mode.value, 'en')}. View both teams, results and replays on Kaissa.` : `Партии и рейтинг ${profile.value.user.username} в режиме ${modeLabel(mode.value)}. Составы команд, результаты и реплеи в клубе Каисса.`) : undefined),
+  title: computed(
+    () =>
+      `${route.params.username} — ${en.value ? "player profile" : "профиль игрока"} | Каисса`,
+  ),
+  canonical: computed(() => `/players/${route.params.username}`),
 });
-
-const isMyProfile = computed(() => auth.user?.username === profile.value?.user.username);
-
-onMounted(async () => {
+async function load() {
+  const current = ++version;
+  loading.value = true;
+  error.value = "";
   try {
-    profile.value = await api.get<ProfilePayload>(`/api/users/${route.params.username}`);
+    const data = await api.get<ProfilePayload>(
+      `/api/users/${encodeURIComponent(String(route.params.username))}?mode=${mode.value}`,
+    );
+    if (current === version) profile.value = data;
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Ошибка';
+    if (current === version) error.value = String(e);
+  } finally {
+    if (current === version) loading.value = false;
   }
-});
-
-/** Простая SVG-спарклайна рейтинга без библиотек */
+}
+watch(mode, load, { immediate: true });
 const sparkPath = computed(() => {
-  if (!profile.value || profile.value.ratingHistory.length < 2) return null;
-  const pts = profile.value.ratingHistory;
-  const w = 560;
-  const h = 120;
-  const minR = Math.min(...pts.map((p) => p.rating));
-  const maxR = Math.max(...pts.map((p) => p.rating));
-  const span = Math.max(1, maxR - minR);
-  const step = w / (pts.length - 1);
+  const pts = profile.value?.ratingHistory ?? [];
+  const min = Math.min(...pts.map((p) => p.rating));
+  const span = Math.max(1, Math.max(...pts.map((p) => p.rating)) - min);
   return pts
-    .map((p, i) => `${i === 0 ? 'M' : 'L'}${(i * step).toFixed(1)},${(h - ((p.rating - minR) / span) * (h - 10) - 5).toFixed(1)}`)
-    .join(' ');
+    .map(
+      (p, i) =>
+        `${i ? "L" : "M"}${((i * 560) / Math.max(1, pts.length - 1)).toFixed(1)},${(115 - ((p.rating - min) * 110) / span).toFixed(1)}`,
+    )
+    .join(" ");
 });
-
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(i18n.locale === 'en' ? 'en-US' : 'ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale); }
-
-function gameOutcome(g: import('shared').GameSummary): string {
-  const isEn = i18n.locale === 'en';
-  if (g.status === 'abandoned' || g.result === '*') return isEn ? 'abandoned' : 'брошена';
-  const winner = g.result === '1-0' ? 1 : 2;
-  const winners = g.participants.filter((p) => p.team === winner).map((p) => p.username);
-  return isEn ? `victory: ${winners.join(' & ')}` : `победа: ${winners.join(' и ')}`;
-}
 </script>
-
 <template>
-  <div v-if="error" class="empty">{{ error }}</div>
-  <div v-else-if="profile" class="profile">
-    <header class="profile-head panel">
-      <div class="who">
-        <h1>{{ profile.user.username }}</h1>
-        <p class="dim">{{ i18n.locale === 'en' ? 'since' : 'с' }} {{ fmtDate(profile.user.createdAt) }}</p>
-      </div>
-      <div class="stats">
-        <div class="stat">
-          <span class="stat-num mono">{{ profile.user.rating }}</span>
-          <span class="stat-label">{{ i18n.t.profile.ratingElo }}</span>
-        </div>
-        <div class="stat">
-          <span class="stat-num mono">{{ profile.user.wins }}</span>
-          <span class="stat-label">{{ i18n.t.profile.statWins }}</span>
-        </div>
-        <div class="stat">
-          <span class="stat-num mono">{{ profile.user.losses }}</span>
-          <span class="stat-label">{{ i18n.t.profile.statLosses }}</span>
-        </div>
-      </div>
+  <div class="profile">
+    <header class="panel profile-head">
+      <h1>{{ route.params.username }}</h1>
+      <span v-if="profile?.user.isGuest" class="badge">{{
+        en ? "Guest" : "Гость"
+      }}</span
+      ><span v-if="profile?.user.isBot" class="badge">{{
+        en ? "Bot" : "Бот"
+      }}</span>
     </header>
-
-    <section class="panel" aria-labelledby="rating-dyn-heading" v-if="profile.ratingHistory.length >= 2">
-      <div class="panel-head"><h2 id="rating-dyn-heading">{{ i18n.t.profile.chartTitle }}</h2></div>
-      <div class="panel-body">
-        <svg viewBox="0 0 560 120" class="spark" preserveAspectRatio="none" role="img" aria-label="Rating Chart">
-          <title>Rating Chart</title>
-          <path :d="sparkPath!" fill="none" stroke="var(--accent)" stroke-width="2" />
+    <section class="panel">
+      <ModeTabs v-model="mode" />
+      <div v-if="loading" class="empty" role="status">
+        {{ en ? "Loading…" : "Загрузка…" }}
+      </div>
+      <div v-else-if="error" class="empty" role="alert">
+        <p>
+          {{ en ? "Could not load profile." : "Не удалось загрузить профиль." }}
+        </p>
+        <button @click="load">{{ en ? "Try again" : "Повторить" }}</button>
+      </div>
+      <div v-else-if="profile" class="panel-body profile-stats">
+        <div class="rating-heading">
+          <strong class="rating-number">{{
+            profile.user.isGuest || profile.user.isBot ? "—" : stats.rating
+          }}</strong>
+          <div>
+            <strong>{{ modeLabel(mode, i18n.locale) }} · Elo</strong>
+            <p class="dim">
+              {{
+                profile.user.isGuest || profile.user.isBot
+                  ? en
+                    ? "Not in public rankings"
+                    : "Не участвует в публичном рейтинге"
+                  : ratedGames < PROVISIONAL_GAMES
+                    ? en
+                      ? `Preliminary · ${ratedGames}/${PROVISIONAL_GAMES} games`
+                      : `Предварительный · ${ratedGames}/${PROVISIONAL_GAMES} партий`
+                    : en
+                      ? `${ratedGames} rated games`
+                      : `${ratedGames} рейтинговых партий`
+              }}
+            </p>
+          </div>
+        </div>
+        <div class="stat-groups">
+          <div>
+            <h2>{{ en ? "Rated games" : "Рейтинговые партии" }}</h2>
+            <p>
+              {{ en ? "Wins / Draws / Losses" : "Победы / Ничьи / Поражения" }}
+            </p>
+            <strong
+              >{{ stats.wins }} / {{ stats.draws }} / {{ stats.losses }}</strong
+            >
+          </div>
+          <div>
+            <h2>
+              {{
+                en ? "Training · bots or guests" : "Тренировки · боты или гости"
+              }}
+            </h2>
+            <p>
+              {{ en ? "Wins / Draws / Losses" : "Победы / Ничьи / Поражения" }}
+            </p>
+            <strong
+              >{{ stats.trainingWins }} / {{ stats.trainingDraws }} /
+              {{ stats.trainingLosses }}</strong
+            >
+          </div>
+        </div>
+        <p class="dim">
+          {{
+            en
+              ? "Mode ratings start at 1200. Earlier games retain their former common rating in the archive."
+              : "Рейтинг каждого режима начинается с 1200. В прежних партиях сохранён общий рейтинг на момент игры."
+          }}
+          <router-link to="/leaderboard">{{
+            en ? "How ratings work" : "Как считается рейтинг"
+          }}</router-link>
+        </p>
+        <svg
+          v-if="profile.ratingHistory.length >= 2"
+          viewBox="0 0 560 120"
+          class="spark"
+          role="img"
+          :aria-label="en ? 'Rating history' : 'История рейтинга'"
+        >
+          <title>{{ modeLabel(mode, i18n.locale) }}</title>
+          <path
+            :d="sparkPath"
+            fill="none"
+            stroke="var(--accent)"
+            stroke-width="2"
+          />
         </svg>
       </div>
     </section>
-
-    <section class="panel" aria-labelledby="settings-heading" v-if="isMyProfile">
-      <div class="panel-head"><h2 id="settings-heading">{{ i18n.locale === 'en' ? 'Settings' : 'Настройки' }}</h2></div>
-      <div class="panel-body settings-row">
-        <div class="setting-info">
-          <span class="setting-title">{{ i18n.locale === 'en' ? 'Sound Effects' : 'Звуковые эффекты' }}</span>
-          <span class="setting-desc dim">{{ i18n.locale === 'en' ? 'Move sounds, captures, checks, and game end' : 'Звуки ходов, взятий, шахов и окончания партии' }}</span>
-        </div>
-        <button
-          class="button"
-          :class="isMuted ? 'ghost' : 'primary'"
-          @click="toggleSound"
-        >
-          {{ isMuted ? (i18n.locale === 'en' ? 'Sound: Muted' : 'Звук: Выкл') : (i18n.locale === 'en' ? 'Sound: On' : 'Звук: Вкл') }}
-        </button>
+    <section
+      v-if="auth.user?.id === profile?.user.id"
+      class="panel profile-head"
+    >
+      <span>{{ en ? "Game sounds" : "Звуки игры" }}</span
+      ><button @click="toggleSound">
+        {{ isMuted ? (en ? "Enable" : "Включить") : en ? "Mute" : "Выключить" }}
+      </button>
+    </section>
+    <section v-if="profile && !loading && !error" class="panel">
+      <div class="panel-head">
+        <h2>{{ en ? "Recent games" : "Последние партии" }}</h2>
+        <router-link to="/history">{{
+          en ? "Full archive" : "Весь архив"
+        }}</router-link>
+      </div>
+      <div class="match-list">
+        <MatchCard
+          v-for="g in profile.recentGames"
+          :key="g.id"
+          :game="g"
+          :viewer-id="auth.user?.id"
+          @replay="replayId = $event"
+        />
+        <p v-if="!profile.recentGames.length" class="empty">
+          {{
+            en ? "No games in this mode yet." : "В этом режиме партий пока нет."
+          }}
+        </p>
       </div>
     </section>
-
-    <section class="panel" aria-labelledby="recent-games-heading">
-      <div class="panel-head"><h2 id="recent-games-heading">{{ i18n.t.profile.recentMatches }}</h2></div>
-      <div v-if="profile.recentGames.length" class="table-wrap">
-        <table class="club">
-          <thead>
-            <tr>
-              <th>{{ i18n.t.history.colDate }}</th>
-              <th>{{ i18n.t.history.colMode }}</th>
-              <th>{{ i18n.t.history.colPlayers }}</th>
-              <th>{{ i18n.t.history.colResult }}</th>
-              <th>{{ i18n.locale === 'en' ? 'Actions' : 'Действия' }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="g in profile.recentGames" :key="g.id">
-              <td class="mono dim">{{ fmtDate(g.startedAt) }}</td>
-              <td>{{ modeLabel(g.mode) }}</td>
-              <td>{{ g.participants.map((p) => p.username).join(', ') }}</td>
-              <td>{{ gameOutcome(g) }}</td>
-              <td class="actions">
-                <button v-if="g.status !== 'active'" class="button small ghost" @click="replayId = g.id">{{ i18n.t.history.actionReplay }}</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div v-else class="empty">{{ i18n.t.profile.noGamesYet }}</div>
-    </section>
-
-    <!-- Модальный плеер партии -->
     <GameReplayModal
       v-if="replayId !== null"
       :game-id="replayId"
-      :title="i18n.locale === 'en' ? `Match #${replayId}` : `Партия #${replayId}`"
+      :title="`${en ? 'Game' : 'Партия'} #${replayId}`"
       @close="replayId = null"
     />
   </div>
-  <div v-else class="empty">{{ i18n.locale === 'en' ? 'Loading…' : 'Загрузка…' }}</div>
 </template>
-
 <style scoped>
-.profile-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20px;
-  padding: 20px 24px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
-.who p { margin: 4px 0 0; }
-
-.stats { display: flex; gap: 36px; }
-
-.stat { display: flex; flex-direction: column; align-items: center; }
-
-.stat-num { font-size: 28px; font-weight: 600; }
-
-.stat-label { font-size: 13px; color: var(--ink-3); }
-
-.spark { width: 100%; height: 120px; }
-
-.settings-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
+.profile {
+  display: grid;
   gap: 16px;
 }
-
-.setting-info {
+.profile-head {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  flex-wrap: wrap;
 }
-
-.setting-title {
-  font-weight: 600;
-  font-size: 15px;
+.profile-head h1 {
+  overflow-wrap: anywhere;
 }
-
-.setting-desc {
+.profile-stats {
+  padding: 16px;
+}
+.rating-heading {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.rating-number {
+  font-size: 40px;
+}
+.stat-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin: 20px 0;
+}
+.stat-groups h2 {
+  font-size: 16px;
+}
+.stat-groups p {
   font-size: 13px;
+  color: var(--ink-2);
+}
+.stat-groups strong {
+  font-size: 24px;
+}
+.spark {
+  width: 100%;
+  height: 140px;
+  margin-top: 16px;
+}
+.match-list {
+  padding: 16px;
+  display: grid;
+  gap: 14px;
 }
 </style>

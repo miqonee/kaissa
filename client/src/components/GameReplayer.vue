@@ -8,6 +8,7 @@ import ChessBoard from './ChessBoard.vue';
 import PocketBar from './PocketBar.vue';
 import AppIcon from './AppIcon.vue';
 import { buildMoveRows, buildReplay, type ReplayMoveView } from '../game/replay';
+import { matchOutcome, endReason } from '../utils/match';
 import { analyzePosition } from '../utils/analysis';
 import {
   playMoveSound,
@@ -240,22 +241,7 @@ const teams = computed(() => {
   };
 });
 
-const REASONS: Record<string, string> = {
-  checkmate: 'мат',
-  resign: 'сдача',
-  timeout: 'время вышло',
-  stalemate: 'пат',
-  material: 'недостаток материала',
-  abandoned: 'партия брошена',
-};
-
-const resultText = computed(() => {
-  const g = props.game;
-  if (g.status === 'active') return 'партия идёт';
-  if (g.status === 'abandoned' || g.result === '*') return 'партия брошена';
-  const reason = g.reason ? REASONS[g.reason] ?? g.reason : '';
-  return `${g.result === '1-0' ? 'победа белых' : 'победа чёрных'}${reason ? ` · ${reason}` : ''}`;
-});
+const resultText = computed(() => [matchOutcome(props.game, undefined, i18n.locale), endReason(props.game, i18n.locale)].filter(Boolean).join(' · '));
 
 /** имя игрока, сделавшего активный ход */
 const activeMover = computed(() => {
@@ -277,10 +263,10 @@ function pieceLabel(t: PieceType): string {
     <!-- Шапка: кто играл и чем кончилось -->
     <header class="replayer-head">
       <div class="rh-teams">
-        <span class="color-tag w">белые</span>
+        <span class="color-tag w">{{ game.mode === 'bughouse' ? (i18n.locale === 'en' ? 'Team 1' : 'Команда 1') : (i18n.locale === 'en' ? 'White' : 'Белые') }}</span>
         <strong class="truncate">{{ teams.t1 }}</strong>
         <span class="rh-vs">vs</span>
-        <span class="color-tag b">чёрные</span>
+        <span class="color-tag b">{{ game.mode === 'bughouse' ? (i18n.locale === 'en' ? 'Team 2' : 'Команда 2') : (i18n.locale === 'en' ? 'Black' : 'Чёрные') }}</span>
         <strong class="truncate">{{ teams.t2 }}</strong>
       </div>
       <div class="rh-meta">
@@ -295,13 +281,14 @@ function pieceLabel(t: PieceType): string {
       <section class="rp-boards" aria-label="Шахматные доски" :class="{ two: boardsCount === 2 }">
         <div v-for="b in boardsCount" :key="b" class="rp-board-col">
           <div class="rp-board-head">
-            <span class="rp-board-num mono">Доска {{ b }}</span>
+            <span class="rp-board-num mono">{{ i18n.locale === 'en' ? 'Board' : 'Доска' }} {{ b }}</span>
             <span
+              v-if="checkOf(b - 1)"
               class="badge bad rp-check-badge"
               :aria-hidden="!checkOf(b - 1)"
               :class="{ visible: Boolean(checkOf(b - 1)) }"
               aria-label="Шах"
-            >шах</span>
+            >{{ i18n.locale === 'en' ? 'Check' : 'Шах' }}</span>
           </div>
 
           <PocketBar
@@ -339,12 +326,12 @@ function pieceLabel(t: PieceType): string {
       <aside class="rp-side">
         <div class="rp-moves-head">
           <span class="hint mono">{{ cursor }}/{{ total }}</span>
-          <span v-if="activeMover" class="hint">ход: {{ activeMover }}</span>
+          <span v-if="activeMover" class="hint">{{ i18n.locale === 'en' ? 'Move by:' : 'Ход:' }} {{ activeMover }}</span>
         </div>
 
         <div class="rp-moves" :class="{ two: boardsCount === 2 }">
           <div v-for="(rows, b) in rowsByBoard" :key="b" class="rp-move-col">
-            <div v-if="boardsCount === 2" class="rp-col-title mono">Доска {{ b + 1 }}</div>
+            <div v-if="boardsCount === 2" class="rp-col-title mono">{{ i18n.locale === 'en' ? 'Board' : 'Доска' }} {{ b + 1 }}</div>
             <div class="rp-move-grid">
               <template v-for="row in rows" :key="row.no">
                 <span class="rp-move-no mono">{{ row.label }}</span>
@@ -369,7 +356,7 @@ function pieceLabel(t: PieceType): string {
           </div>
         </div>
 
-        <p v-if="!total" class="empty tiny">В этой партии не было ходов.</p>
+        <p v-if="!total" class="empty tiny">{{ i18n.locale === 'en' ? 'No moves were played.' : 'В этой партии не было ходов.' }}</p>
 
         <!-- Дебют и оценка текущей позиции (для режима 1 доски) -->
         <div v-if="game.mode === 'team'" class="rp-analysis-card">

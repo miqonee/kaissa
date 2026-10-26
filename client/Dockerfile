@@ -1,7 +1,5 @@
 FROM node:22-alpine
 WORKDIR /app
-ENV NODE_TLS_REJECT_UNAUTHORIZED=0
-RUN npm config set strict-ssl false
 
 # Копируем и собираем shared
 COPY shared ./shared
@@ -9,7 +7,7 @@ RUN cd shared && npm install && npm run build
 
 # Зависимости клиента
 COPY client/package.json ./client/
-RUN cd client && npm config set strict-ssl false && npm install
+RUN cd client && npm install
 
 # Сборка SPA
 COPY client ./client

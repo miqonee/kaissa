@@ -8,12 +8,7 @@ import { useI18n } from '../stores/i18n';
 
 const i18n = useI18n();
 
-usePageSeo({
-  title: computed(() => (i18n.locale === 'en' ? 'Bughouse Chess Rules Online: Tactics & Drops | Kaissa' : 'Правила шведских шахмат (Багхаус) онлайн: тактика и дропы | Каисса')),
-  description: computed(() => (i18n.locale === 'en' ? 'Comprehensive Bughouse chess rules online. How piece passing works, drop rules, pawn demotions, and team winning tactics.' : 'Подробные правила шведских шахмат (багхаус) онлайн. Как передавать сбитые фигуры партнёру, правила дропа на доску, разжалование пешек и тактика победы в паре.')),
-  canonical: '/rules/bughouse',
-  keywords: ['правила шведских шахмат', 'шведские шахматы онлайн', 'багхаус правила', 'bughouse chess rules', 'drop chess'],
-});
+usePageSeo({ canonical: '/rules/bughouse' });
 </script>
 
 <template>
@@ -56,7 +51,7 @@ usePageSeo({
             In classical chess, captured pieces are permanently eliminated. In <strong>Bughouse Chess</strong> (also known as Siamese chess), four players compete on two parallel boards. Teammates sit side-by-side playing opposite colors: Partner 1 plays White on Board A, and Partner 2 plays Black on Board B.
           </p>
           <p>
-            When you capture an opponent's piece, it changes color and immediately enters your teammate's <strong>pocket (reserve)</strong>. On any of their turns, instead of moving a piece already on the board, your partner can <strong>drop</strong> a piece from their reserve onto any vacant square on their board!
+            When you capture an opponent's piece, it keeps its color and immediately enters your teammate's <strong>pocket (reserve)</strong>. On any of their turns, instead of moving a piece already on the board, your partner can <strong>drop</strong> a piece from their reserve onto any vacant square on their board!
           </p>
 
           <div class="callout-box felt">

@@ -12,7 +12,7 @@ export default defineConfig({
         server.middlewares.use(async (req, res, next) => {
           if (req.url === '/sitemap.xml') {
             try {
-              const backendRes = await fetch('http://localhost:4000/sitemap.xml');
+              const backendRes = await fetch(`${apiTarget}/sitemap.xml`);
               if (backendRes.ok) {
                 const text = await backendRes.text();
                 res.setHeader('Content-Type', 'application/xml; charset=utf-8');

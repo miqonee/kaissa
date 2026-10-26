@@ -11,6 +11,7 @@ import type {
   TimeControl,
 } from 'shared';
 import { GAME_MODES, lobbyCapacity, defaultTimeControl, modeLabel, eloToLevel } from 'shared';
+import { loadPlayerRatings } from '../ratings/service.js';
 import { presence } from '../socket/presence.js';
 import { prisma } from '../prisma.js';
 import { env } from '../env.js';
@@ -25,6 +26,7 @@ export interface LobbyMember {
   ready: boolean;
   host: boolean;
   joinedAt: number;
+  isGuest?: boolean;
   isBot?: boolean;
   botLevel?: number | null;
   teamChoice?: 1 | 2 | null;
@@ -87,6 +89,7 @@ export class Lobby {
       ready: m.ready,
       online: m.isBot ? true : presence.isOnline(m.uid),
       host: m.host,
+      isGuest: m.isGuest,
       isBot: m.isBot,
       botLevel: m.botLevel,
       teamChoice: m.teamChoice,
@@ -208,6 +211,14 @@ export class LobbiesManager {
     }
 
     return dropped;
+  }
+
+  renamePlayer(uid: number, username: string): void {
+    for (const lobby of this.lobbies.values()) {
+      const member = lobby.members.get(uid);
+      if (member) { member.username = username; member.isGuest = false; this.broadcastState(lobby); }
+    }
+    this.broadcastList();
   }
 
   publicList(): Lobby[] {
@@ -398,12 +409,13 @@ export class LobbiesManager {
   async joinWithUser(lobbyId: string, uid: number): Promise<{ ok: true } | { ok: false; error: string }> {
     const lobby = this.lobbies.get(lobbyId);
     if (!lobby) return { ok: false, error: 'Лобби не найдено' };
-    const user = await prisma.user.findUnique({ where: { id: uid } });
+    const user = await prisma.user.findUnique({ where: { id: uid }, include: { modeRatings: true } });
     if (!user) return { ok: false, error: 'Пользователь не найден' };
     return this.join(lobby, {
       uid: user.id,
       username: user.username,
-      rating: user.rating,
+      rating: user.modeRatings.find(r => r.mode === lobby.mode)?.rating ?? 1200,
+      isGuest: user.isGuest,
       isBot: user.isBot,
       botLevel: user.botLevel,
     });
@@ -426,14 +438,14 @@ export class LobbiesManager {
   }
 
   create(
-    host: { uid: number; username: string; rating: number },
+    host: { uid: number; username: string; rating: number; isGuest?: boolean },
     payload: CreateLobbyPayload,
   ): { lobby: Lobby; code: string } {
     const id = `L${this.idSeq++}`;
     const code = genCode();
     const lobby = new Lobby(
       { ...payload, id, code },
-      { uid: host.uid, username: host.username, rating: host.rating, ready: true, host: true, joinedAt: Date.now() },
+      { uid: host.uid, username: host.username, rating: host.rating, isGuest: host.isGuest, ready: true, host: true, joinedAt: Date.now() },
     );
     this.lobbies.set(id, lobby);
     this.broadcastList();
@@ -451,7 +463,7 @@ export class LobbiesManager {
 
   join(
     lobby: Lobby,
-    member: { uid: number; username: string; rating: number; isBot?: boolean; botLevel?: number | null; host?: boolean },
+    member: { uid: number; username: string; rating: number; isGuest?: boolean; isBot?: boolean; botLevel?: number | null; host?: boolean },
   ): { ok: true } | { ok: false; error: string } {
     if (lobby.started) return { ok: false, error: 'Игра уже началась' };
     if (lobby.members.has(member.uid)) return { ok: true };
@@ -485,6 +497,7 @@ export class LobbiesManager {
       ready: lobby.isQuick ? true : false,
       host: isHost,
       joinedAt: Date.now(),
+      isGuest: member.isGuest,
       isBot: member.isBot,
       botLevel: member.botLevel,
     });
@@ -721,6 +734,9 @@ export class LobbiesManager {
     const humans = [...lobby.members.values()].filter(m => !m.isBot);
     if (humans.length > lobbyCapacity(mode)) return { ok: false, error: 'Для 1×1 за столом должно быть не больше двух людей' };
     if (lobby.isQuick && botUsers.filter(b => !humans.some(h => h.uid === b.id)).length < lobbyCapacity(mode) - humans.length) return { ok: false, error: 'Не хватает ботов для нового режима' };
+    const refreshed = await loadPlayerRatings([...lobby.members.values()], mode);
+    if (lobby.started || this.lobbies.get(lobbyId) !== lobby || !lobby.members.get(uid)?.host) return { ok: false, error: 'Стол уже изменился' };
+    for (const member of refreshed) if (lobby.members.has(member.uid)) lobby.members.set(member.uid, member);
     const wasAuto = lobby.isAuto;
     const previousPause = [...lobby.pausedBy];
     lobby.clearCountdown();
@@ -925,6 +941,14 @@ export class LobbiesManager {
     }
 
     lobby.clearCountdown();
+    lobby.started = true;
+    try {
+      const current = await loadPlayerRatings([...lobby.members.values()], lobby.mode);
+      for (const member of current) lobby.members.set(member.uid, member);
+    } catch (error) {
+      lobby.started = false;
+      return { ok: false, error: 'Не удалось загрузить игроков. Попробуйте ещё раз' };
+    }
 
     const membersList = [...lobby.members.values()];
     const humans = membersList.filter((m) => !m.isBot);
@@ -989,14 +1013,16 @@ export class LobbiesManager {
         uid: m.uid,
         username: m.username,
         rating: m.rating,
-        isBot: m.isBot,
+        isGuest: m.isGuest,
+      isBot: m.isBot,
         botLevel: m.isBot ? eloToLevel(m.rating) : m.botLevel,
       })),
       team2: team2.map((m) => ({
         uid: m.uid,
         username: m.username,
         rating: m.rating,
-        isBot: m.isBot,
+        isGuest: m.isGuest,
+      isBot: m.isBot,
         botLevel: m.isBot ? eloToLevel(m.rating) : m.botLevel,
       })),
     }); } catch (error) {
@@ -1028,7 +1054,7 @@ export class LobbiesManager {
 
   async rematch(
     callerUid: number,
-    players: { uid: number; username: string; rating: number; isBot?: boolean; botLevel?: number | null; team?: number; seat?: number }[],
+    players: { uid: number; username: string; rating: number; isGuest?: boolean; isBot?: boolean; botLevel?: number | null; team?: number; seat?: number }[],
     opts: { gameId: number; mode: GameMode; timeControl: TimeControl; teamMode?: TeamMode },
   ): Promise<{ lobbyId: string; code: string } | null> {
     const me = players.find((p) => p.uid === callerUid);
@@ -1042,7 +1068,8 @@ export class LobbiesManager {
           uid: me.uid,
           username: me.username,
           rating: me.rating,
-          isBot: me.isBot,
+          isGuest: me.isGuest,
+        isBot: me.isBot,
           botLevel: me.botLevel,
         });
       }
@@ -1069,6 +1096,7 @@ export class LobbiesManager {
         ready: true,
         host: true,
         joinedAt: Date.now(),
+        isGuest: me.isGuest,
         isBot: me.isBot,
         botLevel: me.botLevel,
       },

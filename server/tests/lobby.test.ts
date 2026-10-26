@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+vi.mock('../src/ratings/service.js', async importOriginal => ({ ...await importOriginal<typeof import('../src/ratings/service.js')>(), loadPlayerRatings: vi.fn(async players => players) }));
 import { Lobby, LobbiesManager } from '../src/lobby/lobbies.js';
 import { prisma } from '../src/prisma.js';
 afterEach(() => { vi.restoreAllMocks(); });

@@ -3,9 +3,10 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { Server as SocketServer } from 'socket.io';
+import { asyncRoute } from './http/asyncRoute.js';
 import { env } from './env.js';
 import { prisma } from './prisma.js';
-import { register, login, logout, me } from './auth/auth.js';
+import { register, login, logout, me, guest, claim } from './auth/auth.js';
 import { requireAuth } from './auth/auth.js';
 import { adminRouter, promoteConfiguredAdmins } from './admin/adminRouter.js';
 import { lobbyRouter } from './lobby/lobbyRouter.js';
@@ -47,7 +48,7 @@ async function main(): Promise<void> {
   await cleanupPureBotGames();
   await gamesManager.cleanupOnBoot();
   await seedBots();
-  await promoteConfiguredAdmins(env.adminUsernames);
+  await promoteConfiguredAdmins(env.adminUserIds);
 
   const app = express();
   app.set('trust proxy', 1);
@@ -68,13 +69,16 @@ async function main(): Promise<void> {
   const authLimiter = createRateLimiter(60_000, 10, 'Слишком много попыток. Подождите минуту.');
 
   // Auth
-  app.post('/api/auth/register', authLimiter, register);
-  app.post('/api/auth/login', authLimiter, login);
-  app.post('/api/auth/logout', logout);
-  app.get('/api/auth/me', me);
+  app.post('/api/auth/register', authLimiter, asyncRoute(register));
+  app.post('/api/auth/login', authLimiter, asyncRoute(login));
+  app.post('/api/auth/logout', asyncRoute(logout));
+  app.get('/api/auth/me', asyncRoute(me));
 
   // SEO (sitemap.xml, robots.txt)
   app.use(seoRouter);
+
+  app.post('/api/auth/guest', authLimiter, asyncRoute(guest));
+  app.post('/api/auth/claim', authLimiter, asyncRoute(claim));
 
   // REST
   app.use('/api/lobbies', lobbyRouter);
@@ -106,7 +110,7 @@ async function main(): Promise<void> {
     pingTimeout: 25_000,
   });
   registerSocketHandlers(io);
-  demoShowcase.start(gamesManager);
+  if (env.demoEnabled) demoShowcase.start(gamesManager);
 
   httpServer.listen(env.port, '0.0.0.0', () => {
     console.log(`[kaissa] server listening on 0.0.0.0:${env.port}`);

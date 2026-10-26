@@ -300,7 +300,7 @@ adminRouter.delete('/users/:id', async (req, res) => {
 
   const target = await prisma.user.findUnique({ where: { id } });
   if (!target) return void res.status(404).json({ error: 'Игрок не найден' });
-  if (target.isBot) return void res.status(400).json({ error: 'Нельзя удалить системного бота' });
+  if (target.isBot || target.isGuest) return void res.status(400).json({ error: 'Нельзя удалить системного бота' });
 
   // Партии, в которых он участвовал, теряют смысл без него — удаляем целиком
   const parts = await prisma.gameParticipant.findMany({ where: { userId: id }, select: { gameId: true } });
@@ -317,10 +317,11 @@ adminRouter.post('/users/:id/reset', async (req, res) => {
   if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
   const target = await prisma.user.findUnique({ where: { id } });
   if (!target) return void res.status(404).json({ error: 'Игрок не найден' });
-  if (target.isBot) return void res.status(400).json({ error: 'Нельзя сбросить системного бота' });
+  if (target.isBot || target.isGuest) return void res.status(400).json({ error: 'Нельзя сбросить системного бота' });
 
   await prisma.$transaction([
     prisma.ratingHistory.deleteMany({ where: { userId: id } }),
+    prisma.modeRating.deleteMany({ where: { userId: id } }),
     prisma.user.update({
       where: { id },
       data: { rating: 1200, wins: 0, losses: 0, draws: 0 },
@@ -338,24 +339,13 @@ adminRouter.post('/users/:id/admin', async (req, res) => {
   if (me?.id === id) return void res.status(400).json({ error: 'Нельзя менять свои права' });
   const target = await prisma.user.findUnique({ where: { id } });
   if (!target) return void res.status(404).json({ error: 'Игрок не найден' });
-  if (target.isBot) return void res.status(400).json({ error: 'Боты не могут быть администраторами' });
+  if (target.isBot || target.isGuest) return void res.status(400).json({ error: 'Боты не могут быть администраторами' });
   await prisma.user.update({ where: { id }, data: { isAdmin } });
   res.json({ ok: true });
 });
 
-/** Выдать права по имени пользователя из ADMIN_USERNAMES при старте сервера */
-export async function promoteConfiguredAdmins(usernames: string[]): Promise<void> {
-  const clean = usernames.map((u) => u.trim()).filter(Boolean);
-  if (!clean.length) return;
-  const users = await prisma.user.findMany({ select: { id: true, username: true, isAdmin: true } });
-  const toPromote = users.filter(
-    (u) => !u.isAdmin && clean.some((c) => c.toLowerCase() === u.username.toLowerCase()),
-  );
-  if (toPromote.length) {
-    await prisma.user.updateMany({
-      where: { id: { in: toPromote.map((u) => u.id) } },
-      data: { isAdmin: true },
-    });
-    console.log(`[kaissa] выданы права администратора: ${toPromote.map((u) => u.username).join(', ')}`);
-  }
+/** Explicit existing user IDs only; account names never confer privileges. */
+export async function promoteConfiguredAdmins(ids: number[]): Promise<void> {
+  if (!ids.length) return;
+  await prisma.user.updateMany({ where: { id: { in: ids }, isBot: false, isGuest: false }, data: { isAdmin: true } });
 }

@@ -31,6 +31,8 @@ export type Pocket = Record<PieceType, number>;
 // ---------- REST-модели ----------
 
 export interface PublicUser {
+  isGuest?: boolean;
+  modeRatings?: ModeRating[];
   id: number;
   username: string;
   rating: number;
@@ -59,6 +61,7 @@ export interface AdminUserRow {
 }
 
 export interface LobbyPlayer {
+  isGuest?: boolean;
   userId: number;
   username: string;
   rating: number;
@@ -103,6 +106,7 @@ export type EndReason =
   | 'abandoned';      // сервер умер / все ушли
 
 export interface GameParticipantInfo {
+  isGuest?: boolean;
   userId: number;
   username: string;
   team: Team;
@@ -116,6 +120,8 @@ export interface GameParticipantInfo {
 }
 
 export interface GameSummary {
+  ratingKind?: RatingKind | null;
+  endBoardIndex?: number | null;
   id: number;
   rulesVersion?: number | null;
   mode: GameMode;
@@ -173,7 +179,7 @@ export type ClientToServerEvents = {
   'lobby:set-team-mode': (mode: TeamMode) => void;
   'lobby:set-mode': (mode: GameMode, cb: (ack: Ack<null>) => void) => void;
   'lobby:set-time-control': (payload: TimeControl | { lobbyId: string; tc: TimeControl }) => void;
-  'lobby:add-bot': (cb?: (res: Ack<null>) => void) => void;
+  'lobby:add-bot': (cb: (res: Ack<null>) => void) => void;
 
   // Игра
   'game:move': (data: { gameId: number; boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType }, cb: (res: Ack<null>) => void) => void;
@@ -218,7 +224,8 @@ export type ServerToClientEvents = {
     legalDrops?: Partial<Record<DropPieceType, string[]>>[];
   }) => void;
   'game:clock': (payload: { gameId: number; clocks: [number, number][]; running: boolean }) => void;
-  'game:end': (payload: { gameId: number; result: GameResult; reason: EndReason; participants: GameParticipantInfo[] }) => void;
+  'game:unavailable': (payload: { gameId: number; error: string }) => void;
+  'game:end': (payload: { status?: GameStatus; ratingKind?: RatingKind; endBoardIndex?: number; gameId: number; result: GameResult; reason: EndReason; participants: GameParticipantInfo[] }) => void;
   'game:chat': (msg: ChatMessage & { gameId: number }) => void;
   'game:players-left': (payload: { gameId: number; left: { userId: number; username: string; reconnected: boolean; leftCount: number }[] }) => void;
   'game:summoned': (payload: { gameId: number }) => void;
@@ -236,6 +243,7 @@ export type ServerToClientEvents = {
 };
 
 export interface Ack<T> {
+  activeGameId?: number;
   ok: boolean;
   error?: string;
   data?: T;
@@ -254,6 +262,9 @@ export interface ChatMessage {
 // ---------- Игровое состояние (полная синхронизация) ----------
 
 export interface GameState {
+  savingResult?: boolean;
+  ratingKind?: RatingKind | null;
+  endBoardIndex?: number | null;
   /** Server-owned pacing for a clock-free bughouse board occupied by bots. */
   botPacing?: { controlledBoard: 0 | 1; waiting: boolean; paused: boolean; pauseAllowed: boolean };
   gameId: number;
@@ -290,6 +301,7 @@ export interface GameState {
 // ---------- Live-трансляция (главная) ----------
 
 export interface LiveGameInfo {
+  isDemo?: boolean;
   gameId: number;
   mode: GameMode;
   players: { userId: number; username: string; rating: number; team: Team; isBot?: boolean }[];
@@ -306,12 +318,14 @@ export interface RatingPoint {
 }
 
 export interface ProfilePayload {
+  mode?: GameMode;
   user: PublicUser;
   ratingHistory: RatingPoint[];
   recentGames: GameSummary[];
 }
 
 export interface LeaderboardRow {
+  provisional?: boolean;
   userId: number;
   username: string;
   rating: number;
@@ -327,6 +341,25 @@ export type AuthResponse = { user: PublicUser } | { error: string };
 // ---------- Утилиты ----------
 
 export const START_RATING = 1200;
+export const PROVISIONAL_GAMES = 10;
+export type RatingKind = 'rated' | 'bots' | 'guest';
+export interface ModeRating {
+  mode: GameMode;
+  rating: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  trainingWins: number;
+  trainingLosses: number;
+  trainingDraws: number;
+}
+export function emptyModeRating(mode: GameMode): ModeRating {
+  return { mode, rating: START_RATING, wins: 0, losses: 0, draws: 0, trainingWins: 0, trainingLosses: 0, trainingDraws: 0 };
+}
+/** Old team games used * for draws; unfinished/abandoned games must remain distinct. */
+export function normalizedResult(game: Pick<GameSummary, 'status' | 'result' | 'reason'>): GameResult {
+  return game.status === 'finished' && game.result === '*' && ['stalemate', 'material', 'repetition', 'fifty'].includes(game.reason ?? '') ? '1/2-1/2' : game.result;
+}
 export const ELO_K = 32;
 
 export function expectedScoreElo(a: number, b: number): number {

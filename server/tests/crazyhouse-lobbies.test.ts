@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('../src/ratings/service.js', async importOriginal => ({ ...await importOriginal<typeof import('../src/ratings/service.js')>(), loadPlayerRatings: vi.fn(async players => players) }));
 import { LobbiesManager } from '../src/lobby/lobbies.js';
 import { prisma } from '../src/prisma.js';
 const bots = Array.from({ length: 6 }, (_, i) => ({ id: 100 + i, username: `bot_${i}`, isBot: true, rating: 1200 }));

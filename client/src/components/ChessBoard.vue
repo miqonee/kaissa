@@ -48,7 +48,6 @@ const emit = defineEmits<{
 
 const el = ref<HTMLElement | null>(null);
 let cg: CgApi | null = null;
-let ro: ResizeObserver | null = null;
 
 // ---------- утилиты по FEN ----------
 
@@ -195,14 +194,6 @@ function config() {
 onMounted(() => {
   if (!el.value) return;
   cg = Chessground(el.value, config() as never);
-  requestAnimationFrame(() => cg?.redrawAll());
-
-  if (typeof ResizeObserver !== 'undefined') {
-    ro = new ResizeObserver(() => {
-      cg?.redrawAll();
-    });
-    ro.observe(el.value);
-  }
 });
 
 watch(
@@ -291,17 +282,22 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  ro?.disconnect();
-  ro = null;
   cg?.destroy();
   cg = null;
 });
+
+// Chessground caches its hit-test rectangle. Layout above the board can move
+// without resizing it (e.g. a hint or first-move banner disappears). Refresh the
+// cache BEFORE Chessground handles the input, without rebuilding its DOM or
+// clearing the selected piece/premove.
+function refreshBounds(): void { cg?.state.dom.bounds.clear(); }
 
 function onRightClick(): void {
   cg?.cancelPremove();
   emit('cancelDrop');
 }
 function dragPocketPiece(piece: PieceType, color: 'w' | 'b', event: MouseEvent | TouchEvent): void {
+  refreshBounds();
   const roles = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' } as const;
   cg?.dragNewPiece({ role: roles[piece], color: color === 'w' ? 'white' : 'black' }, event, true);
 }
@@ -327,7 +323,7 @@ defineExpose({ cancelPremove, dragPocketPiece, resetView });
 </script>
 
 <template>
-  <div class="board-wrap" :class="{ mini: mini }" role="region" aria-label="Шахматная доска" @contextmenu.prevent="onRightClick">
+  <div class="board-wrap" :class="{ mini: mini }" role="region" aria-label="Шахматная доска" @mousedown.capture="refreshBounds" @touchstart.capture.passive="refreshBounds" @contextmenu.prevent="onRightClick">
     <div ref="el" class="cg-wrap-item"></div>
   </div>
 </template>

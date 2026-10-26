@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import seoPages from '../content/seo-pages.json';
+import QuickPlayPanel from '../components/QuickPlayPanel.vue';
+import { useConnectionStore } from '../stores/connection';
+import { trackGoal } from '../utils/analytics';
 import { lobbyCapacity, GAME_MODES, modeLabel as sharedModeLabel } from 'shared';
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
@@ -15,18 +19,12 @@ import BotHoverCard from '../components/BotHoverCard.vue';
 import { usePageSeo } from '../composables/useSeo';
 
 const i18n = useI18n();
+const connection = useConnectionStore();
+const liveLoaded = ref(false);
 
 usePageSeo({
-  title: computed(() =>
-    i18n.locale === 'en'
-      ? 'Online Team Chess: 2v2 and Bughouse | Kaissa'
-      : 'Шахматы на двоих онлайн: играть 2 на 2 и в Багхаус | Каисса',
-  ),
-  description: computed(() =>
-    i18n.locale === 'en'
-      ? 'Play team chess online in pairs on one board or Bughouse with live piece drops and Stockfish AI bots.'
-      : 'Играйте в шахматы на двоих онлайн бесплатно. Командные шахматы 2х2 на одной доске и шведские шахматы (багхаус) с фигурами из резерва. Игра с друзьями и ботами.',
-  ),
+  title: computed(() => seoPages['/'][i18n.locale].title),
+  description: computed(() => seoPages['/'][i18n.locale].description),
   keywords: [
     'шахматы на двоих',
     'шахматы на двоих онлайн',
@@ -49,9 +47,11 @@ const auth = useAuthStore();
 const lobbies = ref<LobbySummary[]>([]);
 const liveGames = ref<LiveGameInfo[]>([]);
 const loadingLobbies = ref(true);
+const lobbyError = ref('');
+const quickMode = ref<GameMode>('team');
 
 const autoLobbies = computed(() => lobbies.value.filter((l) => l.isAuto).sort((a, b) => a.mode.localeCompare(b.mode)));
-const userLobbies = computed(() => lobbies.value.filter((l) => !l.isAuto || (l.mode !== 'team' && l.players.some(p => !p.isBot))));
+const userLobbies = computed(() => lobbies.value.filter(l => !l.isAuto));
 const humanCount = (lobby: LobbySummary) => lobby.players.filter(p => !p.isBot).length;
 
 const sortedLiveGames = computed(() => {
@@ -76,25 +76,25 @@ const joinCode = ref('');
 const joinError = ref('');
 const joinBusy = ref(false);
 
-const socket = getSocket();
+let socket = getSocket();
 
-onMounted(async () => {
+async function loadLobbies() {
+  loadingLobbies.value = true; lobbyError.value = '';
   try {
     const res = await api.get<{ lobbies: LobbySummary[] }>('/api/lobbies');
     if (res.lobbies) lobbies.value = res.lobbies;
-  } catch {} finally {
+  } catch { lobbyError.value = i18n.locale === 'en' ? 'Could not load tables. Check your connection.' : 'Не удалось загрузить столы. Проверьте соединение.'; } finally {
     loadingLobbies.value = false;
   }
-  handleCtaAction(route.query.action);
-  socket.emit('live:subscribe');
-  socket.emit('lobby-list:subscribe');
+}
+function subscribeLive() {
   // Реконнект сокета теряет комнаты live/lobby-list — подписаться заново
   offResync = onSocketResync(() => {
     socket.emit('live:subscribe');
     socket.emit('lobby-list:subscribe');
   });
-  socket.on('lobby:list:update', (list) => (lobbies.value = list));
-  socket.on('live:snapshot', (games) => (liveGames.value = games));
+  socket.on('lobby:list:update', (list) => { lobbies.value = list; lobbyError.value = ''; });
+  socket.on('live:snapshot', (games) => { liveGames.value = games; liveLoaded.value = true; });
   socket.on('live:new', (g) => {
     liveGames.value = [g, ...liveGames.value.filter((x) => x.gameId !== g.gameId)];
   });
@@ -114,11 +114,14 @@ onMounted(async () => {
       });
     }
   });
-});
+  socket.emit('live:subscribe');
+  socket.emit('lobby-list:subscribe');
+}
+onMounted(async () => { subscribeLive(); await loadLobbies(); handleCtaAction(route.query.action); });
 
 let offResync: (() => void) | null = null;
 
-onBeforeUnmount(() => {
+function unsubscribeLive() {
   offResync?.();
   offResync = null;
   socket.off('lobby:list:update');
@@ -127,7 +130,9 @@ onBeforeUnmount(() => {
   socket.off('live:update');
   socket.off('live:end');
   socket.off('user:notif');
-});
+}
+onBeforeUnmount(unsubscribeLive);
+function refreshSocket() { if (socket !== getSocket()) { unsubscribeLive(); socket = getSocket(); subscribeLive(); } }
 
 // ---------- Toast ----------
 const toast = ref<{ text: string; action?: () => void } | null>(null);
@@ -149,27 +154,19 @@ function notifyBrowser(text: string): void {
 
 // ---------- Создание и вход ----------
 
-function openCreateModal(): void {
-  if (!auth.user) {
-    router.push({ name: 'login', query: { redirect: '/' } });
-    return;
-  }
-  showCreateModal.value = true;
+async function openCreateModal(): Promise<void> {
+  try { await auth.ensureGuest(); refreshSocket(); showCreateModal.value = true; }
+  catch(e) { showToast(e instanceof Error ? e.message : 'Не удалось войти'); }
 }
 
 async function handleCreate(payload: { name: string; mode: GameMode; timeControl: TimeControl; private: boolean; teamMode?: TeamMode }) {
-  if (!auth.user) {
-    router.push({ name: 'login', query: { redirect: '/' } });
-    return;
-  }
   createError.value = '';
   createBusy.value = true;
   try {
+    await auth.ensureGuest(); refreshSocket();
     const res = await api.post<{ lobby: LobbySummary; code: string }>('/api/lobbies', payload);
     showCreateModal.value = false;
-    socket.emit('lobby:join', res.code, () => {
-      router.push(`/lobby/${res.lobby.id}`);
-    });
+    await router.push(`/lobby/${res.lobby.id}`);
   } catch (e: any) {
     createError.value = e.message || 'Ошибка создания лобби';
   } finally {
@@ -179,45 +176,29 @@ async function handleCreate(payload: { name: string; mode: GameMode; timeControl
 
 async function joinByCode(): Promise<void> {
   const code = joinCode.value.trim().toUpperCase();
-  if (!code) return;
-  if (!auth.user) {
-    router.push({ name: 'login', query: { redirect: '/' } });
-    return;
-  }
-  joinError.value = '';
+  if (!code || joinBusy.value) return;
+  joinBusy.value = true; joinError.value = '';
+  try { await auth.ensureGuest(); refreshSocket(); await router.push(`/lobby/${encodeURIComponent(code)}`); }
+  catch(e) { joinError.value = e instanceof Error ? e.message : 'Не удалось войти'; }
+  finally { joinBusy.value = false; }
+}
+async function enterLobby(l: LobbySummary): Promise<void> {
+  if (joinBusy.value) return;
   joinBusy.value = true;
-  try {
-    const res = await api.post<{ lobby: LobbySummary }>('/api/lobbies/join', { code });
-    socket.emit('lobby:join', code, () => {
-      router.push(`/lobby/${res.lobby.id}`);
-    });
-  } catch (e: any) {
-    joinError.value = e.message || 'Стол не найден';
-  } finally {
-    joinBusy.value = false;
-  }
+  try { await auth.ensureGuest(); refreshSocket(); await router.push(`/lobby/${l.id}`); }
+  catch(e) { showToast(e instanceof Error ? e.message : 'Не удалось войти'); }
+  finally { joinBusy.value = false; }
 }
 
-function enterLobby(l: LobbySummary): void {
-  if (!auth.user) {
-    router.push({ name: 'login', query: { redirect: `/lobby/${l.id}` } });
-    return;
-  }
-  socket.emit('lobby:join', l.id, (ack) => {
-    if (ack.ok && ack.data) {
-      router.push(`/lobby/${ack.data.lobby.id}`);
-    } else if (ack && !ack.ok) {
-      showToast(ack.error || 'Не удалось войти в стол');
-    }
-  });
-}
+function playQuick(lobby: LobbySummary) { trackGoal('quick_play_clicked', { mode: lobby.mode }); void enterLobby(lobby); }
 
 function handleCtaAction(action: unknown): void {
   if (action === 'quick') {
-    const target = autoLobbies.value.find(l => l.mode === (GAME_MODES.includes(route.query.mode as GameMode) ? route.query.mode : 'team'));
+    quickMode.value = GAME_MODES.includes(route.query.mode as GameMode) ? route.query.mode as GameMode : 'team';
+    const target = autoLobbies.value.find(l => l.mode === quickMode.value);
     if (target) {
       enterLobby(target);
-    } else {
+    } else if (!lobbyError.value) {
       openCreateModal();
     }
   } else if (action === 'lobbies') {
@@ -293,11 +274,18 @@ function lobbyRosterTitle(l: LobbySummary): string {
     <!-- Верхний баннер с быстрыми действиями -->
     <section class="home-banner panel" :aria-label="i18n.t.home.quickStartChip">
       <div class="banner-intro">
-        <h1>{{ i18n.t.home.bannerTitle }}</h1>
-        <p class="dim">{{ i18n.t.home.bannerSubtitle }}</p>
+        <h1>{{ seoPages['/'][i18n.locale].heading }}</h1>
+        <p class="dim">{{ i18n.locale === 'en' ? '2v2, Bughouse and Crazyhouse with friends or bots. Start without registering.' : '2×2, Багхаус и Crazyhouse с друзьями или ботами. Начать можно без регистрации.' }}</p>
       </div>
+
+    </section>
+
+    <QuickPlayPanel v-model="quickMode" :lobby="autoLobbies.find(l => l.mode === quickMode)" :busy="joinBusy" :loading="loadingLobbies" :error="lobbyError" :guest="!auth.user || auth.user.isGuest" @play="playQuick" @retry="loadLobbies" />
+
+    <section class="panel invite-panel" :aria-label="i18n.locale === 'en' ? 'Play with friends' : 'Игра с друзьями'">
+      <h2>{{ i18n.locale === 'en' ? 'Playing with friends?' : 'Собираетесь с друзьями?' }}</h2>
       <div class="banner-actions">
-        <button class="primary banner-create-btn" @click="openCreateModal">
+        <button class="ghost banner-create-btn" @click="openCreateModal">
           <AppIcon name="plus" :size="18" :stroke-width="2.4" />
           {{ i18n.t.home.createTable }}
         </button>
@@ -316,18 +304,70 @@ function lobbyRosterTitle(l: LobbySummary): string {
           </button>
         </form>
       </div>
-      <p v-if="joinError" class="error-text banner-error">{{ joinError }}</p>
+      <p v-if="joinError" class="error-text banner-error" role="alert">{{ joinError }}</p>
     </section>
 
     <!-- Основная сетка -->
     <div class="home-grid">
+      <section class="lobbies-col" id="lobbies-section" aria-labelledby="open-lobbies-heading">
+        <div class="panel">
+          <div class="panel-head">
+            <h2 id="open-lobbies-heading">{{ i18n.t.home.openTablesHeading }}</h2>
+            <span class="hint">{{ userLobbies.length }} {{ i18n.t.home.tablesCount }}</span>
+          </div>
+
+          <div v-if="lobbyError" class="empty" role="alert"><p>{{ lobbyError }}</p><button @click="loadLobbies">{{ i18n.locale === 'en' ? 'Try again' : 'Повторить' }}</button></div>
+          <div v-else-if="loadingLobbies" class="empty dim" style="padding: 32px 16px;">
+            {{ i18n.t.home.loadingTables }}
+          </div>
+
+          <div v-else-if="userLobbies.length" class="panel-body lobby-rows">
+            <!-- Открытые пользовательские столы -->
+            <article
+              v-for="l in userLobbies"
+              :key="l.id"
+              class="lobby-card compact-card"
+
+            >
+              <div class="lobby-card-main">
+                <div class="lobby-title-row">
+                  <span class="lobby-name">{{ l.name }}</span>
+                  <span class="badge mono">{{ timeControlLabel(l.timeControl) }}</span>
+                  <span class="badge">{{ modeLabel(l.mode) }}</span>
+                </div>
+                <div class="lobby-players-summary dim" :title="lobbyRosterTitle(l)">
+                  {{ lobbyRosterLabel(l) }}
+                </div>
+              </div>
+
+              <div class="lobby-card-meta">
+                <span class="seats-indicator" :title="`${l.players.length}/${lobbyCapacity(l.mode)}`">
+                  <span
+                    v-for="s in lobbyCapacity(l.mode)"
+                    :key="s"
+                    class="seat-pip"
+                    :class="{ filled: s <= l.players.length }"
+                  ></span>
+                  <span class="seats mono">{{ l.players.length }}/{{ lobbyCapacity(l.mode) }}</span>
+                </span>
+                <button class="primary small" @click.stop="enterLobby(l)">{{ i18n.locale === 'en' ? 'Join' : 'Войти' }}</button>
+              </div>
+            </article>
+          </div>
+
+          <div v-else class="empty">
+            <p>{{ i18n.locale === 'en' ? 'No public tables yet. Create one to invite your friends.' : 'Публичных столов пока нет. Создайте свой и пригласите друзей.' }}</p>
+            <button class="primary" @click="openCreateModal">{{ i18n.locale === 'en' ? 'Create a table' : 'Создать стол для друзей' }}</button>
+          </div>
+        </div>
+      </section>
       <!-- Текущие live-партии (Lichess TV style) -->
       <section class="live-col" aria-labelledby="live-games-heading">
         <div class="panel">
           <div class="panel-head">
             <h2 id="live-games-heading">{{ i18n.t.home.liveHeading }}</h2>
             <span class="badge on" v-if="sortedLiveGames.length">{{ sortedLiveGames.length }} {{ i18n.t.home.liveCount }}</span>
-            <span class="hint" v-else>{{ i18n.t.home.noLiveGames }}</span>
+            <span class="hint" v-else>{{ !liveLoaded ? (i18n.locale === 'en' ? 'Connecting…' : 'Подключаемся…') : i18n.t.home.noLiveGames }}</span>
           </div>
 
           <div
@@ -393,112 +433,22 @@ function lobbyRosterTitle(l: LobbySummary): string {
             </article>
           </div>
 
-          <div v-else class="empty">
-            <p>{{ i18n.t.home.noTables }}</p>
-            <span class="dim">{{ i18n.t.home.createFirstPrompt }}</span>
+          <div v-else class="empty" role="status">
+            <p>{{ connection.state !== 'connected' ? (i18n.locale === 'en' ? 'Reconnecting to live games…' : 'Восстанавливаем трансляцию…') : !liveLoaded ? (i18n.locale === 'en' ? 'Loading live games…' : 'Загружаем текущие партии…') : (i18n.locale === 'en' ? 'No games are being played right now.' : 'Сейчас партий нет.') }}</p>
+            <p class="hint">{{ i18n.locale === 'en' ? 'Start a quick game above or return to watch games later.' : 'Начните быструю игру выше или вернитесь к просмотру позже.' }}</p>
           </div>
         </div>
       </section>
 
       <!-- Открытые столы -->
-      <section class="lobbies-col" id="lobbies-section" aria-labelledby="open-lobbies-heading">
-        <div class="panel">
-          <div class="panel-head">
-            <h2 id="open-lobbies-heading">{{ i18n.t.home.openTablesHeading }}</h2>
-            <span class="hint">{{ userLobbies.length + (autoLobbies.some(l => l.mode === 'team') ? 1 : 0) }} {{ i18n.t.home.tablesCount }}</span>
-          </div>
 
-          <div v-if="loadingLobbies" class="empty dim" style="padding: 32px 16px;">
-            {{ i18n.t.home.loadingTables }}
-          </div>
-
-          <div v-else-if="lobbies.length" class="panel-body lobby-rows">
-            <!-- Быстрый стол 2х2 (ультракомпактная карточка во главе) -->
-            <article
-              v-for="autoLobby in autoLobbies.filter(l => l.mode === 'team').slice(0, 1)"
-              :key="autoLobby.id"
-              class="lobby-card auto-lobby-card compact-card single-line-card"
-              role="button"
-              tabindex="0"
-              :aria-label="i18n.t.home.sitAtTable"
-              @click="enterLobby(autoLobby)"
-              @keydown.enter.space.prevent="enterLobby(autoLobby)"
-            >
-              <div class="lobby-card-main single-line-main">
-                <span class="badges-row">
-                  <span class="badge auto-chip">
-                    <AppIcon name="bolt" :size="12" />
-                    {{ i18n.t.home.quickStartChip }}
-                  </span>
-                  <span class="badge">{{ modeLabel(autoLobby.mode) }}</span>
-                  <span class="badge mono">{{ timeControlLabel(autoLobby.timeControl) }}</span>
-                  <span
-                    class="badge auto-hint-chip"
-                    :title="i18n.t.home.quickStartHint"
-                  >{{ i18n.t.home.quickStartHint }}</span>
-                </span>
-              </div>
-
-              <div class="lobby-card-meta">
-                <span class="seats-indicator" :title="`${humanCount(autoLobby)} ${i18n.locale === 'en' ? 'humans' : 'чел.'}, ${4 - humanCount(autoLobby)} ${i18n.locale === 'en' ? 'bots' : 'ботов'}`">
-                  <span
-                    v-for="s in 4"
-                    :key="s"
-                    class="seat-pip"
-                    :class="{ filled: s <= humanCount(autoLobby), bot: s > humanCount(autoLobby) }"
-                  ></span>
-                  <span class="seats mono">{{ humanCount(autoLobby) }}/4 {{ i18n.t.home.playersCount }}</span>
-                </span>
-                <button class="brass small" @click.stop="enterLobby(autoLobby)">
-                  <AppIcon name="bolt" :size="13" /> {{ i18n.t.home.sitAtTable }}
-                </button>
-              </div>
-            </article>
-
-            <!-- Открытые пользовательские столы -->
-            <article
-              v-for="l in userLobbies"
-              :key="l.id"
-              class="lobby-card compact-card"
-              role="button"
-              tabindex="0"
-              :aria-label="`Стол ${l.name}`"
-              @click="enterLobby(l)"
-              @keydown.enter.space.prevent="enterLobby(l)"
-            >
-              <div class="lobby-card-main">
-                <div class="lobby-title-row">
-                  <span class="lobby-name">{{ l.name }}</span>
-                  <span class="badge mono">{{ timeControlLabel(l.timeControl) }}</span>
-                  <span class="badge">{{ modeLabel(l.mode) }}</span>
-                </div>
-                <div class="lobby-players-summary dim" :title="lobbyRosterTitle(l)">
-                  {{ lobbyRosterLabel(l) }}
-                </div>
-              </div>
-
-              <div class="lobby-card-meta">
-                <span class="seats-indicator" :title="`${l.players.length}/${lobbyCapacity(l.mode)}`">
-                  <span
-                    v-for="s in lobbyCapacity(l.mode)"
-                    :key="s"
-                    class="seat-pip"
-                    :class="{ filled: s <= l.players.length }"
-                  ></span>
-                  <span class="seats mono">{{ l.players.length }}/{{ lobbyCapacity(l.mode) }}</span>
-                </span>
-                <button class="primary small" @click.stop="enterLobby(l)">Войти</button>
-              </div>
-            </article>
-          </div>
-
-          <div v-else class="empty">
-            <p>Открытых столов пока нет.</p>
-            <button class="primary" @click="openCreateModal">Создать свой стол</button>
-          </div>
-        </div>
-      </section>
     </div>
+
+    <section v-if="!auth.user || auth.user.isGuest" class="panel home-guide" aria-labelledby="home-guide-title">
+      <h2 id="home-guide-title">{{ i18n.locale === 'en' ? 'Find your way to play' : 'Выберите свой способ играть' }}</h2>
+      <div class="guide-grid"><article v-for="section in seoPages['/'][i18n.locale].sections" :key="section.heading"><h3>{{ section.heading }}</h3><p v-for="paragraph in section.paragraphs" :key="paragraph">{{ paragraph }}</p></article></div>
+      <nav :aria-label="i18n.locale === 'en' ? 'Learn the rules' : 'Изучить правила'"><router-link to="/rules/duo">{{ i18n.locale === 'en' ? '2v2 rules' : 'Правила 2×2' }}</router-link><router-link to="/rules/bughouse">{{ i18n.locale === 'en' ? 'Bughouse rules' : 'Правила багхауса' }}</router-link><router-link to="/rules/crazyhouse">{{ i18n.locale === 'en' ? 'Crazyhouse rules' : 'Правила Crazyhouse' }}</router-link></nav>
+    </section>
 
     <!-- Модальное окно создания стола -->
     <CreateLobbyModal
@@ -519,6 +469,9 @@ function lobbyRosterTitle(l: LobbySummary): string {
 </template>
 
 <style scoped>
+.invite-panel {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;padding:16px 22px;}.invite-panel h2 {font-size:17px;}.invite-panel .banner-actions {flex-wrap:wrap;}
+.home-guide {padding:22px;}.home-guide h2 {font-size:22px;margin-bottom:18px;}.guide-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:24px;}.guide-grid h3 {margin-bottom:10px;}.guide-grid p {font-size:14px;color:var(--ink-2);line-height:1.65;}.home-guide nav {display:flex;flex-wrap:wrap;gap:18px;margin-top:16px;}.home-guide a {text-decoration:underline;text-underline-offset:3px;}
+.quick-help { margin:0 0 10px; color:var(--ink-2); font-size:14px; }
 .home {
   display: flex;
   flex-direction: column;
@@ -979,6 +932,8 @@ function lobbyRosterTitle(l: LobbySummary): string {
 
 /* На узких экранах карточка стола и баннер перестраиваются вертикально */
 @media (max-width: 768px) {
+  .banner-intro { flex: 0 1 auto; }
+
   .home-banner {
     flex-direction: column;
     align-items: stretch;

@@ -7,12 +7,7 @@ import { useI18n } from '../stores/i18n';
 
 const i18n = useI18n();
 
-usePageSeo({
-  title: computed(() => (i18n.locale === 'en' ? `About Kaissa: 2v2 and Bughouse Chess Platform` : 'О платформе Каисса: командные шахматы 2 на 2 и Багхаус онлайн')),
-  description: computed(() => (i18n.locale === 'en' ? 'Kaissa is a collaborative team chess platform for 2v2 on one board and Bughouse with Stockfish WASM bots.' : 'Платформа Каисса — современный шахматный клуб для командных шахмат 2х2 и багхауса в реальном времени. Рейтинг Elo, боты на базе Stockfish WASM, открытый код.')),
-  canonical: '/about',
-  keywords: ['о платформе каисса', 'шахматная платформа', 'командные шахматы онлайн', 'stockfish шахматы', 'kaissa chess'],
-});
+usePageSeo({ canonical: '/about' });
 </script>
 
 <template>

@@ -1,304 +1,257 @@
 <script setup lang="ts">
-import { modeLabel as sharedModeLabel, type GameMode } from 'shared';
-import { computed, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
-import type { GameSummary } from 'shared';
-import { timeControlLabel } from 'shared';
-import { api } from '../api/rest';
-import { useAuthStore } from '../stores/auth';
-import { useI18n } from '../stores/i18n';
-import GameReplayModal from '../components/GameReplayModal.vue';
-import AppIcon from '../components/AppIcon.vue';
-import { openLichessAnalysis } from '../api/lichess';
-import { usePageSeo } from '../composables/useSeo';
-
+import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { GAME_MODES, modeLabel, type GameSummary } from "shared";
+import { api } from "../api/rest";
+import { useAuthStore } from "../stores/auth";
+import { useI18n } from "../stores/i18n";
+import { usePageSeo } from "../composables/useSeo";
+import MatchCard from "../components/MatchCard.vue";
+import GameReplayModal from "../components/GameReplayModal.vue";
 const auth = useAuthStore();
-const router = useRouter();
 const i18n = useI18n();
-
-usePageSeo({
-  title: computed(() => (i18n.locale === 'en' ? `Match Archive: 2v2 and Bughouse Replays | ${i18n.t.nav.brand}` : 'Архив партий: реплеи командных шахмат 2 на 2 и Багхауса | Каисса')),
-  description: computed(() => (i18n.locale === 'en' ? 'Archive of played matches on Kaissa platform. Interactive move replay, PGN export, and game analysis.' : 'Архив сыгранных матчей на платформе Каисса. Интерактивный просмотр реплеев игр 2х2 и шведских шахмат, история ходов и анализ партий.')),
-  keywords: [
-    'архив партий',
-    'база партий',
-    'история шахматных игр',
-    'реплеи шахмат',
-    'pgn шахматы',
-    'kaissa archive',
-  ],
-  canonical: '/history',
-});
-
-const tab = ref<'mine' | 'all'>('mine');
+const en = computed(() => i18n.locale === "en");
+usePageSeo({ canonical: '/history' });
+const tab = ref(auth.user ? "mine" : "all");
+const mode = ref("");
+const opponents = ref("");
+const result = ref("");
+const kind = ref("");
+const player = ref("");
 const games = ref<GameSummary[]>([]);
-const loading = ref(true);
-const lichessLoading = ref<number | null>(null);
+const loading = ref(false);
+const error = ref("");
+const nextCursor = ref<number | null>(null);
 const replayId = ref<number | null>(null);
-
-async function loadGames() {
+let version = 0;
+let timer: ReturnType<typeof setTimeout>;
+async function load(more = false) {
+  const current = ++version;
   loading.value = true;
-  try {
-    if (tab.value === 'mine') {
-      const res = await api.get<{ games: GameSummary[] }>('/api/games/mine');
-      games.value = res.games;
-    } else {
-      const res = await api.get<{ games: GameSummary[] }>('/api/games/archive?limit=100');
-      games.value = res.games;
-    }
-  } catch (e) {
+  error.value = "";
+  if (!more) {
     games.value = [];
-  } finally {
-    loading.value = false;
+    nextCursor.value = null;
   }
-}
-
-onMounted(loadGames);
-watch(tab, loadGames);
-
-function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale); }
-
-function meOf(g: GameSummary) {
-  return g.participants.find((p) => p.userId === auth.user?.id);
-}
-
-function outcome(g: GameSummary): { text: string; cls: string } {
-  const isEn = i18n.locale === 'en';
-  if (g.status === 'active') return { text: isEn ? 'Live' : 'Идёт', cls: 'live' };
-  if (g.status === 'abandoned') return { text: isEn ? 'Abandoned' : 'Брошена', cls: 'dim' };
-  if (g.result === '*' || g.result === '1/2-1/2') return { text: isEn ? 'Draw' : 'Ничья', cls: 'dim' };
-  if (tab.value === 'all') {
-    return { text: g.result === '1-0' ? (isEn ? 'White won' : 'Победа белых') : (isEn ? 'Black won' : 'Победа чёрных'), cls: '' };
-  }
-  const me = meOf(g);
-  if (!me) return { text: g.result, cls: '' };
-  const myTeamWon = (g.result === '1-0' && me.team === 1) || (g.result === '0-1' && me.team === 2);
-  return myTeamWon ? { text: isEn ? 'Win' : 'Победа', cls: 'win' } : { text: isEn ? 'Loss' : 'Поражение', cls: 'loss' };
-}
-
-function formatTeams(g: GameSummary): { t1: string; t2: string } {
-  const t1 = g.participants.filter((p) => p.team === 1).map((p) => p.username).join(' / ');
-  const t2 = g.participants.filter((p) => p.team === 2).map((p) => p.username).join(' / ');
-  return { t1: t1 || '—', t2: t2 || '—' };
-}
-
-function delta(g: GameSummary): number {
-  const me = meOf(g);
-  if (!me || me.ratingAfter === null) return 0;
-  return me.ratingAfter - me.ratingBefore;
-}
-
-function deltaText(g: GameSummary): string {
-  const d = delta(g);
-  if (g.status === 'abandoned' || g.status === 'active') return '—';
-  if (d === 0) return '0';
-  return (d > 0 ? '+' : '') + d;
-}
-
-function deltaClass(g: GameSummary): string {
-  const d = delta(g);
-  return d > 0 ? 'win' : d < 0 ? 'loss' : 'dim';
-}
-
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleString('ru-RU', {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
+  const query = new URLSearchParams({
+    mode: mode.value,
+    opponents: opponents.value,
+    result: result.value,
+    kind: kind.value,
+    player: player.value,
   });
-}
-
-function openReplay(g: GameSummary): void {
-  if (g.status === 'active') {
-    router.push(`/game/${g.id}`);
-  } else {
-    replayId.value = g.id;
-  }
-}
-
-function onRowKey(e: KeyboardEvent, g: GameSummary): void {
-  if (e.key === 'Enter' || e.key === ' ') {
-    e.preventDefault();
-    openReplay(g);
-  }
-}
-
-async function analyzeOnLichess(gameId: number) {
-  lichessLoading.value = gameId;
+  if (more && nextCursor.value) query.set("cursor", String(nextCursor.value));
   try {
-    await openLichessAnalysis(gameId, 0);
+    const res = await api.get<{
+      games: GameSummary[];
+      nextCursor: number | null;
+    }>(`/api/games/${tab.value === "mine" ? "mine" : "archive"}?${query}`);
+    if (current !== version) return;
+    games.value = more ? [...games.value, ...res.games] : res.games;
+    nextCursor.value = res.nextCursor;
+  } catch (e) {
+    if (current === version)
+      error.value = e instanceof Error ? e.message : "Ошибка загрузки";
   } finally {
-    lichessLoading.value = null;
+    if (current === version) loading.value = false;
   }
 }
+watch(
+  [tab, mode, opponents, result, kind],
+  () => {
+    clearTimeout(timer);
+    if (tab.value === "all" && ["win", "loss"].includes(result.value)) {
+      result.value = "";
+      return;
+    }
+    void load();
+  },
+  { immediate: true },
+);
+watch(player, () => {
+  ++version;
+  loading.value = true;
+  clearTimeout(timer);
+  timer = setTimeout(() => void load(), 300);
+});
+onBeforeUnmount(() => {
+  ++version;
+  clearTimeout(timer);
+});
 </script>
-
 <template>
-  <div class="history-page">
-    <section class="panel history-panel" aria-label="Архив партий">
-      <div class="panel-head">
-        <div class="head-tabs" role="tablist" aria-label="Фильтр партий">
-          <button
-            class="tab-btn"
-            :class="{ active: tab === 'mine' }"
-            role="tab"
-            :aria-selected="tab === 'mine'"
-            @click="tab = 'mine'"
-          >
-            {{ i18n.locale === 'en' ? 'My Matches' : 'Мои партии' }}
-          </button>
-          <button
-            class="tab-btn"
-            :class="{ active: tab === 'all' }"
-            role="tab"
-            :aria-selected="tab === 'all'"
-            @click="tab = 'all'"
-          >
-            {{ i18n.locale === 'en' ? 'All Matches' : 'Все партии' }}
-          </button>
-        </div>
-        <span class="hint">{{ games.length }} {{ i18n.locale === 'en' ? 'matches' : 'записей' }}</span>
+  <section class="panel history-panel">
+    <div class="panel-head">
+      <h1>{{ en ? "Match history" : "История партий" }}</h1>
+    </div>
+    <div class="history-controls">
+      <div
+        role="group"
+        :aria-label="en ? 'Archive' : 'Архив'"
+        class="scope-tabs"
+      >
+        <button
+          :class="{ primary: tab === 'mine' }"
+          :aria-pressed="tab === 'mine'"
+          @click="tab = 'mine'"
+        >
+          {{ en ? "My games" : "Мои партии" }}
+        </button>
+        <button
+          :class="{ primary: tab === 'all' }"
+          :aria-pressed="tab === 'all'"
+          @click="tab = 'all'"
+        >
+          {{ en ? "Club games" : "Партии клуба" }}
+        </button>
       </div>
-
-      <div v-if="loading" class="empty">{{ i18n.locale === 'en' ? 'Loading matches…' : 'Загрузка партий…' }}</div>
-
-      <div v-else-if="!games.length" class="empty">
-        <p class="empty-title">{{ i18n.t.history.emptyText }}</p>
-        <router-link to="/" class="button primary small">{{ i18n.locale === 'en' ? 'Go to tables' : 'Перейти к столам' }}</router-link>
+      <div class="filters">
+        <label
+          >{{ en ? "Mode" : "Режим"
+          }}<select v-model="mode">
+            <option value="">{{ en ? "All modes" : "Все режимы" }}</option>
+            <option v-for="m in GAME_MODES" :key="m" :value="m">
+              {{ modeLabel(m, i18n.locale) }}
+            </option>
+          </select></label
+        >
+        <label
+          >{{ en ? "Opponents" : "Соперники"
+          }}<select v-model="opponents">
+            <option value="">{{ en ? "All" : "Все" }}</option>
+            <option value="humans">
+              {{ en ? "Humans on both teams" : "Люди в обеих командах" }}
+            </option>
+            <option value="bots">
+              {{ en ? "Against bots" : "Против ботов" }}
+            </option>
+          </select></label
+        >
+        <label
+          >{{ en ? "Result" : "Результат"
+          }}<select v-model="result">
+            <option value="">{{ en ? "All" : "Все" }}</option>
+            <option v-if="tab === 'mine'" value="win">
+              {{ en ? "Wins" : "Победы" }}
+            </option>
+            <option v-if="tab === 'mine'" value="loss">
+              {{ en ? "Losses" : "Поражения" }}
+            </option>
+            <option value="draw">{{ en ? "Draws" : "Ничьи" }}</option>
+            <option value="abandoned">
+              {{ en ? "Abandoned" : "Не завершены" }}
+            </option>
+          </select></label
+        >
+        <label
+          >{{ en ? "Rating" : "Рейтинг"
+          }}<select v-model="kind">
+            <option value="">{{ en ? "All games" : "Все партии" }}</option>
+            <option value="rated">{{ en ? "Rated" : "Рейтинговые" }}</option>
+            <option value="training">
+              {{ en ? "Training" : "Тренировочные" }}
+            </option>
+          </select></label
+        >
+        <label
+          >{{ en ? "Player or teammate" : "Игрок или напарник"
+          }}<input
+            v-model="player"
+            type="search"
+            maxlength="30"
+            :placeholder="en ? 'Username' : 'Ник участника'"
+        /></label>
       </div>
-
-      <div v-else class="table-wrap">
-        <table class="club">
-          <thead>
-            <tr>
-              <th>{{ i18n.t.history.colDate }}</th>
-              <th>{{ i18n.t.history.colMode }}</th>
-              <th>{{ i18n.locale === 'en' ? 'Clock' : 'Контроль' }}</th>
-              <th>{{ i18n.locale === 'en' ? 'Team 1 (White)' : 'Команда 1 (белые)' }}</th>
-              <th>{{ i18n.locale === 'en' ? 'Team 2 (Black)' : 'Команда 2 (черные)' }}</th>
-              <th>{{ i18n.t.history.colResult }}</th>
-              <th v-if="tab === 'mine'" class="num">{{ i18n.t.history.colRatingChange }}</th>
-              <th class="actions">{{ i18n.locale === 'en' ? 'Actions' : 'Действия' }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="g in games"
-              :key="g.id"
-              class="row-link"
-              role="button"
-              tabindex="0"
-              :title="g.status === 'active' ? (i18n.locale === 'en' ? 'Live match — watch online' : 'Партия идёт — смотреть онлайн') : (i18n.locale === 'en' ? 'Open game replayer' : 'Открыть плеер партии')"
-              @click="openReplay(g)"
-              @keydown="onRowKey($event, g)"
-            >
-              <td class="mono dim">{{ fmtDate(g.startedAt) }}</td>
-              <td>
-                <span class="badge">{{ modeLabel(g.mode) }}</span>
-              </td>
-              <td class="mono dim">{{ timeControlLabel(g.timeControl) }}</td>
-              <td class="nowrap">{{ formatTeams(g).t1 }}</td>
-              <td class="nowrap">{{ formatTeams(g).t2 }}</td>
-              <td :class="outcome(g).cls" style="font-weight: 600;">
-                {{ outcome(g).text }}
-              </td>
-              <td v-if="tab === 'mine'" class="mono num" :class="deltaClass(g)" style="font-weight: 700;">
-                {{ deltaText(g) }}
-              </td>
-              <td class="actions">
-                <div class="actions-cell">
-                  <button
-                    class="button small ghost"
-                    :title="g.status === 'active' ? (i18n.locale === 'en' ? 'Watch live' : 'Смотреть онлайн') : (i18n.locale === 'en' ? 'Open replayer' : 'Открыть плеер')"
-                    @click.stop="openReplay(g)"
-                  >
-                    <AppIcon :name="g.status === 'active' ? 'eye' : 'play'" :size="14" />
-                    {{ g.status === 'active' ? 'Онлайн' : 'Плеер' }}
-                  </button>
-
-                  <a
-                    v-if="g.status !== 'active'"
-                    :href="`/api/games/${g.id}/pgn?download=1`"
-                    class="button small ghost"
-                    title="Скачать PGN файл"
-                    download
-                    @click.stop
-                  >
-                    <AppIcon name="download" :size="14" />
-                    PGN
-                  </a>
-
-                  <button
-                    v-if="g.status !== 'active' && g.mode === 'team'"
-                    class="button small brass"
-                    :disabled="lichessLoading === g.id"
-                    @click.stop="analyzeOnLichess(g.id)"
-                    title="Импортировать и разобрать партию на Lichess"
-                  >
-                    <AppIcon name="external" :size="13" />
-                    {{ lichessLoading === g.id ? '…' : 'Lichess' }}
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+    </div>
+    <div v-if="tab === 'mine' && !auth.user" class="empty">
+      <p>
+        {{
+          en
+            ? "Sign in to see your games. The club archive is open to everyone."
+            : "Войдите, чтобы увидеть свои партии. Архив клуба доступен всем."
+        }}
+      </p>
+      <router-link
+        class="button"
+        :to="{ name: 'login', query: { redirect: '/history' } }"
+        >{{ en ? "Sign in" : "Войти" }}</router-link
+      >
+    </div>
+    <template v-else>
+      <div v-if="error" class="empty" role="alert">
+        <p>
+          {{
+            en
+              ? "Could not load games. Check your connection."
+              : "Не удалось загрузить партии. Проверьте соединение."
+          }}
+        </p>
+        <button @click="load()">{{ en ? "Try again" : "Повторить" }}</button>
       </div>
-    </section>
-
+      <div class="match-list" :aria-busy="loading">
+        <MatchCard
+          v-for="game in games"
+          :key="game.id"
+          :game="game"
+          :viewer-id="auth.user?.id"
+          @replay="replayId = $event"
+        />
+      </div>
+      <p v-if="loading" class="empty" role="status">
+        {{ en ? "Loading…" : "Загрузка…" }}
+      </p>
+      <p v-else-if="!games.length && !error" class="empty">
+        {{
+          en
+            ? "No games match these filters."
+            : "По выбранным фильтрам партий пока нет."
+        }}
+      </p>
+      <div v-if="nextCursor && !error" class="empty">
+        <button :disabled="loading" @click="load(true)">
+          {{ en ? "Load more" : "Показать ещё" }}
+        </button>
+      </div>
+    </template>
     <GameReplayModal
       v-if="replayId !== null"
       :game-id="replayId"
+      :title="`${en ? 'Game' : 'Партия'} #${replayId}`"
       @close="replayId = null"
     />
-  </div>
+  </section>
 </template>
-
 <style scoped>
-.history-page {
+h1 {
+  font-size: 22px;
+}
+.history-controls {
+  padding: 16px;
+}
+.scope-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.filters label {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-l);
+  gap: 5px;
+  font-size: 13px;
+  flex: 1 1 150px;
 }
-
-.head-tabs {
-  display: flex;
-  gap: var(--gap-xs);
-  flex-wrap: wrap;
+.filters select,
+.filters input {
+  width: 100%;
+  min-width: 0;
 }
-
-.tab-btn {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--ink-3);
-  padding: 6px 14px;
-  border-radius: var(--r-s);
-  font-size: 14px;
-  font-weight: 600;
-}
-.tab-btn:hover {
-  color: var(--ink);
-  background: var(--surface-inset);
-  border-color: transparent;
-}
-.tab-btn.active {
-  background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  color: var(--accent);
-}
-
-.table-wrap {
-  overflow-x: auto;
-}
-
-.actions-cell {
-  display: inline-flex;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-td.live {
-  color: var(--ok);
+.match-list {
+  display: grid;
+  gap: 14px;
+  padding: 0 16px 16px;
 }
 </style>

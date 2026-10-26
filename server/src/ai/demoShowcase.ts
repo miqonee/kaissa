@@ -46,6 +46,7 @@ export class DemoShowcase {
   private nextSlot: -1 | -2 = -1;
   private checkInterval: NodeJS.Timeout | null = null;
   private running = false;
+  private transitionTimer: NodeJS.Timeout | null = null;
   private isTransitioning = false;
   private levelRotationIndex = 0;
 
@@ -60,6 +61,9 @@ export class DemoShowcase {
 
   stop(): void {
     this.running = false;
+    if (this.transitionTimer) clearTimeout(this.transitionTimer);
+    this.transitionTimer = null;
+    this.isTransitioning = false;
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
       this.checkInterval = null;
@@ -78,8 +82,10 @@ export class DemoShowcase {
       this.isTransitioning = true;
       const finishedId = this.currentDemoGameId;
       // Зрители видят результат 4 секунды
-      setTimeout(async () => {
+      this.transitionTimer = setTimeout(async () => {
+        this.transitionTimer = null;
         try {
+          if (!this.running) return;
           await this.launchNextDemo(finishedId);
         } finally {
           this.isTransitioning = false;
@@ -89,7 +95,8 @@ export class DemoShowcase {
     }
 
     // Первый запуск
-    await this.launchNextDemo();
+    this.isTransitioning = true;
+    try { await this.launchNextDemo(); } finally { this.isTransitioning = false; }
   }
 
   private async launchNextDemo(prevGameId?: number): Promise<void> {
@@ -97,7 +104,7 @@ export class DemoShowcase {
       const bots = await prisma.user.findMany({
         where: { isBot: true },
       });
-      if (bots.length < 4) return;
+      if (!this.running || bots.length < 4) return;
 
       // Выбираем 4 случайных ботов из всех доступных персоналий
       const shuffled = bots.slice().sort(() => Math.random() - 0.5);

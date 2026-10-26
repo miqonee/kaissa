@@ -10,7 +10,9 @@ datasource db {
 model User {
   id           Int      @id @default(autoincrement())
   username     String   @unique
-  passwordHash String
+  passwordHash String?
+  isGuest      Boolean  @default(false)
+  sessionVersion Int   @default(0)
   rating       Int      @default(1200)
   wins         Int      @default(0)
   losses       Int      @default(0)
@@ -24,6 +26,7 @@ model User {
   participations GameParticipant[]
   ratingHistory  RatingHistory[]
   moves          GameMove[]
+  modeRatings    ModeRating[]
 
   @@index([rating])
   @@index([isBot])
@@ -35,15 +38,34 @@ model RatingHistory {
   delta     Int
   value     Int
   gameId    Int?
+  mode      String?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
 }
 
+model ModeRating {
+  userId Int
+  mode String
+  rating Int @default(1200)
+  wins Int @default(0)
+  losses Int @default(0)
+  draws Int @default(0)
+  trainingWins Int @default(0)
+  trainingLosses Int @default(0)
+  trainingDraws Int @default(0)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, mode])
+  @@index([mode, rating])
+}
+
 model Game {
   id             Int       @id @default(autoincrement())
   rulesVersion   Int?
+  ratingKind     String?   // null: historical common rating; rated | bots | guest
+  endBoardIndex  Int?
   mode           String    // 'team' | 'bughouse'
   status         String    @default("active") // active | finished | abandoned
   result         String    @default("*")     // '1-0' | '0-1' | '*'
@@ -70,6 +92,7 @@ model GameParticipant {
   moveSlot      Int     @default(0) // порядок хода в team-режиме
   ratingBefore  Int
   ratingAfter   Int?
+  wasGuest      Boolean @default(false)
 
   game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -32,7 +32,7 @@
     <meta name="twitter:image" content="https://duochess.ru/og-image.png" />
 
     <!-- Schema.org JSON-LD Structured Data -->
-    <script type="application/ld+json">
+    <script id="kaissa-schema" type="application/ld+json">
     [
       {
         "@context": "https://schema.org",
@@ -72,6 +72,8 @@
 
     <!-- Yandex.Metrika counter -->
     <script type="text/javascript">
+      (function () {
+      if (!['duochess.ru', 'www.duochess.ru'].includes(window.location.hostname)) return;
       (function(m,e,t,r,i,k,a){
         m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
         m[i].l=1*new Date();
@@ -88,6 +90,7 @@
         accurateTrackBounce: true,
         trackLinks: true
       });
+      })();
     </script>
     <!-- /Yandex.Metrika counter -->
 

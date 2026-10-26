@@ -1,0 +1,276 @@
+{
+  "/": {
+    "ru": {
+      "title": "Командные шахматы онлайн — 2×2, Багхаус и Crazyhouse | Каисса",
+      "description": "Играйте в шахматы 2 на 2, Багхаус и Crazyhouse с друзьями или ботами. Быстрый вход без регистрации, приглашения по ссылке, рейтинг по режимам и просмотр партий.",
+      "heading": "Командные шахматы с друзьями",
+      "intro": "Выберите один из четырёх форматов и начните играть без регистрации. Боты заполняют свободные места: собирать всех друзей одновременно не обязательно.",
+      "sections": [
+        {
+          "heading": "Четыре способа играть",
+          "paragraphs": [
+            "2×2: одна доска, два игрока в каждой команде. Напарники по очереди ходят фигурами одного цвета.",
+            "Багхаус: две доски, четыре игрока. Взятая фигура переходит в резерв напарника, который играет другим цветом на соседней доске.",
+            "Crazyhouse 1×1: взятые фигуры становятся вашим резервом; вместо обычного хода их можно выставить на доску.",
+            "Crazyhouse 2×2: одна доска, общий резерв команды и чередование ходов напарников. Это командный вариант клуба, а не багхаус."
+          ]
+        },
+        {
+          "heading": "Пригласите друга или начните с ботами",
+          "paragraphs": [
+            "Быстрая игра открывает готовый стол выбранного режима. В лобби можно дождаться друзей, выбрать время и распределение команд. Поделиться столом можно ссылкой или шестизначным кодом.",
+            "Гостевая сессия связана с браузером. Чтобы не потерять доступ к истории, сохраните аккаунт, выбрав ник и пароль."
+          ]
+        },
+        {
+          "heading": "Понятный рейтинг и история",
+          "paragraphs": [
+            "У каждого режима свой Elo. Матчи с гостями и игры только против ботов считаются тренировочными и не меняют публичный рейтинг.",
+            "В архиве видны составы команд, причины завершения и изменение рейтинга. Встроенный плеер воспроизводит ходы, а в багхаусе — обе доски и карманы."
+          ]
+        }
+      ]
+    },
+    "en": {
+      "title": "Team Chess Online — 2v2, Bughouse & Crazyhouse | Kaissa",
+      "description": "Play 2v2 team chess, Bughouse and Crazyhouse with friends or bots. Start as a guest, invite a teammate, track ratings by mode and replay your games.",
+      "heading": "Play chess together",
+      "intro": "Choose one of four formats and start without registering. Bots fill empty seats, so you do not need to gather everyone at the same time.",
+      "sections": [
+        {
+          "heading": "Four ways to play",
+          "paragraphs": [
+            "2v2: four players share one board. Teammates alternate moves with the same colour.",
+            "Bughouse: four players use two boards. Captured pieces go to your teammate’s reserve on the other board. Partners play opposite colours.",
+            "Crazyhouse 1v1: captures become your own reserve. On your turn, drop a reserve piece instead of making a regular move.",
+            "Crazyhouse 2v2: teammates share a reserve and alternate turns on one board. This is Kaissa’s team variant, not Bughouse."
+          ]
+        },
+        {
+          "heading": "Invite friends or start with bots",
+          "paragraphs": [
+            "Quick play opens a prepared table. In the lobby, wait for friends or choose the clock and teams. Share a table link or a six-character code.",
+            "Guest access belongs to this browser. Choose a username and password to keep access to your games on other devices."
+          ]
+        },
+        {
+          "heading": "Ratings and replays",
+          "paragraphs": [
+            "Each mode has its own Elo. Games involving guests and games against bots only are training games and do not affect public ratings.",
+            "The archive shows both teams, the result, its reason and rating changes. Replays include moves, reserves and both boards in Bughouse."
+          ]
+        }
+      ]
+    }
+  },
+  "/rules/duo": {
+    "ru": {
+      "title": "Правила шахмат 2 на 2 на одной доске | Каисса",
+      "description": "Как играть в командные шахматы 2 на 2: очередь напарников, одна доска, общий контроль времени, победа и ничья. Начните партию с друзьями или ботами.",
+      "heading": "Правила командных шахмат 2×2",
+      "intro": "Четыре игрока играют на одной стандартной доске. У каждой команды один цвет, а напарники строго чередуются при каждом ходе своей команды.",
+      "sections": [
+        {
+          "heading": "Порядок ходов",
+          "paragraphs": [
+            "Первый игрок белых делает первый ход, затем ходит первый игрок чёрных. На следующем ходу белых играет второй напарник, затем второй напарник чёрных.",
+            "Следующего игрока показывает очередь ходов. Премув допустим только для того напарника, чья очередь будет следующей."
+          ]
+        },
+        {
+          "heading": "Обычные шахматные правила",
+          "paragraphs": [
+            "Разрешены рокировка, взятие на проходе и превращение пешки. Резерва и постановки взятых фигур в этом режиме нет.",
+            "Мат, сдача или истечение времени означают поражение всей команды. Пат, недостаток материала, троекратное повторение и правило 50 ходов дают ничью."
+          ]
+        },
+        {
+          "heading": "Как начать",
+          "paragraphs": [
+            "Выберите 2×2 в быстрой игре или создайте стол. Свободные места можно заполнить ботами. Быстрый стол по умолчанию использует 3+0; время меняется в лобби."
+          ]
+        }
+      ]
+    },
+    "en": {
+      "title": "Alternating-turn 2v2 Chess Rules | Kaissa",
+      "description": "Learn alternating-turn 2v2 chess: teammates share one board and colour, alternate moves, and use a team clock. Play with friends or fill seats with bots.",
+      "heading": "Alternating-turn 2v2 chess rules",
+      "intro": "Four players share one standard chessboard. Each team plays one colour and its two teammates alternate whenever that team moves.",
+      "sections": [
+        {
+          "heading": "Turn order",
+          "paragraphs": [
+            "White’s first teammate moves, then Black’s first teammate. On the next White turn, the second teammate moves, followed by Black’s second teammate.",
+            "The turn queue identifies the next player. Premoves are available only when you are the next teammate to move for your colour."
+          ]
+        },
+        {
+          "heading": "Standard chess rules",
+          "paragraphs": [
+            "Castling, en passant and pawn promotion work as in ordinary chess. This mode has no reserves or piece drops.",
+            "Checkmate, resignation or a fallen flag loses the game for the entire team. Stalemate, insufficient material, threefold repetition and the 50-move rule are draws."
+          ]
+        },
+        {
+          "heading": "Start a game",
+          "paragraphs": [
+            "Choose 2v2 in quick play or create a table. Bots can fill empty seats. The quick table defaults to 3+0; you can change the clock in the lobby."
+          ]
+        }
+      ]
+    }
+  },
+  "/rules/bughouse": {
+    "ru": {
+      "title": "Правила Багхауса — две доски и передача фигур | Каисса",
+      "description": "Правила шведских шахмат: две доски, резерв напарника, дропы, превращения, мат и пат. Узнайте особенности Багхауса в Каиссе и начните игру.",
+      "heading": "Правила Багхауса",
+      "intro": "Багхаус, или шведские шахматы, — командная игра на двух досках. Напарники играют противоположными цветами. Взятие на одной доске пополняет резерв партнёра на другой.",
+      "sections": [
+        {
+          "heading": "Как работает резерв",
+          "paragraphs": [
+            "В свой ход можно сделать обычный шахматный ход или поставить фигуру из кармана на пустое поле. Пешки ставятся только на горизонтали 2–7. Король в карман не попадает.",
+            "Шах и мат постановкой разрешены. Пешка, которая превратилась в другую фигуру, при взятии возвращается в резерв как пешка."
+          ]
+        },
+        {
+          "heading": "Когда матч заканчивается",
+          "paragraphs": [
+            "Мат, пат, сдача или флаг на любой доске проигрывают весь матч. В правилах клуба пат — поражение, а не ничья.",
+            "При определении мата учитываются фигуры, уже находящиеся в резерве. Автоматического ожидания будущей фигуры нет. Правила повторения, 50 ходов и недостатка материала здесь не применяются."
+          ]
+        },
+        {
+          "heading": "Игра с ботами",
+          "paragraphs": [
+            "Быстрый багхаус по умолчанию идёт без часов. Когда одна доска занята только ботами, её темп связан с ходами на доске людей.",
+            "Единственный человек может поставить обе доски на паузу. После потери соединения такая партия приостанавливается; после возвращения нужно явно продолжить игру."
+          ]
+        }
+      ]
+    },
+    "en": {
+      "title": "Bughouse Rules — Two Boards and Shared Captures | Kaissa",
+      "description": "Learn Kaissa’s Bughouse rules: two boards, teammate reserves, piece drops, promotions and match endings. Start with friends or bots.",
+      "heading": "Bughouse rules",
+      "intro": "Bughouse is a team game on two boards. Partners play opposite colours. A capture on one board adds a piece to the partner’s reserve on the other.",
+      "sections": [
+        {
+          "heading": "Reserves and drops",
+          "paragraphs": [
+            "On your turn, either make a regular chess move or place a reserve piece on an empty square. Pawns may only be dropped on ranks 2–7. Kings never enter a reserve.",
+            "Drops may give check or checkmate. A promoted pawn returns to the reserve as a pawn when captured."
+          ]
+        },
+        {
+          "heading": "How the match ends",
+          "paragraphs": [
+            "Checkmate, stalemate, resignation or a fallen flag on either board loses the entire match. Under Kaissa’s club rules, stalemate is a loss, not a draw.",
+            "Mate detection considers pieces already in the reserve. There is no automatic waiting for a future capture. Repetition, the 50-move rule and insufficient-material rules do not apply."
+          ]
+        },
+        {
+          "heading": "Playing with bots",
+          "paragraphs": [
+            "Quick Bughouse defaults to no clock. A board occupied only by bots is paced by moves on the human board.",
+            "A solo human may pause both boards. Disconnection pauses that solo game; after reconnecting, explicitly resume play."
+          ]
+        }
+      ]
+    }
+  },
+  "/about": {
+    "ru": {
+      "title": "О Каиссе — командные шахматы с друзьями и ботами",
+      "description": "Каисса — клуб командных шахмат: 2×2, Багхаус и Crazyhouse, гостевой вход, рейтинги по режимам и просмотр сыгранных партий.",
+      "heading": "О клубе Каисса",
+      "intro": "Каисса помогает играть в шахматы вместе: в паре на одной доске или командой на двух. Начать можно одному, заполнив свободные места ботами.",
+      "sections": [
+        {
+          "heading": "Что доступно",
+          "paragraphs": [
+            "Четыре режима, приватные столы по ссылке, чат, серверные часы, гостевой вход и постоянные аккаунты. Интерфейс доступен на русском и английском.",
+            "Для обычных шахмат используется Stockfish, для вариантов с резервом — Fairy-Stockfish. Сила ботов в нестандартных режимах не является подтверждённым Elo."
+          ]
+        },
+        {
+          "heading": "Рейтинг и история",
+          "paragraphs": [
+            "Рейтинги разделены по режимам. История хранит команды и результат; плеер позволяет вернуться к ходам и резервам. Исходный код проекта открыт на GitHub."
+          ]
+        }
+      ]
+    },
+    "en": {
+      "title": "About Kaissa — Team Chess with Friends and Bots",
+      "description": "Kaissa is a team chess club with 2v2, Bughouse and Crazyhouse, guest play, separate mode ratings and game replays.",
+      "heading": "About Kaissa",
+      "intro": "Kaissa is built for playing chess together, as partners on one board or as a team on two boards. You can also start alone with bots in the empty seats.",
+      "sections": [
+        {
+          "heading": "Available features",
+          "paragraphs": [
+            "Four modes, private invitation links, chat, server clocks, guest play and permanent accounts. The interface is available in Russian and English.",
+            "Standard chess uses Stockfish; reserve variants use Fairy-Stockfish. Bot strength in nonstandard modes is not a verified Elo rating."
+          ]
+        },
+        {
+          "heading": "Ratings and history",
+          "paragraphs": [
+            "Ratings are separate for each mode. The archive records both teams and the result; the replayer revisits moves and reserves. The source code is available on GitHub."
+          ]
+        }
+      ]
+    }
+  },
+  "/leaderboard": {
+    "ru": {
+      "title": "Рейтинг игроков по режимам | Каисса",
+      "description": "Таблица лидеров Каиссы: отдельный Elo для 2×2, Багхауса и Crazyhouse. Рейтинговые матчи отделены от тренировок с ботами и гостями.",
+      "heading": "Рейтинг игроков по режимам",
+      "intro": "Таблица лидеров Каиссы: отдельный Elo для 2×2, Багхауса и Crazyhouse. Рейтинговые матчи отделены от тренировок с ботами и гостями.",
+      "sections": []
+    },
+    "en": {
+      "title": "Ratings by Game Mode | Kaissa",
+      "description": "Kaissa leaderboards with separate Elo ratings for 2v2, Bughouse and Crazyhouse. Rated matches are separate from bot and guest training games.",
+      "heading": "Ratings by Game Mode",
+      "intro": "Kaissa leaderboards with separate Elo ratings for 2v2, Bughouse and Crazyhouse. Rated matches are separate from bot and guest training games.",
+      "sections": []
+    }
+  },
+  "/history": {
+    "ru": {
+      "title": "История партий и составы команд | Каисса",
+      "description": "Архив партий Каиссы: кто с кем играл, результат, причина завершения и изменение рейтинга. Фильтры по режиму, участникам и соперникам, реплеи и PGN.",
+      "heading": "История партий и составы команд",
+      "intro": "Архив партий Каиссы: кто с кем играл, результат, причина завершения и изменение рейтинга. Фильтры по режиму, участникам и соперникам, реплеи и PGN.",
+      "sections": []
+    },
+    "en": {
+      "title": "Match History and Team Rosters | Kaissa",
+      "description": "Explore Kaissa games: both teams, results, ending reasons and rating changes. Filter by mode, player and opponent type, watch replays and download PGN.",
+      "heading": "Match History and Team Rosters",
+      "intro": "Explore Kaissa games: both teams, results, ending reasons and rating changes. Filter by mode, player and opponent type, watch replays and download PGN.",
+      "sections": []
+    }
+  },
+  "/login": {
+    "ru": {
+      "title": "Вход и сохранение гостевого аккаунта | Каисса",
+      "description": "Войдите в Каиссу или сохраните гостевой аккаунт с тем же ID и историей партий. Для быстрой игры регистрация не обязательна.",
+      "heading": "Вход и сохранение гостевого аккаунта",
+      "intro": "Войдите в Каиссу или сохраните гостевой аккаунт с тем же ID и историей партий. Для быстрой игры регистрация не обязательна.",
+      "sections": []
+    },
+    "en": {
+      "title": "Sign In and Save a Guest Account | Kaissa",
+      "description": "Sign in to Kaissa or save a guest account while keeping its games and identity. Registration is optional for quick play.",
+      "heading": "Sign In and Save a Guest Account",
+      "intro": "Sign in to Kaissa or save a guest account while keeping its games and identity. Registration is optional for quick play.",
+      "sections": []
+    }
+  }
+}

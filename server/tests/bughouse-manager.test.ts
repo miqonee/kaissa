@@ -1,4 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('../src/ratings/service.js', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/ratings/service.js')>(),
+  loadPlayerRatings: vi.fn(async players => players),
+  saveGameResult: vi.fn(async (game, result, reason) => {
+    const { prisma } = await import('../src/prisma.js');
+    await prisma.game.update({ where: { id: game.id }, data: { status: 'finished', result, reason } });
+    return game.participants.map((p: {uid:number; ratingBefore:number}) => ({uid:p.uid, before:p.ratingBefore, after:p.ratingBefore}));
+  }),
+}));
 import { BughouseGame, type AnyMove } from 'shared/bughouse';
 vi.mock('../src/ai/engine.js', () => ({ chooseBotMove: vi.fn(), getBotThinkingDelayMs: () => 1 }));
 vi.mock('../src/ai/bughouse.js', () => ({ chooseBughouseMove: vi.fn(), bughouseThinkingDelay: () => 1 }));
@@ -39,6 +48,7 @@ describe('Bughouse manager concurrency', () => {
     expect((await manager.applyMove(id, 1, { boardIndex: 0, from: 'e2', to: 'e4' })).ok).toBe(false);
     expect((manager.getActive(id)!.engine as BughouseGame).snapshot()).toEqual(before);
     expect(manager.getActive(id)!.ply).toBe(0);
+    expect(manager.getActive(id)!.boardsStarted).toEqual([false, false]);
   });
   it('finishes once on a flag and never applies a late move', async () => {
     const manager = new GamesManager(); const id = await manager.createGame({ ...setups, timeControl: { kind: 'clock', baseMin: 5, incSec: 3 } });
@@ -163,8 +173,9 @@ describe('Human-paced bughouse', () => {
     const manager = new GamesManager();
     const id = await manager.createGame({ ...withHumans([1]), timeControl: { kind: 'clock', baseMin: 5, incSec: 3 } });
     expect(manager.toGameState(manager.getActive(id)!).botPacing).toBeUndefined(); manager.cancelBotTimers(id);
-    await manager.createGame(withHumans([1, 2]));
-    expect(manager.toGameState(manager.getActive(id)!).botPacing).toBeUndefined(); manager.cancelBotTimers(id);
+    const independent = new GamesManager();
+    const independentId = await independent.createGame(withHumans([1, 2]));
+    expect(independent.toGameState(independent.getActive(independentId)!).botPacing).toBeUndefined(); independent.cancelBotTimers(independentId);
     const demo = await manager.createGame({ ...withHumans([]), isDemo: true, fixedId: -1 });
     expect(manager.toGameState(manager.getActive(demo)!).botPacing).toBeUndefined();
     expect(manager.getActive(id)).toBeDefined();
@@ -178,5 +189,57 @@ describe('Human-paced bughouse', () => {
     await vi.advanceTimersByTimeAsync(10_001);
     expect(manager.getActive(-1)).toBe(next);
     expect(next!.status).toBe('active');
+  });
+});
+
+describe('Result persistence failures', () => {
+  it('freezes play and retries the same result without abandoning the game', async () => {
+    const { saveGameResult } = await import('../src/ratings/service.js');
+    const manager = new GamesManager(); const id = await manager.createGame(setups);
+    vi.mocked(saveGameResult).mockRejectedValueOnce(new Error('database offline'));
+    await manager.resign(id, 1);
+    const game = manager.getActive(id)!;
+    expect(game.status).toBe('active');
+    expect(game.pendingFinish?.reason).toBe('resign');
+    expect((await manager.applyMove(id, 1, {boardIndex:0,from:'e2',to:'e4'})).ok).toBe(false);
+    await manager.abortUnrated(game);
+    expect(game.status).toBe('active');
+    await manager.checkFlags();
+    expect(game.status).toBe('finished');
+    expect(game.result).toBe('0-1');
+    expect(saveGameResult).toHaveBeenCalledTimes(2);
+    await manager.checkFlags();
+    expect(saveGameResult).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('One active match per human', () => {
+  it('reserves participants during creation and rejects a second concurrent match', async () => {
+    const manager = new GamesManager();
+    const results = await Promise.allSettled([manager.createGame(setups), manager.createGame(setups)]);
+    expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter(r => r.status === 'rejected')).toHaveLength(1);
+    expect(prisma.game.create).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe('Disconnect and first move after persistence failure', () => {
+  it('does not count a rejected first move on a human board as played', async () => {
+    const manager = new GamesManager(); const id = await manager.createGame(withHumans([1]));
+    const game = manager.getActive(id)!;
+    // The other board has moved; the human board still has not.
+    game.ply = 1; game.boardsStarted[1] = true;
+    vi.mocked(prisma.gameMove.create).mockRejectedValueOnce(new Error('disk unavailable'));
+    await manager.applyMove(id,1,{boardIndex:0,from:'e2',to:'e4'});
+    expect(game.boardsStarted).toEqual([false,true]);
+    expect(manager.isFirstMovePending(game)).toBe(true);
+  });
+  it('abandons a timed bot game when its only human has disconnected', async () => {
+    const manager = new GamesManager(); const id = await manager.createGame({...withHumans([1]),timeControl:{kind:'clock',baseMin:3,incSec:0}});
+    await manager.applyMove(id,1,{boardIndex:0,from:'e2',to:'e4'});
+    manager.onPlayerDisconnect(id,1);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(manager.getActive(id)!.status).toBe('abandoned');
   });
 });

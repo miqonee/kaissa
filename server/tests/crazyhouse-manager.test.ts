@@ -1,4 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('../src/ratings/service.js', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/ratings/service.js')>(),
+  loadPlayerRatings: vi.fn(async players => players),
+  saveGameResult: vi.fn(async (game, result, reason) => {
+    const { prisma } = await import('../src/prisma.js');
+    await prisma.game.update({ where: { id: game.id }, data: { status: 'finished', result, reason } });
+    return game.participants.map((p: {uid:number; ratingBefore:number}) => ({uid:p.uid, before:p.ratingBefore, after:p.ratingBefore}));
+  }),
+}));
 import { CrazyhouseGame } from 'shared/crazyhouse';
 vi.mock('../src/ai/engine.js', () => ({ chooseBotMove: vi.fn(), getBotThinkingDelayMs: () => 1 }));
 vi.mock('../src/ai/crazyhouse.js', () => ({ chooseCrazyhouseMove: vi.fn() }));

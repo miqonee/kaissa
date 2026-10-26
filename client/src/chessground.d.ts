@@ -63,7 +63,7 @@ declare module 'chessground-types' {
 
   export interface Api {
     set(config: Config): void;
-    state: unknown;
+    state: { dom: { bounds: (() => DOMRect) & { clear(): void } } };
     getFen(): string;
     toggleOrientation(): void;
     move(orig: Key, dest: Key): void;

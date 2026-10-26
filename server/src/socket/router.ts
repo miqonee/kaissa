@@ -2,11 +2,12 @@ import type { Server, Socket } from 'socket.io';
 import type { Ack, ClientToServerEvents, ServerToClientEvents } from 'shared';
 import { Chess } from 'chess.js';
 import { CrazyhouseGame } from 'shared/crazyhouse';
-import { isCrazyhouse, hasPockets, type GameMode } from 'shared';
+import { normalizedResult, isCrazyhouse, hasPockets, type GameMode } from 'shared';
 import { BughouseGame } from 'shared/bughouse';
 import type { Pocket, DropPieceType, PieceType } from 'shared';
 import { gamesManager, lobbies } from '../state.js';
 import { presence } from './presence.js';
+import { authEvents } from '../auth/auth.js';
 import { socketAuth } from './authSocket.js';
 import { env } from '../env.js';
 import { prisma } from '../prisma.js';
@@ -37,13 +38,37 @@ function cancelGrace(uid: number): void {
   }
 }
 
+function safeAsync<T extends unknown[]>(handler: (...args: T) => Promise<unknown>): (...args: T) => void {
+  return (...args) => {
+    void handler(...args).catch(error => {
+      console.error('[socket] Request failed:', error);
+      const ack = args.at(-1);
+      if (typeof ack === 'function') ack({ ok: false, error: 'Не удалось выполнить запрос. Попробуйте ещё раз' });
+    });
+  };
+}
+
 export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerToClientEvents>): void {
   presence.attach(io as never);
   gamesManager.attach(io as never);
   lobbies.attach(io as never, gamesManager);
 
+  io.use((socket, next) => {
+    socketAuth(socket).then(auth => { socket.data.auth = auth; next(); }, () => next(new Error('Authentication unavailable')));
+  });
+  authEvents.on('changed', (uid: number, username?: string) => {
+    if (username) { gamesManager.renamePlayer(uid, username); lobbies.renamePlayer(uid, username); }
+    io.in(presence.userRoom(uid)).disconnectSockets(true);
+  });
   io.on('connection', (socket) => {
-    const auth = socketAuth(socket);
+    const auth = socket.data.auth;
+    socket.use((_packet, next) => {
+      if (!auth) return next();
+      socketAuth(socket).then(current => {
+        if (!current) { socket.disconnect(true); return next(new Error('Session expired')); }
+        next();
+      }, () => next(new Error('Authentication unavailable')));
+    });
     const ctx: SocketCtx | null = auth ? { ...auth, lobbyId: null, gameId: null } : null;
 
     if (ctx) {
@@ -64,28 +89,30 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
 
     // ---------- LOBBY ----------
 
-    socket.on('lobby:join', async (codeOrId, cb) => {
+    socket.on('lobby:join', safeAsync(async (codeOrId, cb) => {
       if (!ctx) {
-        cb({ ok: false, error: 'Требуется авторизация' });
+        cb?.({ ok: false, error: 'Требуется авторизация' });
         return;
       }
+      const activeGameId = gamesManager.activeGameOf(ctx.uid);
+      if (activeGameId !== null) { cb?.({ ok: false, error: 'У вас уже идёт партия', activeGameId }); return; }
       let lobby = lobbies.getByCode(String(codeOrId)) ?? lobbies.getById(String(codeOrId));
       if (!lobby) {
-        cb({ ok: false, error: 'Лобби не найдено' });
+        cb?.({ ok: false, error: 'Лобби не найдено' });
         return;
       }
       if (!lobby.members.has(ctx.uid)) {
         const r = await lobbies.joinWithUser(lobby.id, ctx.uid);
         if (!r.ok) {
-          cb({ ok: false, error: r.error });
+          cb?.({ ok: false, error: r.error });
           return;
         }
       }
       ctx.lobbyId = lobby.id;
       socket.join(`lobby:${lobby.id}`);
-      cb({ ok: true, data: { lobby: lobby.summary() } });
+      cb?.({ ok: true, data: { lobby: lobby.summary() } });
       lobbies.broadcastState(lobby);
-    });
+    }));
 
     socket.on('lobby:leave', () => {
       if (ctx?.lobbyId) {
@@ -124,11 +151,11 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
       if (ctx?.lobbyId) lobbies.setTeamChoice(ctx.lobbyId, ctx.uid, team);
     });
 
-    socket.on('lobby:set-mode', async (mode, cb) => {
-      if (!ctx?.lobbyId) return cb({ ok: false, error: 'Вы не в лобби' });
+    socket.on('lobby:set-mode', safeAsync(async (mode, cb) => {
+      if (!ctx?.lobbyId) return cb?.({ ok: false, error: 'Вы не в лобби' });
       const result = await lobbies.setMode(ctx.lobbyId, ctx.uid, mode);
       cb(result.ok ? { ok: true, data: null } : { ok: false, error: result.error ?? 'Не удалось сменить режим' });
-    });
+    }));
 
     socket.on('lobby:set-team-mode', (mode) => {
       if (ctx?.lobbyId) lobbies.setTeamMode(ctx.lobbyId, ctx.uid, mode);
@@ -140,13 +167,13 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
       if (lobbyId && ctx?.uid) lobbies.setTimeControl(lobbyId, ctx.uid, tc);
     });
 
-    socket.on('lobby:add-bot', async (cb) => {
+    socket.on('lobby:add-bot', safeAsync(async (cb) => {
       if (!ctx?.lobbyId) return cb?.({ ok: false, error: 'Вы не в лобби' });
       const r = await lobbies.addBot(ctx.lobbyId, ctx.uid);
       cb?.(r.ok ? { ok: true, data: null } : { ok: false, error: r.error });
-    });
+    }));
 
-    socket.on('lobby:start', async (cb) => {
+    socket.on('lobby:start', safeAsync(async (cb) => {
       if (!ctx?.lobbyId) {
         cb?.({ ok: false, error: 'Вы не в лобби' });
         return;
@@ -160,7 +187,7 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
       }
       const r = lobbies.beginCountdown(ctx.lobbyId, ctx.uid, 5);
       cb?.(r.ok ? { ok: true, data: null } : { ok: false, error: r.error });
-    });
+    }));
 
     socket.on('lobby:cancel-start', (cb) => {
       if (!ctx?.lobbyId) {
@@ -173,21 +200,21 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
 
     // ---------- GAME ----------
 
-    socket.on('game:set-paused', async (data, cb) => {
+    socket.on('game:set-paused', safeAsync(async (data, cb) => {
       if (!ctx || !Number.isInteger(data?.gameId) || typeof data?.paused !== 'boolean') {
         cb?.({ ok: false, error: 'Некорректный запрос' });
         return;
       }
       cb?.(await gamesManager.setPaused(data.gameId, ctx.uid, data.paused));
-    });
+    }));
 
-    socket.on('game:move', async (data, cb) => {
+    socket.on('game:move', safeAsync(async (data, cb) => {
       if (!ctx) {
-        cb({ ok: false, error: 'Требуется авторизация' });
+        cb?.({ ok: false, error: 'Требуется авторизация' });
         return;
       }
       if (typeof data?.gameId !== 'number') {
-        cb({ ok: false, error: 'Некорректные данные' });
+        cb?.({ ok: false, error: 'Некорректные данные' });
         return;
       }
       const r = await gamesManager.applyMove(data.gameId, ctx.uid, {
@@ -198,11 +225,11 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
         dropPiece: data.dropPiece,
       });
       if (!r.ok) {
-        cb({ ok: false, error: r.error });
+        cb?.({ ok: false, error: r.error });
         return;
       }
-      cb({ ok: true });
-    });
+      cb?.({ ok: true });
+    }));
 
     socket.on('game:resign', (gameId) => {
       if (ctx) void gamesManager.resign(Number(gameId), ctx.uid);
@@ -214,11 +241,12 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
 
     // ---------- Комнаты игры / трансляции ----------
 
-    socket.on('game:watch', async (gameId: number) => {
+    socket.on('game:watch', safeAsync(async (gameId: number) => {
       const id = Number(gameId);
+      if (!Number.isSafeInteger(id)) return;
       const g = gamesManager.getActive(id);
       if (g) {
-        if (ctx) {
+        if (ctx && g.participants.some(p => p.uid === ctx.uid)) {
           ctx.gameId = id;
           gamesManager.onPlayerReconnect(id, ctx.uid);
         }
@@ -230,6 +258,7 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
         where: { id },
         include: { participants: { include: { user: true } }, moves: { orderBy: [{ boardIndex: 'asc' }, { ply: 'asc' }] } },
       });
+      if (!dbGame) { socket.emit('game:unavailable', { gameId: id, error: 'Партия не найдена' }); return; }
       if (dbGame) {
         const lastFen0 = dbGame.moves.filter((m: { boardIndex: number; fenAfter: string }) => m.boardIndex === 0).at(-1)?.fenAfter || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
         const lastFen1 = dbGame.moves.filter((m: { boardIndex: number; fenAfter: string }) => m.boardIndex === 1).at(-1)?.fenAfter || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -260,6 +289,8 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
         socket.emit('game:state', {
           gameId: dbGame.id,
           rulesVersion: dbGame.rulesVersion,
+          ratingKind: dbGame.ratingKind as import('shared').RatingKind | null,
+          endBoardIndex: dbGame.endBoardIndex,
           mode: dbGame.mode as any,
           timeControl: { kind: dbGame.noClock ? 'none' : 'clock', baseMin: dbGame.baseMin, incSec: dbGame.incSec },
           fens: dbGame.mode === 'bughouse' ? [lastFen0, lastFen1] : [lastFen0],
@@ -270,6 +301,7 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
           participants: dbGame.participants.map((p: any) => ({
             userId: p.userId,
             username: p.user.username,
+            isGuest: p.wasGuest,
             isBot: p.user.isBot,
             botLevel: p.user.botLevel,
             team: p.team as any,
@@ -281,14 +313,14 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
           })),
           pockets,
           status: dbGame.status as any,
-          result: dbGame.result as any,
+          result: normalizedResult({ status: dbGame.status as import('shared').GameStatus, result: dbGame.result as import('shared').GameResult, reason: dbGame.reason as import('shared').EndReason | null }),
           reason: dbGame.reason as any,
           moveNumber: Math.floor(dbGame.moves.length / 2) + 1,
           moves,
           startedAt: dbGame.startedAt.getTime(),
         });
       }
-    });
+    }));
 
     socket.on('game:leave', (gameId: number) => {
       const id = Number(gameId);
@@ -329,9 +361,8 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
           lobbies.leave(ctx.lobbyId, ctx.uid);
           ctx.lobbyId = null;
         }
-        if (ctx.gameId) {
-          gamesManager.onPlayerDisconnect(ctx.gameId, ctx.uid);
-        }
+        const activeGameId = gamesManager.activeGameOf(ctx.uid);
+        if (activeGameId !== null) gamesManager.onPlayerDisconnect(activeGameId, ctx.uid);
       }, env.abandonSeconds * 1000);
       graceTimers.set(ctx.uid, timer);
     });

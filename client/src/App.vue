@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue';
+import BrandMark from './components/BrandMark.vue';
+import GuestNotice from './components/GuestNotice.vue';
+import { computed, onMounted } from 'vue';
 import { useAuthStore } from './stores/auth';
 import { useThemeStore } from './stores/theme';
 import { useConnectionStore } from './stores/connection';
 import { useI18nStore } from './stores/i18n';
 import { useToast } from './stores/toast';
-import { getSocket, resetSocket } from './api/socket';
+import { getSocket } from './api/socket';
 import AppIcon from './components/AppIcon.vue';
 import AppFooter from './components/AppFooter.vue';
 
@@ -24,19 +26,10 @@ onMounted(async () => {
   getSocket();
 });
 
-watch(
-  () => auth.user?.id,
-  (newId, oldId) => {
-    // Сбрасываем сокет только при реальной смене аккаунта, а не при стартовой проверке null -> user
-    if (oldId && newId && oldId !== newId) {
-      resetSocket();
-      getSocket();
-    }
-  },
-);
-
-function logout(): void {
-  auth.logout();
+async function logout(): Promise<void> {
+  if (auth.user?.isGuest && !confirm(i18n.locale === 'en' ? 'This guest has no password. Signing out removes access to these games. Save your account first to keep access. Sign out anyway?' : 'У гостя нет пароля. После выхода доступ к его партиям будет потерян. Чтобы сохранить доступ, сначала сохраните аккаунт. Всё равно выйти?')) return;
+  try { await auth.logout(); }
+  catch { toast.show(i18n.locale === 'en' ? 'Could not sign out. Try again.' : 'Не удалось выйти. Попробуйте ещё раз.'); }
 }
 
 const themeTitle = computed(() =>
@@ -61,25 +54,29 @@ const connLabel = computed(() => {
   <div class="app-shell">
     <header class="topbar">
       <div class="topbar-inner">
-        <router-link to="/" class="brand">
-          <svg class="brand-logo" width="26" height="26" viewBox="0 0 180 180" fill="none" aria-hidden="true">
-            <rect class="logo-felt" x="24" y="42" width="46" height="46" rx="12" />
-            <rect class="logo-gold" x="86" y="36" width="46" height="46" rx="12" />
-            <rect class="logo-gold" x="24" y="98" width="46" height="46" rx="12" />
-            <rect class="logo-felt" x="80" y="98" width="46" height="46" rx="12" />
-          </svg>
-          {{ i18n.t.nav.brand }}
+        <router-link to="/" class="brand" :aria-label="i18n.t.nav.brand">
+          <BrandMark />
+          <span class="brand-name">{{ i18n.t.nav.brand }}</span>
         </router-link>
 
-        <nav aria-label="Основная навигация">
-          <router-link to="/">{{ i18n.t.nav.lobbies }}</router-link>
-          <router-link to="/leaderboard">{{ i18n.t.nav.leaderboard }}</router-link>
-          <router-link to="/history">{{ i18n.t.nav.history }}</router-link>
+        <nav :aria-label="i18n.locale === 'en' ? 'Main navigation' : 'Основная навигация'">
+          <router-link to="/" class="header-control header-nav-link">{{ i18n.t.nav.lobbies }}</router-link>
+          <router-link to="/leaderboard" class="header-control header-nav-link">{{ i18n.t.nav.leaderboard }}</router-link>
+          <router-link to="/history" class="header-control header-nav-link">{{ i18n.t.nav.history }}</router-link>
+          <router-link
+            v-if="auth.user?.isAdmin"
+            to="/admin"
+            class="header-control header-nav-link"
+            :title="i18n.t.admin.title"
+          >
+            <AppIcon name="crown" :size="18" />
+            <span>{{ i18n.t.nav.admin }}</span>
+          </router-link>
         </nav>
 
         <div class="topbar-right">
           <button
-            class="lang-btn"
+            class="header-control lang-btn"
             @click="i18n.toggle"
             :title="i18n.t.nav.switchLang"
             :aria-label="i18n.t.nav.switchLang"
@@ -89,50 +86,31 @@ const connLabel = computed(() => {
             <span class="lang-opt" :class="{ active: i18n.locale === 'en' }">EN</span>
           </button>
 
-          <span
-            v-if="auth.user"
-            class="conn-indicator"
-            :class="conn.state"
-            :title="connLabel"
-            role="status"
-            :aria-label="connLabel"
-          >
-            <span class="conn-dot"></span>
-            <span class="conn-text" v-if="conn.state !== 'connected'">{{ connLabel }}</span>
-          </span>
-
-          <button class="icon-btn" @click="theme.toggle" :title="themeTitle" :aria-label="themeTitle">
-            <AppIcon :name="theme.current === 'dark' ? 'sun' : 'moon'" :size="16" />
+          <button class="header-control header-icon" @click="theme.toggle" :title="themeTitle" :aria-label="themeTitle">
+            <AppIcon :name="theme.current === 'dark' ? 'sun' : 'moon'" :size="18" />
           </button>
 
           <template v-if="auth.user">
-            <router-link
-              v-if="auth.user.isAdmin"
-              to="/admin"
-              class="admin-header-btn"
-              :title="i18n.t.admin.title"
-            >
-              <AppIcon name="crown" :size="14" />
-              <span>{{ i18n.t.nav.admin }}</span>
-            </router-link>
-
-            <router-link :to="`/players/${auth.user.username}`" class="me-link">
+            <router-link :to="`/players/${auth.user.username}`" class="header-control me-link" :title="`${auth.user.username} · ${connLabel}`" :aria-label="`${i18n.locale === 'en' ? 'Profile' : 'Профиль'}: ${auth.user.username}`">
+              <AppIcon name="user" :size="18" />
               <span class="me-name">{{ auth.user.username }}</span>
-              <span class="rating-chip mono">{{ auth.user.rating }}</span>
+              <span v-if="auth.user.isGuest" class="profile-label">{{ i18n.locale === 'en' ? 'Guest' : 'Гость' }}</span>
+              <span class="conn-indicator" :class="conn.state" role="status" :aria-label="connLabel"><span class="conn-dot"></span></span>
             </router-link>
-            <button class="logout-btn" @click="logout" :title="i18n.t.nav.logout" :aria-label="i18n.t.nav.logout">
-              <AppIcon name="log-out" :size="14" />
+            <button class="header-control logout-btn" @click="logout" :title="i18n.t.nav.logout" :aria-label="i18n.t.nav.logout">
+              <AppIcon name="log-out" :size="18" />
               <span class="logout-text">{{ i18n.t.nav.logout }}</span>
             </button>
           </template>
           <template v-else>
-            <router-link to="/login" class="login-header-btn">{{ i18n.locale === 'ru' ? 'Войти / Регистрация' : 'Sign In / Register' }}</router-link>
+            <router-link to="/login" class="header-control login-header-btn"><span class="login-full">{{ i18n.locale === 'ru' ? 'Войти / Регистрация' : 'Sign In / Register' }}</span><span class="login-short">{{ i18n.locale === 'ru' ? 'Войти' : 'Sign in' }}</span></router-link>
           </template>
         </div>
       </div>
     </header>
 
     <main class="page">
+      <GuestNotice v-if="$route.name !== 'login' && $route.name !== 'game'" compact />
       <router-view :key="$route.fullPath" />
     </main>
 
@@ -145,170 +123,6 @@ const connLabel = computed(() => {
 </template>
 
 <style scoped>
-.admin-header-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  font-size: 13px;
-  font-weight: 600;
-  border-radius: var(--r-s);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  text-decoration: none;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.admin-header-btn:hover {
-  background: var(--accent);
-  color: var(--surface);
-  border-color: var(--accent);
-}
-
-.login-header-btn {
-  display: inline-flex;
-  align-items: center;
-  height: 32px;
-  padding: 0 14px;
-  font-size: 13px;
-  font-weight: 600;
-  border-radius: var(--r-s);
-  background: var(--felt);
-  color: var(--felt-ink);
-  text-decoration: none;
-  cursor: pointer;
-  transition: opacity 0.15s ease;
-}
-
-.login-header-btn:hover {
-  opacity: 0.9;
-}
-
-.conn-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--ink-2);
-  padding: 0 10px;
-  border-radius: var(--r-s);
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  white-space: nowrap;
-  box-sizing: border-box;
-}
-
-.conn-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ok);
-  box-shadow: 0 0 5px var(--ok);
-  flex: none;
-}
-
-.conn-indicator.reconnecting,
-.conn-indicator.connecting {
-  background: var(--warn-soft);
-  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
-  color: var(--warn);
-}
-
-.conn-indicator.reconnecting .conn-dot,
-.conn-indicator.connecting .conn-dot {
-  background: var(--warn);
-  box-shadow: 0 0 6px var(--warn);
-  animation: conn-blink 1s ease-in-out infinite;
-}
-
-.conn-indicator.offline {
-  background: var(--bad-soft);
-  border-color: color-mix(in srgb, var(--bad) 40%, transparent);
-  color: var(--bad);
-}
-
-.conn-indicator.offline .conn-dot {
-  background: var(--bad);
-  box-shadow: 0 0 6px var(--bad);
-}
-
-.conn-indicator.connected .conn-text {
-  display: none;
-}
-
-@keyframes conn-blink {
-  0%,
-  100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-.lang-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  height: 32px;
-  padding: 0 8px;
-  font-size: 12px;
-  font-weight: 600;
-  border-radius: var(--r-s);
-  background: var(--surface-2);
-  color: var(--ink-2);
-  border: 1px solid var(--line);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  user-select: none;
-}
-
-.lang-btn:hover {
-  border-color: var(--line-active);
-  color: var(--ink);
-}
-
-.lang-opt {
-  transition: color 0.15s ease;
-}
-
-.lang-opt.active {
-  color: var(--accent);
-  font-weight: 700;
-}
-
-.lang-divider {
-  opacity: 0.35;
-  font-size: 11px;
-}
-
-@media (max-width: 720px) {
-  .lang-btn {
-    height: 30px;
-    padding: 0 6px;
-    font-size: 11px;
-  }
-
-  .admin-header-btn {
-    height: 30px;
-    padding: 0 6px;
-    font-size: 11px;
-    gap: 3px;
-    flex-shrink: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .conn-dot {
-    animation: none !important;
-  }
-}
-
 /* ================= Подвал сайта (семантический footer) ================= */
 .site-footer {
   margin-top: auto;

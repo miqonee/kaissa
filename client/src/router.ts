@@ -110,6 +110,10 @@ export const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore();
   if (!auth.checked) await auth.check();
+  if (to.name === 'lobby' && !auth.user) {
+    try { await auth.ensureGuest(); }
+    catch { return { name: 'login', query: { redirect: to.fullPath, guestError: '1' } }; }
+  }
   const requiresAuth = to.name === 'lobby' || to.name === 'admin';
   if (requiresAuth && !auth.user) {
     return { name: 'login', query: { redirect: to.fullPath } };

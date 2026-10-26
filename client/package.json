@@ -10,7 +10,8 @@
     "typecheck": "vue-tsc --noEmit",
     "check:replay": "node --experimental-strip-types tests/replay.check.ts",
     "check:seo": "node --experimental-strip-types tests/seo.check.ts",
-    "check:prerender": "node tests/crazyhouse-seo.check.mjs"
+    "check:prerender": "node tests/crazyhouse-seo.check.mjs && node tests/public-seo.check.mjs",
+    "check:unit": "vitest run tests"
   },
   "dependencies": {
     "@lichess-org/chessground": "^9.0.0",
@@ -23,8 +24,10 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
+    "jsdom": "^26.1.0",
     "typescript": "^5.6.3",
     "vite": "^6.0.7",
+    "vitest": "^2.1.8",
     "vue-tsc": "^2.2.0"
   }
 }

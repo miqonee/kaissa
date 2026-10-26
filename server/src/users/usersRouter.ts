@@ -1,4 +1,6 @@
-import type { GameMode } from 'shared';
+import { GAME_MODES, normalizedResult, PROVISIONAL_GAMES, type GameMode } from 'shared';
+import type { Prisma } from '@prisma/client';
+import { asyncRoute } from '../http/asyncRoute.js';
 import { Router } from 'express';
 import { currentUser, requireAuth, toPublic } from '../auth/auth.js';
 import { prisma } from '../prisma.js';
@@ -10,102 +12,60 @@ import type { GameSummary, LeaderboardRow, ProfilePayload } from 'shared';
 
 export const usersRouter = Router();
 
-/** Лидерборд */
-usersRouter.get('/leaderboard', async (_req, res) => {
-  const rows = await prisma.user.findMany({
-    where: { isBot: false },
-    orderBy: [{ rating: 'desc' }],
-    take: 20,
+function selectedMode(value: unknown): GameMode {
+  return GAME_MODES.includes(value as GameMode) ? value as GameMode : 'team';
+}
+usersRouter.get('/leaderboard', asyncRoute(async (req, res) => {
+  const mode = selectedMode(req.query.mode);
+  const rows = await prisma.modeRating.findMany({
+    where: { mode, user: { isBot: false, isGuest: false }, OR: [{ wins: { gt: 0 } }, { losses: { gt: 0 } }, { draws: { gt: 0 } }] },
+    orderBy: [{ rating: 'desc' }, { userId: 'asc' }], take: 50, include: { user: true },
   });
-  res.json({
-    leaderboard: rows.map<LeaderboardRow>((u) => ({
-      userId: u.id,
-      username: u.username,
-      rating: u.rating,
-      wins: u.wins,
-      losses: u.losses,
-      draws: u.draws,
-    })),
-  });
-});
-
-/** Поиск игроков (для сравнения и UI) */
-usersRouter.get('/search', async (req, res) => {
-  const q = String(req.query.q ?? '').trim();
+  res.json({ mode, leaderboard: rows.map<LeaderboardRow>(r => ({ userId: r.userId, username: r.user.username, rating: r.rating,
+    wins: r.wins, losses: r.losses, draws: r.draws, provisional: r.wins + r.losses + r.draws < PROVISIONAL_GAMES })) });
+}));
+usersRouter.get('/search', asyncRoute(async (req, res) => {
+  const q = String(req.query.q ?? '').trim().slice(0, 30);
   if (q.length < 2) return void res.json({ users: [] });
-  const users = await prisma.user.findMany({
-    where: { isBot: false, username: { contains: q, mode: 'insensitive' } },
-    take: 10,
-    orderBy: { rating: 'desc' },
-  });
+  const users = await prisma.user.findMany({ where: { isBot: false, username: { contains: q, mode: 'insensitive' } }, take: 10, include: { modeRatings: true } });
   res.json({ users: users.map(toPublic) });
-});
-
-/** Профиль + история рейтинга + недавние партии */
-usersRouter.get('/:username', async (req, res) => {
-  const user = await prisma.user.findUnique({
-    where: { username: String(req.params.username) },
-  });
+}));
+usersRouter.get('/:username', asyncRoute(async (req, res) => {
+  const mode = selectedMode(req.query.mode);
+  const user = await prisma.user.findUnique({ where: { username: String(req.params.username) }, include: { modeRatings: true } });
   if (!user) return void res.status(404).json({ error: 'Игрок не найден' });
-
-  const [history, parts] = await Promise.all([
-    prisma.ratingHistory.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'asc' },
-      take: 100,
-    }),
-    prisma.gameParticipant.findMany({
-      where: { userId: user.id },
-      orderBy: { game: { startedAt: 'desc' } },
-      take: 20,
-      include: { game: { include: { participants: { include: { user: true } } } } },
-    }),
+  const [history, games] = await Promise.all([
+    prisma.ratingHistory.findMany({ where: { userId: user.id, mode }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 100 }),
+    prisma.game.findMany({ where: { mode, participants: { some: { userId: user.id } } }, orderBy: { id: 'desc' }, take: 10, include: { participants: { include: { user: true } } } }),
   ]);
-
-  const recentGames = parts.map((part) => dbGameToSummary(part.game));
-  const payload: ProfilePayload = {
-    user: toPublic(user),
-    ratingHistory: history.map((h) => ({ at: h.createdAt.toISOString(), rating: h.value })),
-    recentGames,
-  };
+  const payload: ProfilePayload = { user: toPublic(user), mode, ratingHistory: history.reverse().map(h => ({ at: h.createdAt.toISOString(), rating: h.value })), recentGames: games.map(dbGameToSummary) };
   res.json(payload);
-});
-
-// ---------------- Games ----------------
+}));
 
 export const gamesRouter = Router();
-
-/** Мои партии */
-gamesRouter.get('/mine', requireAuth, async (req, res) => {
-  const user = await currentUser(req);
-  if (!user) return void res.status(401).json({ error: 'Не авторизован' });
-  const parts = await prisma.gameParticipant.findMany({
-    where: { userId: user.id },
-    orderBy: { game: { startedAt: 'desc' } },
-    take: 50,
-    include: { game: { include: { participants: { include: { user: true } } } } },
-  });
-  res.json({ games: parts.map((p) => dbGameToSummary(p.game)) });
-});
-
-/** Архив клуба: все завершённые партии с участием людей */
-gamesRouter.get('/archive', requireAuth, async (req, res) => {
-  const take = Math.min(200, Math.max(1, parseInt(String(req.query.limit ?? '100'), 10) || 100));
-  const games = await prisma.game.findMany({
-    where: {
-      status: { in: ['finished', 'abandoned'] },
-      participants: {
-        some: {
-          user: { isBot: false },
-        },
-      },
-    },
-    orderBy: { startedAt: 'desc' },
-    take,
-    include: { participants: { include: { user: true } } },
-  });
-  res.json({ games: games.map(dbGameToSummary) });
-});
+async function listGames(req: import('express').Request, res: import('express').Response, mine: boolean) {
+  const user = mine ? await currentUser(req) : null;
+  if (mine && !user) return void res.status(401).json({ error: 'Не авторизован' });
+  const and: Prisma.GameWhereInput[] = [{ participants: { some: { user: { isBot: false } } } }];
+  if (user) and.push({ participants: { some: { userId: user.id } } });
+  if (req.query.mode && GAME_MODES.includes(req.query.mode as GameMode)) and.push({ mode: String(req.query.mode) });
+  const q = String(req.query.player ?? '').trim().slice(0, 30);
+  if (q) and.push({ participants: { some: { user: { username: { contains: q, mode: 'insensitive' } } } } });
+  if (req.query.kind === 'rated') and.push({ ratingKind: 'rated' });
+  if (req.query.kind === 'training') and.push({ ratingKind: { in: ['bots', 'guest'] } });
+  if (req.query.opponents === 'humans') for (const team of [1, 2]) and.push({ participants: { some: { team, user: { isBot: false } } } });
+  if (req.query.opponents === 'bots') and.push({ OR: [1, 2].map(team => ({ participants: { none: { team, user: { isBot: false } } } })) });
+  if (req.query.result === 'draw') and.push({ status: 'finished', OR: [{ result: '1/2-1/2' }, { result: '*', reason: { in: ['stalemate', 'material', 'repetition', 'fifty'] } }] });
+  if (req.query.result === 'abandoned') and.push({ status: 'abandoned' });
+  if (user && ['win', 'loss'].includes(String(req.query.result))) and.push({ status: 'finished', OR: [1, 2].map(team => ({ result: (req.query.result === 'win' ? team === 1 : team === 2) ? '1-0' : '0-1', participants: { some: { userId: user.id, team } } })) });
+  const cursor = Number(req.query.cursor);
+  if (Number.isSafeInteger(cursor) && cursor > 0) and.push({ id: { lt: cursor } });
+  const games = await prisma.game.findMany({ where: { AND: and }, orderBy: { id: 'desc' }, take: 31, include: { participants: { include: { user: true } } } });
+  const page = games.slice(0, 30);
+  res.json({ games: page.map(dbGameToSummary), nextCursor: games.length > 30 ? page[page.length - 1].id : null });
+}
+gamesRouter.get('/mine', requireAuth, asyncRoute(async (req, res) => { await listGames(req, res, true); }));
+gamesRouter.get('/archive', asyncRoute(async (req, res) => { await listGames(req, res, false); }));
 
 async function getPgnData(id: number): Promise<{ game: PgnGame; moves: PgnMove[]; mode: string } | null> {
   const game = await prisma.game.findUnique({
@@ -123,7 +83,7 @@ async function getPgnData(id: number): Promise<{ game: PgnGame; moves: PgnMove[]
         id: game.id,
         mode: game.mode as GameMode,
         rulesVersion: game.rulesVersion,
-        result: game.result,
+        result: normalizedResult({status:game.status as GameSummary['status'],result:game.result as GameSummary['result'],reason:game.reason as GameSummary['reason']}),
         reason: game.reason,
         baseMin: game.baseMin,
         incSec: game.incSec,
@@ -189,7 +149,7 @@ async function getPgnData(id: number): Promise<{ game: PgnGame; moves: PgnMove[]
 }
 
 /** PGN партии: скачивание/анализ во внешних движках */
-gamesRouter.get('/:id/pgn', async (req, res) => {
+gamesRouter.get('/:id/pgn', asyncRoute(async (req, res) => {
   const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
   const data = await getPgnData(id);
@@ -203,19 +163,19 @@ gamesRouter.get('/:id/pgn', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   }
   res.type('application/x-chess-pgn').send(pgn);
-});
+}));
 
 /** Мгновенное получение актуального состояния активной игры (HTTP fallback / initial render) */
-gamesRouter.get('/:id/state', (req, res) => {
+gamesRouter.get('/:id/state', asyncRoute((req, res) => {
   const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
   const g = gamesManager.getActive(id);
   if (!g) return void res.status(404).json({ error: 'Партия не активна' });
   res.json({ state: gamesManager.toGameState(g) });
-});
+}));
 
 /** Прокси для анализа на Lichess через их API https://lichess.org/api/import */
-gamesRouter.post('/:id/lichess-import', requireAuth, async (req, res) => {
+gamesRouter.post('/:id/lichess-import', requireAuth, asyncRoute(async (req, res) => {
   const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
   const data = await getPgnData(id);
@@ -250,10 +210,10 @@ gamesRouter.post('/:id/lichess-import', requireAuth, async (req, res) => {
   } catch (e: any) {
     res.status(500).json({ error: 'Ошибка отправки на Lichess: ' + e.message });
   }
-});
+}));
 
 /** Одна партия (для replay) */
-gamesRouter.get('/:id', async (req, res) => {
+gamesRouter.get('/:id', asyncRoute(async (req, res) => {
   const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
   const game = await prisma.game.findUnique({
@@ -278,10 +238,10 @@ gamesRouter.get('/:id', async (req, res) => {
       clocksAfter: m.clocksAfter ? (JSON.parse(m.clocksAfter) as [number, number]) : null,
     })),
   });
-});
+}));
 
 /** Реванш: создать лобби реванша */
-gamesRouter.post('/:id/rematch', requireAuth, async (req, res) => {
+gamesRouter.post('/:id/rematch', requireAuth, asyncRoute(async (req, res) => {
   const user = await currentUser(req);
   if (!user) return void res.status(401).json({ error: 'Не авторизован' });
   const id = parseInt(String(req.params.id), 10);
@@ -289,7 +249,11 @@ gamesRouter.post('/:id/rematch', requireAuth, async (req, res) => {
   if (!game) return void res.status(404).json({ error: 'Партия не найдена' });
   if (!game.participants.some((p) => p.userId === user.id)) {
     return void res.status(403).json({ error: 'Вы не участник партии' });
-  }  const players = await gamesManager.rematchPlayers(id);
+  }
+  if (game.status === 'active') return void res.status(409).json({ error: 'Дождитесь завершения партии' });
+  const activeId = gamesManager.activeGameOf(user.id);
+  if (activeId !== null) return void res.status(409).json({ error: 'Сначала завершите текущую партию' });
+  const players = await gamesManager.rematchPlayers(id);
   const r = await lobbies.rematch(
     user.id,
     players,
@@ -304,7 +268,7 @@ gamesRouter.post('/:id/rematch', requireAuth, async (req, res) => {
   if (!r) return void res.status(500).json({ error: 'Не удалось создать лобби' });
 
   // Разослать событие реванша в комнату партии (всех в партии перекинет в лобби)
-  gamesManager.broadcastRematch(id, r.lobbyId);
+  for (const p of game.participants) if (p.userId !== user.id) presence.emitToUser(p.userId, 'game:rematch', { gameId: id, lobbyId: r.lobbyId });
 
   // Уведомить остальных участников через личные сокеты (если уже вышли из комнаты игры)
   for (const p of game.participants) {
@@ -316,11 +280,13 @@ gamesRouter.post('/:id/rematch', requireAuth, async (req, res) => {
     });
   }
   res.json({ lobbyId: r.lobbyId, code: r.code });
-});
+}));
 
 // ---------------- Вспомогательные ----------------
 
 type DbGame = {
+  ratingKind?: string | null;
+  endBoardIndex?: number | null;
   id: number;
   rulesVersion?: number | null;
   mode: string;
@@ -333,6 +299,7 @@ type DbGame = {
   startedAt: Date;
   endedAt: Date | null;
   participants: {
+    wasGuest?: boolean;
     userId: number;
     team: number;
     color: string;
@@ -348,9 +315,11 @@ function dbGameToSummary(game: DbGame): GameSummary {
   return {
     id: game.id,
     rulesVersion: game.rulesVersion,
+    ratingKind: game.ratingKind as GameSummary['ratingKind'],
+    endBoardIndex: game.endBoardIndex,
     mode: game.mode as GameMode,
     status: game.status as 'active' | 'finished' | 'abandoned',
-    result: game.result as '1-0' | '0-1' | '*',
+    result: normalizedResult({ status: game.status as GameSummary['status'], result: game.result as GameSummary['result'], reason: game.reason as GameSummary['reason'] }),
     reason: (game.reason as GameSummary['reason']) ?? null,
     timeControl: game.noClock
       ? { kind: 'none', baseMin: 0, incSec: 0 }
@@ -358,6 +327,7 @@ function dbGameToSummary(game: DbGame): GameSummary {
     participants: game.participants.map((p) => ({
       userId: p.userId,
       username: p.user.username,
+      isGuest: p.wasGuest,
       isBot: p.user.isBot,
       botLevel: p.user.botLevel,
       team: p.team as 1 | 2,

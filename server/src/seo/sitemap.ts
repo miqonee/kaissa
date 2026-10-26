@@ -95,7 +95,7 @@ export async function getActivePlayers(options?: { activeOnly?: boolean; limit?:
   const activeOnly = options?.activeOnly ?? true;
   const limit = options?.limit ?? 45_000;
 
-  const where: any = { isBot: false };
+  const where: any = { isBot: false, isGuest: false };
   if (activeOnly) {
     where.OR = [
       { participations: { some: {} } },
@@ -123,7 +123,7 @@ export async function getActivePlayers(options?: { activeOnly?: boolean; limit?:
 /**
  * Генерация sitemap.xml
  * Включает:
- * - Основные статические страницы: /, /leaderboard, /history, /login
+ * - Основные статические страницы: /, /leaderboard, /history и правила
  * - Публичные профили активных игроков: /players/:username
  * - Корректные атрибуты lastmod, changefreq, priority для всех страниц
  */
@@ -189,36 +189,25 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
       priority: 0.7,
       alternates: makeAlternates(`${baseUrl}/history`),
     },
-    { loc: `${baseUrl}/rules/crazyhouse`, lastmod: today, changefreq: 'weekly', priority: 0.9, alternates: makeAlternates(`${baseUrl}/rules/crazyhouse`) },
+    { loc: `${baseUrl}/rules/crazyhouse`, changefreq: 'weekly', priority: 0.9, alternates: makeAlternates(`${baseUrl}/rules/crazyhouse`) },
     // Правила и информация о платформе
     {
       loc: `${baseUrl}/rules/duo`,
-      lastmod: today,
       changefreq: 'weekly',
       priority: 0.9,
       alternates: makeAlternates(`${baseUrl}/rules/duo`),
     },
     {
       loc: `${baseUrl}/rules/bughouse`,
-      lastmod: today,
       changefreq: 'weekly',
       priority: 0.9,
       alternates: makeAlternates(`${baseUrl}/rules/bughouse`),
     },
     {
       loc: `${baseUrl}/about`,
-      lastmod: today,
       changefreq: 'monthly',
       priority: 0.8,
       alternates: makeAlternates(`${baseUrl}/about`),
-    },
-    // Вход и регистрация: статичная служебная страница
-    {
-      loc: `${baseUrl}/login`,
-      lastmod: today,
-      changefreq: 'monthly',
-      priority: 0.5,
-      alternates: makeAlternates(`${baseUrl}/login`),
     },
   ];
 
@@ -256,9 +245,6 @@ export function generateRobotsTxt(options: { baseUrl?: string; host?: string } =
   return [
     'User-agent: *',
     'Allow: /',
-    'Disallow: /admin',
-    'Disallow: /lobby/',
-    'Disallow: /lobby/*',
     'Disallow: /api/',
     '',
     '# Clean-param for Yandex search engine',

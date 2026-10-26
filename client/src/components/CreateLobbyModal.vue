@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue';
 import { MODE_INFO, modeLabel, type GameMode, type TeamMode, type TimeControl } from 'shared';
 import { useI18n } from '../stores/i18n';
+import { useDialog } from '../composables/useDialog';
 import AppIcon from './AppIcon.vue';
 
 const i18n = useI18n();
@@ -11,10 +12,13 @@ const emit = defineEmits<{
   (e: 'create', payload: { name: string; mode: GameMode; timeControl: TimeControl; private: boolean; teamMode: TeamMode }): void;
 }>();
 
-defineProps<{
+const props = defineProps<{
   busy?: boolean;
   error?: string;
 }>();
+
+const dialog = ref<HTMLElement | null>(null);
+useDialog(dialog, () => { if (!props.busy) emit('close'); });
 
 const selectedMode = ref<GameMode>('bughouse');
 const lobbyName = ref('');
@@ -43,6 +47,7 @@ const modeTc = ref<Record<GameMode, number>>({ team: 0, bughouse: 5, crazyhouse:
 const selectedTcIdx = computed({ get: () => modeTc.value[selectedMode.value], set: value => { modeTc.value[selectedMode.value] = value; } });
 
 function submit() {
+  if (props.busy) return;
   const tc = tcPresets.value[selectedTcIdx.value].tc;
   const defaultName = modeLabel(selectedMode.value, i18n.locale);
   const name = lobbyName.value.trim() || defaultName;
@@ -57,11 +62,11 @@ function submit() {
 </script>
 
 <template>
-  <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="create-modal-title" @click.self="emit('close')">
-    <div class="modal create-modal">
+  <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="create-modal-title" @click.self="!busy && emit('close')">
+    <div ref="dialog" class="modal create-modal" tabindex="-1">
       <header class="modal-head">
         <h2 id="create-modal-title">{{ i18n.t.createModal.title }}</h2>
-        <button class="modal-close" @click="emit('close')" :aria-label="i18n.t.createModal.cancelBtn">
+        <button class="modal-close" :disabled="busy" @click="emit('close')" :aria-label="i18n.t.createModal.cancelBtn">
           <AppIcon name="close" :size="18" />
         </button>
       </header>
@@ -69,8 +74,9 @@ function submit() {
       <div class="modal-body">
         <!-- Название -->
         <div class="form-row">
-          <label class="field-label">{{ i18n.t.createModal.nameLabel }}</label>
+          <label class="field-label" for="lobby-name">{{ i18n.t.createModal.nameLabel }}</label>
           <input
+            id="lobby-name"
             v-model="lobbyName"
             :placeholder="i18n.t.createModal.namePlaceholder"
             maxlength="40"
@@ -86,14 +92,15 @@ function submit() {
               :key="info.mode"
               class="mode-card"
               :class="{ active: selectedMode === info.mode }"
-              @click="selectedMode = info.mode"
+
             >
-              <div class="mode-card-head">
+              <label class="mode-card-head">
+                <input v-model="selectedMode" type="radio" name="game-mode" :value="info.mode" :aria-label="modeLabel(info.mode, i18n.locale)" />
                 <span class="mode-title">{{ modeLabel(info.mode, i18n.locale) }}</span>
                 <span v-if="selectedMode === info.mode" class="mode-check">
                   <AppIcon name="check" :size="13" :stroke-width="2.6" />
                 </span>
-              </div>
+              </label>
               <p class="mode-short">{{ i18n.locale === 'en' ? info.shortEn ?? info.short : info.short }}</p>
               <button
                 type="button"
@@ -121,6 +128,7 @@ function submit() {
               type="button"
               class="tc-btn"
               :class="{ active: selectedTcIdx === i }"
+              :aria-pressed="selectedTcIdx === i"
               @click="selectedTcIdx = i"
             >
               {{ p.label }}
@@ -174,7 +182,7 @@ function submit() {
       </div>
 
       <footer class="modal-foot">
-        <button type="button" @click="emit('close')">{{ i18n.t.createModal.cancelBtn }}</button>
+        <button type="button" :disabled="busy" @click="emit('close')">{{ i18n.t.createModal.cancelBtn }}</button>
         <button
           type="button"
           class="primary"
@@ -190,6 +198,9 @@ function submit() {
 </template>
 
 <style scoped>
+.mode-card-head { cursor:pointer; }
+.mode-card input[type="radio"] { width:16px; height:16px; accent-color:var(--accent); flex:0 0 auto; }
+.mode-card:focus-within { outline:2px solid var(--accent); outline-offset:2px; }
 .create-modal {
   max-width: 620px;
   max-height: min(92vh, 700px);

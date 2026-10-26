@@ -32,6 +32,8 @@ const i18n = useI18n();
 }
 .mode-tabs button {
   flex: 1 1 auto;
+  height: var(--control-size);
+  padding: 0 12px;
   font-size: 13px;
 }
 </style>

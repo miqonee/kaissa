@@ -14,8 +14,9 @@
   --font-ui: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
-  /* ---- Единый размер элементов шапки, включая мобильную версию ---- */
-  --header-control-size: 44px;
+  /* ---- Общая высота навигации, выбора режима и игровых действий ---- */
+  --control-size: 40px;
+  --header-control-size: var(--control-size);
   --header-control-radius: 8px;
   --header-control-padding: 12px;
   --header-control-gap: 8px;
@@ -37,6 +38,10 @@
   /* ---- Скорости ---- */
   --t-fast: 0.12s ease;
   --t-med: 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (pointer: coarse) {
+  :root { --control-size: 44px; }
 }
 
 /* ============================================================

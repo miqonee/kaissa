@@ -271,41 +271,43 @@ function lobbyRosterTitle(l: LobbySummary): string {
 
 <template>
   <div class="home">
-    <!-- Верхний баннер с быстрыми действиями -->
-    <section class="home-banner panel" :aria-label="i18n.t.home.quickStartChip">
+    <!-- Заголовок страницы и общий блок игровых действий -->
+    <section class="home-banner" :aria-label="i18n.t.home.quickStartChip">
       <div class="banner-intro">
         <h1>{{ seoPages['/'][i18n.locale].heading }}</h1>
         <p class="dim">{{ i18n.locale === 'en' ? '2v2, Bughouse and Crazyhouse with friends or bots. Start without registering.' : '2×2, Багхаус и Crazyhouse с друзьями или ботами. Начать можно без регистрации.' }}</p>
       </div>
-
     </section>
 
-    <QuickPlayPanel v-model="quickMode" :lobby="autoLobbies.find(l => l.mode === quickMode)" :busy="joinBusy" :loading="loadingLobbies" :error="lobbyError" :guest="!auth.user || auth.user.isGuest" @play="playQuick" @retry="loadLobbies" />
+    <div class="panel play-panel">
+      <QuickPlayPanel v-model="quickMode" :lobby="autoLobbies.find(l => l.mode === quickMode)" :busy="joinBusy" :loading="loadingLobbies" :error="lobbyError" @play="playQuick" @retry="loadLobbies" />
 
-    <section class="panel invite-panel" :aria-label="i18n.locale === 'en' ? 'Play with friends' : 'Игра с друзьями'">
-      <h2>{{ i18n.locale === 'en' ? 'Playing with friends?' : 'Собираетесь с друзьями?' }}</h2>
-      <div class="banner-actions">
-        <button class="ghost banner-create-btn" @click="openCreateModal">
-          <AppIcon name="plus" :size="18" :stroke-width="2.4" />
-          {{ i18n.t.home.createTable }}
-        </button>
-
-        <form class="quick-join" @submit.prevent="joinByCode">
-          <input
-            v-model="joinCode"
-            :placeholder="i18n.t.home.tableCodePlaceholder"
-            maxlength="6"
-            class="mono join-input"
-            :aria-label="i18n.t.home.tableCodePlaceholder"
-            @input="joinError = ''"
-          />
-          <button type="submit" class="brass join-btn" :disabled="!joinCode.trim() || joinBusy">
-            {{ i18n.t.home.joinTable }}
+      <section class="invite-panel" :aria-label="i18n.locale === 'en' ? 'Play with friends' : 'Игра с друзьями'">
+        <h2>{{ i18n.locale === 'en' ? 'With friends' : 'С друзьями' }}</h2>
+        <div class="banner-actions">
+          <button class="banner-create-btn" @click="openCreateModal">
+            <AppIcon name="plus" :size="18" :stroke-width="2.4" />
+            {{ i18n.t.home.createTable }}
           </button>
-        </form>
-      </div>
-      <p v-if="joinError" class="error-text banner-error" role="alert">{{ joinError }}</p>
-    </section>
+
+          <form class="quick-join" @submit.prevent="joinByCode">
+            <input
+              v-model="joinCode"
+              :placeholder="i18n.t.home.tableCodePlaceholder"
+              maxlength="6"
+              class="mono join-input"
+              :aria-label="i18n.t.home.tableCodePlaceholder"
+              @input="joinError = ''"
+            />
+            <button type="submit" class="join-btn" :disabled="!joinCode.trim() || joinBusy">
+              {{ i18n.t.home.joinTable }}
+            </button>
+          </form>
+        </div>
+        <p v-if="joinError" class="error-text banner-error" role="alert">{{ joinError }}</p>
+      </section>
+
+    </div>
 
     <!-- Основная сетка -->
     <div class="home-grid">
@@ -469,29 +471,21 @@ function lobbyRosterTitle(l: LobbySummary): string {
 </template>
 
 <style scoped>
-.invite-panel {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;padding:16px 22px;}.invite-panel h2 {font-size:17px;}.invite-panel .banner-actions {flex-wrap:wrap;}
+.play-panel { box-shadow: none; }
+.invite-panel { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:12px 16px; border-top:1px solid var(--line); }
+.invite-panel h2 { font-family:var(--font-ui); font-size:13px; font-weight:500; color:var(--ink-2); }
+.invite-panel .banner-actions { flex-wrap:wrap; }
 .home-guide {padding:22px;}.home-guide h2 {font-size:22px;margin-bottom:18px;}.guide-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:24px;}.guide-grid h3 {margin-bottom:10px;}.guide-grid p {font-size:14px;color:var(--ink-2);line-height:1.65;}.home-guide nav {display:flex;flex-wrap:wrap;gap:18px;margin-top:16px;}.home-guide a {text-decoration:underline;text-underline-offset:3px;}
 .quick-help { margin:0 0 10px; color:var(--ink-2); font-size:14px; }
 .home {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
-.home-banner {
-  padding: 22px 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  background: linear-gradient(135deg, var(--surface) 0%, color-mix(in srgb, var(--felt) 12%, var(--surface)) 100%);
-  border-color: color-mix(in srgb, var(--accent-2) 35%, var(--line));
-  min-height: 90px;
-  box-sizing: border-box;
-}
+.home-banner { padding: 4px 2px; }
 
 .banner-intro {
-  flex: 1 1 500px;
   min-width: 0;
   max-width: 680px;
 }
@@ -511,14 +505,14 @@ function lobbyRosterTitle(l: LobbySummary): string {
 .banner-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex: 0 0 auto;
+  gap: 10px;
+  flex: 0 1 auto;
 }
 
 .banner-create-btn {
-  height: 42px;
-  padding: 0 20px;
-  font-size: 14.5px;
+  height: var(--control-size);
+  padding: 0 12px;
+  font-size: 13px;
   font-weight: 600;
   border-radius: var(--r-s);
   box-sizing: border-box;
@@ -531,12 +525,12 @@ function lobbyRosterTitle(l: LobbySummary): string {
 }
 
 .join-input {
-  height: 42px;
+  height: var(--control-size);
   width: 140px;
   padding: 0 12px;
   font-size: 14px;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.06em;
   font-weight: 600;
   text-align: center;
   border-radius: var(--r-s);
@@ -544,9 +538,9 @@ function lobbyRosterTitle(l: LobbySummary): string {
 }
 
 .join-btn {
-  height: 42px;
-  padding: 0 18px;
-  font-size: 14px;
+  height: var(--control-size);
+  padding: 0 12px;
+  font-size: 13px;
   font-weight: 600;
   border-radius: var(--r-s);
   box-sizing: border-box;
@@ -560,7 +554,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
 .home-grid {
   display: grid;
   grid-template-columns: 1.05fr 1fr;
-  gap: 24px;
+  gap: 20px;
   align-items: start;
 }
 
@@ -932,42 +926,21 @@ function lobbyRosterTitle(l: LobbySummary): string {
 
 /* На узких экранах карточка стола и баннер перестраиваются вертикально */
 @media (max-width: 768px) {
-  .banner-intro { flex: 0 1 auto; }
-
-  .home-banner {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 18px 16px;
-    gap: 16px;
-    min-height: auto;
-  }
-
   .banner-intro h1 {
     font-size: 21px;
   }
 
-  .banner-actions {
-    width: 100%;
-    flex-wrap: wrap;
-  }
+  .invite-panel { gap: 8px; }
+  .banner-actions { gap: 8px; }
 }
 
 @media (max-width: 560px) {
-  .home-banner {
-    padding: 16px 14px;
-    gap: 14px;
-    min-height: auto;
-  }
-
   .banner-intro h1 {
     font-size: 20px;
   }
 
-  .banner-actions {
-    width: 100%;
-    flex-direction: column;
-    align-items: stretch;
-  }
+  .invite-panel { padding: 12px; }
+  .banner-actions { width: 100%; flex-direction: column; align-items: stretch; gap: 8px; }
 
   .banner-create-btn {
     width: 100%;

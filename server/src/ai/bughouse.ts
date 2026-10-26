@@ -61,7 +61,7 @@ export function fallbackBughouseMove(game: BughouseGame, board: Board): AnyMove 
     const next = BughouseGame.fromSnapshot(game.snapshot());
     const result = next.apply(move);
     const score = (result.captured ? VALUES[result.captured.piece] : 0) + (result.check ? 60 : 0) + (isDrop(move) ? 10 : 0);
-    if (next.isBughouseCheckmate(board) || next.isBughouseStalemate(board)) return move;
+    if (result.check && next.isBughouseCheckmate(board)) return move;
     if (score > bestScore) { best = move; bestScore = score; }
     if (Date.now() >= deadline) break;
   }

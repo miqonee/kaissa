@@ -532,6 +532,16 @@ onMounted(() => {
         playMoveSound();
       }
     }
+
+    if (mv.fenAfter && state.value) {
+      state.value.fens[mv.boardIndex] = mv.fenAfter;
+      state.value.turns[mv.boardIndex] = mv.fenAfter.split(' ')[1] as 'w' | 'b';
+      if (state.value.mode === 'bughouse') {
+        const turnColor = mv.fenAfter.split(' ')[1] as 'w' | 'b';
+        const nextP = state.value.participants.find((p) => p.boardIndex === mv.boardIndex && p.color === turnColor);
+        if (nextP) state.value.turnUserIds[mv.boardIndex] = nextP.userId;
+      }
+    }
   });
 
   socket.on('game:end', (payload) => {

@@ -86,6 +86,7 @@ interface ActiveGame {
   chat: ChatMessage[];
   isDemo?: boolean;
   rulesVersion?: number | null;
+  boardsStarted: [boolean, boolean];
 }
 
 const TEAM_COLORS_BUGHOUSE: Record<Team, Record<Board, SideColor>> = {
@@ -290,6 +291,7 @@ export class GamesManager {
       chatIdSeq: 1,
       chat: [],
       isDemo: Boolean(opts.isDemo),
+      boardsStarted: [false, false],
     };
     if (opts.mode === 'bughouse' && noClock && !opts.isDemo && participants.some(p => !p.isBot)) {
       const board = ([0, 1] as Board[]).find(b => participants.filter(p => p.boardIndex === b).every(p => p.isBot));
@@ -390,6 +392,7 @@ export class GamesManager {
     }
 
     g.ply += 1;
+    g.boardsStarted[data.boardIndex] = true;
     try { await this.persistMove(g, uid, data, fen, clocksAfter); }
     catch (error) {
       if (before) g.engine = g.engine instanceof CrazyhouseGame ? CrazyhouseGame.fromSnapshot(before) : BughouseGame.fromSnapshot(before);
@@ -416,6 +419,7 @@ export class GamesManager {
       ...(data.promotion ? { promotion: data.promotion } : {}),
       ...(data.dropPiece ? { dropPiece: data.dropPiece } : {}),
       clocksAfter,
+      fenAfter: fen,
     });
     await this.checkEndAfterMove(g, data.boardIndex as Board);
     this.io?.to(this.gameRoom(g.id)).emit('game:state', this.toGameState(g));
@@ -492,13 +496,10 @@ export class GamesManager {
   isFirstMovePending(g: ActiveGame): boolean {
     if (g.status !== 'active') return false;
     if (g.ply === 0) return true;
-    if (g.engine instanceof BughouseGame) {
-      const bg = g.engine as BughouseGame;
-      for (let b = 0; b < 2; b++) {
-        const boardHasHumans = g.participants.some((p) => p.boardIndex === b && !p.isBot);
-        if (boardHasHumans && bg.boards[b as Board].history().length === 0) {
-          return true;
-        }
+    if (g.mode === 'bughouse') {
+      const humanBoards = ([0, 1] as Board[]).filter((b) => g.participants.some((p) => p.boardIndex === b && !p.isBot));
+      if (humanBoards.length > 0 && humanBoards.every((b) => !g.boardsStarted[b])) {
+        return true;
       }
     }
     return false;

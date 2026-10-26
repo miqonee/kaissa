@@ -35,6 +35,14 @@ export function getSocket(): Socket<ServerToClientEvents, ClientToServerEvents> 
     });
     socket.on('disconnect', () => conn.set('reconnecting'));
     socket.on('connect_error', () => conn.set('reconnecting'));
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pageshow', (event) => {
+        if (event.persisted && socket && !socket.connected) {
+          socket.connect();
+        }
+      });
+    }
   }
   return socket;
 }

@@ -567,6 +567,8 @@ export class LobbiesManager {
 
     lobby.autoCountdown = seconds;
     this.broadcastCountdown(lobby);
+    this.clearCountdownChat(lobby.id);
+    this.sendCountdownChat(lobby, `Матч начнётся через ${seconds} с...`);
 
     lobby.countdownTimer = setInterval(async () => {
       const current = this.lobbies.get(lobby.id);
@@ -580,6 +582,9 @@ export class LobbiesManager {
       if (lobby.autoCountdown !== null && lobby.autoCountdown > 0) {
         lobby.autoCountdown -= 1;
         this.broadcastCountdown(lobby);
+        if (lobby.autoCountdown > 0) {
+          this.sendCountdownChat(lobby, `${lobby.autoCountdown}...`);
+        }
       }
 
       if (lobby.autoCountdown === 0) {
@@ -602,8 +607,38 @@ export class LobbiesManager {
     if (lobby.countdownTimer || lobby.autoCountdown !== null) {
       lobby.clearCountdown();
       this.broadcastCountdown(lobby);
+      this.clearCountdownChat(lobby.id);
     }
     return { ok: true };
+  }
+
+  sendCountdownChat(lobby: Lobby, text: string): void {
+    const msg: ChatMessage = {
+      id: lobby.chatIdSeq++,
+      userId: 0,
+      username: 'Система',
+      text,
+      at: Date.now(),
+      system: true,
+      isCountdown: true,
+    };
+    this.io?.to(this.room(lobby.id)).emit('lobby:chat', msg);
+  }
+
+  sendSystemChat(lobby: Lobby, text: string): void {
+    const msg: ChatMessage = {
+      id: lobby.chatIdSeq++,
+      userId: 0,
+      username: 'Система',
+      text,
+      at: Date.now(),
+      system: true,
+    };
+    this.io?.to(this.room(lobby.id)).emit('lobby:chat', msg);
+  }
+
+  clearCountdownChat(lobbyId: string): void {
+    this.io?.to(this.room(lobbyId)).emit('lobby:chat:clear-countdown');
   }
 
   broadcastCountdown(lobby: Lobby): void {
@@ -632,6 +667,10 @@ export class LobbiesManager {
     const humans = [...lobby.members.values()].filter((x) => !x.isBot);
     const isPaused = humans.length === 1 ? lobby.pausedBy.has(uid) : lobby.pausedBy.size === humans.length;
     lobby.isPaused = isPaused;
+
+    if (isPaused) {
+      this.clearCountdownChat(lobby.id);
+    }
 
     this.broadcastCountdown(lobby);
     this.broadcastState(lobby);
@@ -790,6 +829,7 @@ export class LobbiesManager {
     if (lobby.rematchOf || lobby.countdownTimer || lobby.autoCountdown !== null) {
       lobby.clearCountdown();
       this.broadcastCountdown(lobby);
+      this.clearCountdownChat(lobby.id);
     }
     if (lobby.members.size === 0 || (lobby.rematchOf && [...lobby.members.values()].every(m => m.isBot))) {
       this.lobbies.delete(lobbyId);
@@ -814,6 +854,7 @@ export class LobbiesManager {
     if (!ready && (lobby.countdownTimer || lobby.autoCountdown !== null)) {
       lobby.clearCountdown();
       this.broadcastCountdown(lobby);
+      this.clearCountdownChat(lobby.id);
     }
     this.broadcastState(lobby);
   }

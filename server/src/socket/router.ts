@@ -151,6 +151,13 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
         cb?.({ ok: false, error: 'Вы не в лобби' });
         return;
       }
+      const lobby = lobbies.getById(ctx.lobbyId);
+      if (lobby?.isQuick) {
+        const r = await lobbies.start(ctx.lobbyId, ctx.uid);
+        if (r.ok) ctx.lobbyId = null;
+        cb?.(r.ok ? { ok: true, data: { gameId: r.gameId } } : { ok: false, error: r.error });
+        return;
+      }
       const r = lobbies.beginCountdown(ctx.lobbyId, ctx.uid, 5);
       cb?.(r.ok ? { ok: true, data: null } : { ok: false, error: r.error });
     });

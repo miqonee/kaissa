@@ -152,6 +152,9 @@ onMounted(() => {
     chat.value.push(msg);
     scrollChat();
   });
+  socket.on('lobby:chat:clear-countdown', () => {
+    chat.value = chat.value.filter((m) => !m.isCountdown);
+  });
   socket.on('lobby:started', ({ gameId }) => {
     gameStarting = true;
     if (lobby.value?.rematchOf) trackGoal('rematch_started', { mode: lobby.value.mode }, String(gameId));
@@ -172,6 +175,7 @@ onBeforeUnmount(() => {
   socket.off('lobby:state');
   socket.off('lobby:countdown');
   socket.off('lobby:chat');
+  socket.off('lobby:chat:clear-countdown');
   socket.off('lobby:started');
   socket.off('lobby:closed');
 });
@@ -308,8 +312,8 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
         </div>
 
         <div class="panel-body">
-          <!-- Баннер Быстрого стола (Автолобби или обратный отсчет) -->
-          <div v-if="quick || (countdown !== null && countdown.seconds !== null)" class="auto-lobby-banner">
+          <!-- Баннер Быстрого стола (Автолобби или реванш) -->
+          <div v-if="quick || lobby.rematchOf" class="auto-lobby-banner">
             <div class="auto-banner-info">
               <span class="countdown-chip" :class="{ paused: countdown?.paused }">
                 <span v-if="countdown?.paused">{{ i18n.locale === 'en' ? 'Paused' : 'Пауза' }} ({{ countdown?.pausedCount }}/{{ countdown?.neededCount }})</span>
@@ -524,9 +528,6 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
         <p v-if="error" class="error-text start-error">
           {{ error }}
         </p>
-        <p v-else-if="countdown?.seconds !== null && countdown?.seconds !== undefined && countdown.seconds > 0 && !countdown.paused" class="ok-hint countdown-live-hint">
-          ⏱ {{ i18n.locale === 'en' ? `Match starts in ${countdown.seconds}s…` : `Старт матча через ${countdown.seconds} с…` }}
-        </p>
         <p v-else-if="lobby.players.length < capacity" class="dim">
           {{ i18n.locale === 'en' ? `${capacity} players needed to start. Current: ${lobby.players.length}/${capacity}.` : `Для начала матча нужно ${capacity} игрока. Сейчас: ${lobby.players.length}/${capacity}.` }}
         </p>
@@ -549,7 +550,7 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
         </button>
 
         <button
-          v-if="isHost && countdown?.seconds !== null && countdown?.seconds !== undefined && countdown.seconds > 0 && !countdown.paused"
+          v-if="isHost && !quick && countdown?.seconds !== null && countdown?.seconds !== undefined && countdown.seconds > 0 && !countdown.paused"
           class="cancel-start-btn big"
           @click="cancelStart"
         >
@@ -560,7 +561,7 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
         <button
           v-else-if="isHost"
           class="primary big"
-          :disabled="!allReady"
+          :disabled="!quick && !allReady"
           @click="start"
         >
           {{ i18n.locale === 'en' ? 'Start Game' : 'Начать игру' }}

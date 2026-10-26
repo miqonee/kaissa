@@ -193,6 +193,7 @@ export type ServerToClientEvents = {
   'lobby:list:update': (lobbies: LobbySummary[]) => void;
   'lobby:state': (lobby: LobbySummary) => void;
   'lobby:chat': (msg: ChatMessage) => void;
+  'lobby:chat:clear-countdown': () => void;
   'lobby:summoned': (payload: { lobbyId: string; lobbyName: string }) => void;
   'lobby:started': (payload: { gameId: number }) => void;
   'lobby:closed': (reason: string) => void;
@@ -200,7 +201,7 @@ export type ServerToClientEvents = {
 
   // Игра
   'game:state': (state: GameState) => void;
-  'game:move': (mv: { gameId: number; boardIndex: 0 | 1; ply: number; userId: number; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType; clocksAfter: [number, number] | null }) => void;
+  'game:move': (mv: { gameId: number; boardIndex: 0 | 1; ply: number; userId: number; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType; clocksAfter: [number, number] | null; fenAfter?: string }) => void;
   'game:clock': (payload: { gameId: number; clocks: [number, number][]; running: boolean }) => void;
   'game:end': (payload: { gameId: number; result: GameResult; reason: EndReason; participants: GameParticipantInfo[] }) => void;
   'game:chat': (msg: ChatMessage & { gameId: number }) => void;
@@ -232,6 +233,7 @@ export interface ChatMessage {
   text: string;
   at: number;
   system?: boolean;
+  isCountdown?: boolean;
 }
 
 // ---------- Игровое состояние (полная синхронизация) ----------

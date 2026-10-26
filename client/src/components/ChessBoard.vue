@@ -206,7 +206,9 @@ watch(
     } as never);
 
     if (props.movableColor && turnColor === props.movableColor) {
-      cg.playPremove();
+      if (!cg.playPremove()) {
+        cg.cancelPremove();
+      }
     }
   },
 );
@@ -230,7 +232,7 @@ watch(
         enabled: interactive,
       },
     } as never);
-    if (!props.canPremove && props.movableColor !== (props.fen.split(' ')[1] === 'b' ? 'black' : 'white')) {
+    if (!props.canPremove) {
       cg.cancelPremove();
     }
   },

@@ -62,7 +62,7 @@ const connLabel = computed(() => {
         <nav :aria-label="i18n.locale === 'en' ? 'Main navigation' : 'Основная навигация'">
           <router-link to="/" class="header-control header-nav-link">{{ i18n.t.nav.lobbies }}</router-link>
           <router-link to="/leaderboard" class="header-control header-nav-link">{{ i18n.t.nav.leaderboard }}</router-link>
-          <router-link to="/history" class="header-control header-nav-link">{{ i18n.t.nav.history }}</router-link>
+          <router-link v-if="auth.user && !auth.user.isGuest" to="/history" class="header-control header-nav-link">{{ i18n.t.nav.history }}</router-link>
           <router-link
             v-if="auth.user?.isAdmin"
             to="/admin"
@@ -97,9 +97,8 @@ const connLabel = computed(() => {
               <span v-if="auth.user.isGuest" class="profile-label">{{ i18n.locale === 'en' ? 'Guest' : 'Гость' }}</span>
               <span class="conn-indicator" :class="conn.state" role="status" :aria-label="connLabel"><span class="conn-dot"></span></span>
             </router-link>
-            <button class="header-control logout-btn" @click="logout" :title="i18n.t.nav.logout" :aria-label="i18n.t.nav.logout">
+            <button class="header-control header-icon logout-btn" @click="logout" :title="i18n.t.nav.logout" :aria-label="i18n.t.nav.logout">
               <AppIcon name="log-out" :size="18" />
-              <span class="logout-text">{{ i18n.t.nav.logout }}</span>
             </button>
           </template>
           <template v-else>

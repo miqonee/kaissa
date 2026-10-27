@@ -246,14 +246,14 @@
       "title": "История партий и составы команд | Каисса",
       "description": "Архив партий Каиссы: кто с кем играл, результат, причина завершения и изменение рейтинга. Фильтры по режиму, участникам и соперникам, реплеи и PGN.",
       "heading": "История партий и составы команд",
-      "intro": "Архив партий Каиссы: кто с кем играл, результат, причина завершения и изменение рейтинга. Фильтры по режиму, участникам и соперникам, реплеи и PGN.",
+      "intro": "Архив завершённых партий доступен зарегистрированным игрокам. Войдите или сохраните гостевой аккаунт, чтобы смотреть составы команд, результаты и повторы.",
       "sections": []
     },
     "en": {
       "title": "Match History and Team Rosters | Kaissa",
       "description": "Explore Kaissa games: both teams, results, ending reasons and rating changes. Filter by mode, player and opponent type, watch replays and download PGN.",
       "heading": "Match History and Team Rosters",
-      "intro": "Explore Kaissa games: both teams, results, ending reasons and rating changes. Filter by mode, player and opponent type, watch replays and download PGN.",
+      "intro": "Explore completed games after signing in or saving your guest account. Registered players can view teams, results and replays.",
       "sections": []
     }
   },

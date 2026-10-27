@@ -80,7 +80,7 @@ usePageSeo({ canonical: '/rules/bughouse' });
             <li><strong>Full Legal Turn:</strong> Dropping a piece counts as a full legal turn, after which the move passes to the opponent.</li>
             <li><strong>Any Vacant Square:</strong> You can drop pieces onto any unoccupied square.</li>
             <li><strong>Pawn Restrictions (1st & 8th ranks):</strong> Pawns may NEVER be dropped on the 1st or 8th rank. Drops are allowed strictly on ranks 2 through 7.</li>
-            <li><strong>7th Rank Drop:</strong> Dropping a pawn on the 7th rank threatens immediate promotion to queen on your very next turn!</li>
+            <li><strong>7th Rank Drop:</strong> A white pawn dropped on the 7th rank (or a black pawn on the 2nd) threatens promotion if its next move is legal.</li>
           </ul>
 
           <h3>3. Drop Check & Drop Mate</h3>
@@ -109,10 +109,10 @@ usePageSeo({ canonical: '/rules/bughouse' });
               title="Smothered Mate by Knight Drop"
               badge="Drop Mate"
               badge-color="bad"
-              fen="r1bq2rk/ppp2ppp/8/8/2B5/8/PPPP1PPP/R1BQK2R w - - 0 1"
+              fen="r1bq2rk/ppp3pp/8/8/2B5/8/PPPP1PPP/R1BQK2R w - - 0 1"
               interactive-fen="r1bq2rk/ppp2Npp/8/8/2B5/8/PPPP1PPP/R1BQK2R b - - 0 1"
               :pocket-white="[{ type: 'n', count: 1 }]"
-              action-label="Drop ♞@f7#"
+              action-label="Drop ♘@f7#"
               reset-label="Reset Position"
               check-square="h8"
               :last-move="[null, 'f7']"
@@ -123,13 +123,13 @@ usePageSeo({ canonical: '/rules/bughouse' });
               title="Pawn Wedge Attack on Queen"
               badge="Pawn Drop"
               badge-color="felt"
-              fen="r1b1k2r/pppq1ppp/2n5/8/4B3/8/PPP2PPP/R1BQK2R w KQkq - 0 1"
-              interactive-fen="r1b1k2r/pppq1ppp/2nP4/8/4B3/8/PPP2PPP/R1BQK2R b KQkq - 0 1"
+              fen="r1b1k2r/ppp1qppp/2n5/8/4B3/8/PPP2PPP/R1BQK2R w KQkq - 0 1"
+              interactive-fen="r1b1k2r/ppp1qppp/2nP4/8/4B3/8/PPP2PPP/R1BQK2R b KQkq - 0 1"
               :pocket-white="[{ type: 'p', count: 1 }]"
-              action-label="Drop ♟@d6"
+              action-label="Drop ♙@d6"
               reset-label="Reset Position"
               :last-move="[null, 'd6']"
-              caption="White drops a pawn on d6 from reserve. The queen on d7 is attacked, piece coordination is broken, and c7 becomes a critical invasion target."
+              caption="White drops a pawn on d6 from reserve. The queen on e7 is attacked, piece coordination is broken, and c7 becomes a critical invasion target."
             />
           </div>
         </section>
@@ -202,7 +202,7 @@ usePageSeo({ canonical: '/rules/bughouse' });
             и играют противоположными цветами: первый партнёр руководит белыми фигурами на Доске А, а второй — чёрными на Доске B.
           </p>
           <p>
-            Когда вы сбиваете фигуру оппонента, она мгновенно меняет свой цвет на противоположный и отправляется в
+            Когда вы сбиваете фигуру оппонента, она сохраняет свой цвет и сразу отправляется в
             <strong>«карман» (резерв)</strong> вашего напарника. Напарник в любой свой ход вместо движения фигурой по доске имеет право
             <strong>выставить (сделать дроп)</strong> полученную фигуру на любое свободное поле своей доски!
           </p>
@@ -235,7 +235,7 @@ usePageSeo({ canonical: '/rules/bughouse' });
             <li><strong>Полноценный ход:</strong> Выставление фигуры из кармана на доску считается отдельным легальным ходом, после которого очередь переходит сопернику.</li>
             <li><strong>Свободное поле:</strong> Фигуру разрешено дропать на абсолютно любую незанятую клетку доски.</li>
             <li><strong>Ограничение для пешек (1-я и 8-я горизонтали):</strong> Пешку строго запрещено дропать на первую и восьмую горизонтали (1 и 8 ряды). Пешку можно выставлять только на ряды со 2-го по 7-й включительно.</li>
-            <li><strong>Дроп на 7-ю горизонталь:</strong> Выставив пешку на 7-й ряд, уже следующим своим ходом вы можете продвинуть её на 8-й ряд и превратить в ферзя!</li>
+            <li><strong>Дроп на 7-ю горизонталь:</strong> Белая пешка на 7-й горизонтали (чёрная на 2-й) угрожает превращением следующим ходом, если поле впереди свободно и ход законен.</li>
           </ul>
 
           <h3>3. Шах и мат дропом (Drop Check & Drop Mate)</h3>
@@ -271,10 +271,10 @@ usePageSeo({ canonical: '/rules/bughouse' });
               title="Спёртый мат дропом конём"
               badge="Мат дропом"
               badge-color="bad"
-              fen="r1bq2rk/ppp2ppp/8/8/2B5/8/PPPP1PPP/R1BQK2R w - - 0 1"
+              fen="r1bq2rk/ppp3pp/8/8/2B5/8/PPPP1PPP/R1BQK2R w - - 0 1"
               interactive-fen="r1bq2rk/ppp2Npp/8/8/2B5/8/PPPP1PPP/R1BQK2R b - - 0 1"
               :pocket-white="[{ type: 'n', count: 1 }]"
-              action-label="Дропнуть ♞@f7#"
+              action-label="Дропнуть ♘@f7#"
               reset-label="Вернуть позицию"
               check-square="h8"
               :last-move="[null, 'f7']"
@@ -286,13 +286,13 @@ usePageSeo({ canonical: '/rules/bughouse' });
               title="Пешечный клин и атака ферзя"
               badge="Дроп пешки"
               badge-color="felt"
-              fen="r1b1k2r/pppq1ppp/2n5/8/4B3/8/PPP2PPP/R1BQK2R w KQkq - 0 1"
-              interactive-fen="r1b1k2r/pppq1ppp/2nP4/8/4B3/8/PPP2PPP/R1BQK2R b KQkq - 0 1"
+              fen="r1b1k2r/ppp1qppp/2n5/8/4B3/8/PPP2PPP/R1BQK2R w KQkq - 0 1"
+              interactive-fen="r1b1k2r/ppp1qppp/2nP4/8/4B3/8/PPP2PPP/R1BQK2R b KQkq - 0 1"
               :pocket-white="[{ type: 'p', count: 1 }]"
-              action-label="Дропнуть ♟@d6"
+              action-label="Дропнуть ♙@d6"
               reset-label="Вернуть позицию"
               :last-move="[null, 'd6']"
-              caption="Белые выставляют пешку на d6 из резерва. Чёрный ферзь d7 атакован пешкой, связь фигур чёрных нарушена, а поле c7 становится следующей критической мишенью для вторжения."
+              caption="Белые выставляют пешку на d6 из резерва. Чёрный ферзь e7 атакован пешкой, связь фигур чёрных нарушена, а поле c7 становится следующей критической мишенью для вторжения."
             />
           </div>
         </section>

@@ -45,7 +45,7 @@ for (const route of [...Object.keys(pages), "/rules/crazyhouse"])
     );
     assert.equal(
       r.headers.get("x-robots-tag"),
-      route === "/login" ? "noindex, follow" : "index, follow",
+      ["/login", "/history"].includes(route) ? "noindex, follow" : "index, follow",
       pathname + " robots",
     );
   }

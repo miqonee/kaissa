@@ -211,7 +211,7 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
   });
 
   const resolvedRobots = computed(() => {
-    const privatePath = /^\/(?:login|admin|lobby|game|replay)(?:\/|$)/.test(pagePath.value);
+    const privatePath = /^\/(?:login|admin|lobby|game|replay|history)(?:\/|$)/.test(pagePath.value);
     return toValue(options.noindex) || privatePath ? 'noindex, follow' : 'index, follow';
   });
 

@@ -36,6 +36,12 @@ const stats = computed(
     profile.value?.user.modeRatings?.find((r) => r.mode === mode.value) ??
     emptyModeRating(mode.value),
 );
+const totals = computed(() => ({
+  wins: stats.value.wins + stats.value.trainingWins + (stats.value.carriedWins ?? 0),
+  losses: stats.value.losses + stats.value.trainingLosses + (stats.value.carriedLosses ?? 0),
+  draws: stats.value.draws + stats.value.trainingDraws + (stats.value.carriedDraws ?? 0),
+}));
+const totalModeGames = computed(() => totals.value.wins + totals.value.losses + totals.value.draws);
 const ratedGames = computed(
   () => stats.value.wins + stats.value.losses + stats.value.draws,
 );
@@ -111,47 +117,27 @@ const sparkPath = computed(() => {
                   ? en
                     ? "Not in public rankings"
                     : "Не участвует в публичном рейтинге"
-                  : ratedGames < PROVISIONAL_GAMES
+                  : stats.carriedRating == null && ratedGames < PROVISIONAL_GAMES
                     ? en
                       ? `Preliminary · ${ratedGames}/${PROVISIONAL_GAMES} games`
                       : `Предварительный · ${ratedGames}/${PROVISIONAL_GAMES} партий`
                     : en
-                      ? `${ratedGames} rated games`
-                      : `${ratedGames} рейтинговых партий`
+                      ? `${totalModeGames} games`
+                      : `${totalModeGames} партий`
               }}
             </p>
           </div>
         </div>
+        <p><strong>{{ en ? 'Total games, all modes' : 'Всего партий во всех режимах' }}: {{ profile.user.wins + profile.user.draws + profile.user.losses }}</strong></p>
         <div class="stat-groups">
-          <div>
-            <h2>{{ en ? "Rated games" : "Рейтинговые партии" }}</h2>
-            <p>
-              {{ en ? "Wins / Draws / Losses" : "Победы / Ничьи / Поражения" }}
-            </p>
-            <strong
-              >{{ stats.wins }} / {{ stats.draws }} / {{ stats.losses }}</strong
-            >
-          </div>
-          <div>
-            <h2>
-              {{
-                en ? "Training · bots or guests" : "Тренировки · боты или гости"
-              }}
-            </h2>
-            <p>
-              {{ en ? "Wins / Draws / Losses" : "Победы / Ничьи / Поражения" }}
-            </p>
-            <strong
-              >{{ stats.trainingWins }} / {{ stats.trainingDraws }} /
-              {{ stats.trainingLosses }}</strong
-            >
-          </div>
+          <div><h2>{{ en ? 'Total games in this mode' : 'Всего партий в этом режиме' }}</h2><strong>{{ totalModeGames }}</strong></div>
+          <div><h2>{{ en ? 'Wins / Draws / Losses' : 'Победы / Ничьи / Поражения' }}</h2><strong>{{ totals.wins }} / {{ totals.draws }} / {{ totals.losses }}</strong></div>
         </div>
         <p class="dim">
           {{
             en
-              ? "Mode ratings start at 1200. Earlier games retain their former common rating in the archive."
-              : "Рейтинг каждого режима начинается с 1200. В прежних партиях сохранён общий рейтинг на момент игры."
+              ? "Each mode has its own Elo. Your rating carries over from game to game."
+              : "У каждого режима свой Elo. Накопленный рейтинг сохраняется и продолжается в следующих партиях."
           }}
           <router-link to="/leaderboard">{{
             en ? "How ratings work" : "Как считается рейтинг"
@@ -200,7 +186,9 @@ const sparkPath = computed(() => {
         />
         <p v-if="!profile.recentGames.length" class="empty">
           {{
-            en ? "No games in this mode yet." : "В этом режиме партий пока нет."
+            !auth.user || auth.user.isGuest
+              ? (en ? "Sign in or save your guest account to see the archive." : "Войдите или сохраните гостевой аккаунт, чтобы увидеть архив.")
+              : (en ? "No games in this mode yet." : "В этом режиме партий пока нет.")
           }}
         </p>
       </div>

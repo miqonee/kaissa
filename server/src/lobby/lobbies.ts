@@ -452,6 +452,8 @@ export class LobbiesManager {
     return { lobby, code };
   }
 
+  memberIds(): number[] { return [...this.lobbies.values()].flatMap(lobby => [...lobby.members.keys()]); }
+
   getByCode(code: string): Lobby | undefined {
     const c = code.trim().toUpperCase();
     return [...this.lobbies.values()].find((l) => l.code === c && !l.started);

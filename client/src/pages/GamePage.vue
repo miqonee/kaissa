@@ -36,6 +36,8 @@ const router = useRouter();
 const auth = useAuthStore();
 const i18n = useI18n();
 const socket = getSocket();
+const canViewArchive = computed(() => !!auth.user && !auth.user.isGuest);
+const archiveLogin = computed(() => ({ path: '/login', query: { redirect: '/history', ...(auth.user?.isGuest ? { claim: '1' } : {}) } }));
 const gameId = Number(route.params.id);
 
 const state = ref<GameState | null>(null);
@@ -698,7 +700,7 @@ function resultHeadline(): string {
         ? 'Match aborted: first move was not made (unrated)'
         : 'Матч отменён: первый ход не был сделан (рейтинг сохранён)';
     }
-    return isEn ? `Game abandoned (${reason || 'players left'})` : `Партия брошена (${reason || 'выход игроков'})`;
+    return isEn ? 'Game abandoned' : 'Партия брошена';
   }
   if (s.result === '*' || s.result === '1/2-1/2') return isEn ? `Draw (${reason || 'by rules'})` : `Ничья (${reason || 'по правилам'})`;
   const winnerTeam = s.result === '1-0' ? 1 : (s.result === '0-1' ? 2 : null);
@@ -718,39 +720,7 @@ function resultHeadline(): string {
       <router-link class="button primary small" :to="`/lobby/${rematchInvite}`">{{ i18n.locale === 'en' ? 'Join' : 'Присоединиться' }}</router-link>
       <button class="small ghost" @click="rematchInvite = null">{{ i18n.locale === 'en' ? 'Dismiss' : 'Не сейчас' }}</button>
     </aside>
-    <!-- Верхняя информационная плашка -->
-    <header class="game-topbar panel">
-      <div class="game-title-group">
-        <router-link to="/" class="back-link" :title="i18n.locale === 'en' ? 'Back to tables' : 'К столам'">
-          <AppIcon name="arrow-left" :size="14" /> {{ i18n.locale === 'en' ? 'Tables' : 'Столы' }}
-        </router-link>
-        <h1>
-          {{ modeLabel(state.mode, i18n.locale) }}
-        </h1>
-        <span class="badge mono">{{ timeControlLabel(state.timeControl) }}</span>
-        <span class="badge">{{ ratingLabel(state, i18n.locale) }}</span>
-        <span v-if="state.savingResult" class="badge" role="status">{{ i18n.locale === 'en' ? 'Saving result…' : 'Сохраняем результат…' }}</span>
-        <span v-if="state.status === 'active'" class="badge on">{{ i18n.locale === 'en' ? 'Live' : 'В игре' }}</span>
-        <span v-else class="badge">{{ state.result }}</span>
-        <span v-if="!isParticipant" class="badge dim">{{ i18n.locale === 'en' ? 'Spectating' : 'Режим зрителя' }}</span>
-        <span v-if="state.status === 'active' && firstMoveSec !== null" class="badge first-move-chip" :class="{ urgent: firstMoveSec <= 10 }">
-          ⏱ {{ i18n.locale === 'en' ? `First move: ${firstMoveSec}s` : `Первый ход: ${firstMoveSec} с` }}
-        </span>
-      </div>
 
-      <div class="game-topbar-actions">
-        <button v-if="state.status !== 'active'" class="small" @click="showReplay = true">
-          <AppIcon name="play" :size="13" /> {{ i18n.locale === 'en' ? 'Replay Game' : 'Смотреть партию' }}
-        </button>
-        <button v-if="isParticipant && state.status === 'active'" class="danger small" @click="resign">
-          {{ resignPending ? (i18n.locale === 'en' ? 'Confirm team resignation' : 'Подтвердить сдачу команды') : i18n.t.game.resignBtn }}
-        </button>
-        <button v-if="resignPending && state.status === 'active'" class="small ghost" @click="resignPending = false">{{ i18n.locale === 'en' ? 'Cancel' : 'Отмена' }}</button>
-        <button v-if="state.status !== 'active' && state.mode === 'team'" class="small brass" @click="analyzeOnLichess(0)">
-          <AppIcon name="external" :size="13" /> {{ i18n.t.game.lichessAnalysis }}
-        </button>
-      </div>
-    </header>
 
     <div v-if="state.status === 'active' && firstMoveSec !== null" class="first-move-banner panel">
       <AppIcon name="clock" :size="16" />
@@ -982,6 +952,39 @@ function resultHeadline(): string {
 
       <!-- Боковая панель: Чат + Статус -->
       <aside class="game-sidebar">
+    <!-- Верхняя информационная плашка -->
+    <header class="game-topbar panel">
+      <div class="game-title-group">
+        <router-link to="/" class="back-link" :title="i18n.locale === 'en' ? 'Back to tables' : 'К столам'">
+          <AppIcon name="arrow-left" :size="14" /> {{ i18n.locale === 'en' ? 'Tables' : 'Столы' }}
+        </router-link>
+        <h1>
+          {{ modeLabel(state.mode, i18n.locale) }}
+        </h1>
+        <span class="badge mono">{{ timeControlLabel(state.timeControl) }}</span>
+        <span class="badge">{{ ratingLabel(state, i18n.locale) }}</span>
+        <span v-if="state.savingResult" class="badge" role="status">{{ i18n.locale === 'en' ? 'Saving result…' : 'Сохраняем результат…' }}</span>
+        <span v-if="state.status === 'active'" class="badge on">{{ i18n.locale === 'en' ? 'Live' : 'В игре' }}</span>
+        <span v-else class="badge">{{ state.result }}</span>
+        <span v-if="!isParticipant" class="badge dim">{{ i18n.locale === 'en' ? 'Spectating' : 'Режим зрителя' }}</span>
+        <span v-if="state.status === 'active' && firstMoveSec !== null" class="badge first-move-chip" :class="{ urgent: firstMoveSec <= 10 }">
+          ⏱ {{ i18n.locale === 'en' ? `First move: ${firstMoveSec}s` : `Первый ход: ${firstMoveSec} с` }}
+        </span>
+      </div>
+
+      <div class="game-topbar-actions">
+        <button v-if="canViewArchive && state.status !== 'active'" class="small" @click="showReplay = true">
+          <AppIcon name="play" :size="13" /> {{ i18n.locale === 'en' ? 'Replay Game' : 'Смотреть партию' }}
+        </button>
+        <button v-if="isParticipant && state.status === 'active'" class="danger small" @click="resign">
+          {{ resignPending ? (i18n.locale === 'en' ? 'Confirm team resignation' : 'Подтвердить сдачу команды') : i18n.t.game.resignBtn }}
+        </button>
+        <button v-if="resignPending && state.status === 'active'" class="small ghost" @click="resignPending = false">{{ i18n.locale === 'en' ? 'Cancel' : 'Отмена' }}</button>
+        <button v-if="canViewArchive && state.status !== 'active' && state.mode === 'team'" class="small brass" @click="analyzeOnLichess(0)">
+          <AppIcon name="external" :size="13" /> {{ i18n.t.game.lichessAnalysis }}
+        </button>
+      </div>
+    </header>
         <!-- Панель статуса / очереди -->
         <div class="panel queue-panel">
           <div class="panel-head">
@@ -1296,8 +1299,9 @@ function resultHeadline(): string {
           <MatchCard :game="{ ...state, id: state.gameId, startedAt: new Date(state.startedAt).toISOString(), endedAt: null }" :viewer-id="auth.user?.id" compact />
           <GuestNotice v-if="isParticipant" />
 
+          <router-link v-if="!canViewArchive" class="button" :to="archiveLogin">{{ i18n.locale === 'en' ? 'Sign in or save account to view replays' : 'Войдите или сохраните аккаунт для просмотра архива' }}</router-link>
           <!-- Блок анализа партии -->
-          <div class="analysis-box">
+          <div v-if="canViewArchive" class="analysis-box">
             <div class="analysis-text">
               <h4>{{ i18n.locale === 'en' ? 'Game Analysis' : 'Анализ партии' }}</h4>
               <p class="dim small-hint">
@@ -1351,6 +1355,7 @@ function resultHeadline(): string {
     <div class="panel game-loading-panel">
       <h2>{{ error || (i18n.locale === 'en' ? `Connecting to game #${gameId}…` : `Подключение к партии #${gameId}…`) }}</h2>
       <p class="hint">{{ i18n.locale === 'en' ? (error ? 'Check the link or return to the tables.' : 'Waiting for the server. If it takes too long, try again or return to the tables.') : (error ? 'Проверьте ссылку или вернитесь к списку столов.' : 'Ожидаем ответ сервера. Если ожидание затянулось, повторите попытку или вернитесь к столам.') }}</p>
+      <router-link v-if="error && !canViewArchive" class="button small" :to="archiveLogin">{{ i18n.locale === 'en' ? 'Open archive after signing in' : 'Войти для просмотра архива' }}</router-link>
       <router-link class="button ghost small" to="/">{{ i18n.locale === 'en' ? 'Tables' : 'К столам' }}</router-link>
       <button class="brass small" @click="requestWatch(3)">
         <AppIcon name="refresh" :size="14" /> {{ i18n.locale === 'en' ? 'Try again' : 'Повторить' }}
@@ -1360,6 +1365,16 @@ function resultHeadline(): string {
 </template>
 
 <style scoped>
+@media (min-width: 1025px) {
+  .game-topbar, .game-topbar-actions { flex-direction: column; align-items: stretch; }
+  .game-topbar-actions button { width: 100%; }
+  .team-board-wrapper { max-width: min(100%, calc(100dvh - 145px)); }
+}
+@media (max-width: 1024px) {
+  .game-sidebar { display: contents !important; }
+  .game-topbar { grid-row: 1; }
+}
+
 .rematch-invite { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:14px; margin-bottom:12px; }
 .pacing-explanation { margin: 0 0 12px; color: var(--text-muted, #959595); font-size: 0.9rem; }
 .board-status { white-space: normal; text-align: center; font-size: 0.75rem; max-width: 220px; }
@@ -1527,7 +1542,7 @@ function resultHeadline(): string {
 /* ================= 2x2 ОДНА ДОСКА ================= */
 .team-board-wrapper {
   width: 100%;
-  max-width: min(100%, calc(100dvh - 195px));
+  max-width: min(100%, calc(100dvh - 145px));
   margin: 0 auto;
   display: flex;
   flex-direction: column;

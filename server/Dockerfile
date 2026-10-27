@@ -1,4 +1,13 @@
-FROM node:22-alpine
+FROM node:22-alpine AS profile-client
+WORKDIR /app
+COPY shared ./shared
+RUN cd shared && npm install && npm run build
+COPY client/package.json ./client/
+RUN cd client && npm install
+COPY client ./client
+RUN cd client && npm run build
+
+FROM node:22-alpine AS backend-build
 WORKDIR /app
 
 COPY shared ./shared
@@ -17,15 +26,17 @@ FROM node:22-alpine
 WORKDIR /app/server
 ENV NODE_ENV=production
 
-COPY --from=0 /app/shared /app/shared
+COPY --from=backend-build /app/shared /app/shared
 COPY server/package.json ./
 RUN npm install --omit=dev
 
 # Копируем уже сгенерированный Prisma Client и query engine из build-стадии
-COPY --from=0 /app/server/node_modules/.prisma ./node_modules/.prisma
-COPY --from=0 /app/server/node_modules/@prisma ./node_modules/@prisma
+COPY --from=backend-build /app/server/node_modules/.prisma ./node_modules/.prisma
+COPY --from=backend-build /app/server/node_modules/@prisma ./node_modules/@prisma
 COPY server/prisma ./prisma
-COPY --from=0 /app/server/dist ./dist
+COPY --from=backend-build /app/server/dist ./dist
+
+COPY --from=profile-client /app/client/dist /app/client/dist
 
 EXPOSE 4000
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]

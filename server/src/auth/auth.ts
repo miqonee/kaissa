@@ -12,6 +12,8 @@ import {
 import { env } from "../env.js";
 import { prisma } from "../prisma.js";
 
+import { touchGuest } from './guestCleanup.js';
+
 const COOKIE_NAME = "kaissa_token";
 const TOKEN_TTL_S = 60 * 60 * 24 * 30;
 const cookieOptions = {
@@ -248,7 +250,9 @@ export async function currentUser(req: Request) {
     where: { id: p.uid },
     include: { modeRatings: true },
   });
-  return user && user.sessionVersion === p.sv ? user : null;
+  if (!user || user.sessionVersion !== p.sv) return null;
+  await touchGuest(user);
+  return user;
 }
 export async function requireAuth(
   req: Request,
@@ -264,6 +268,16 @@ export async function requireAuth(
   } catch (e) {
     next(e);
   }
+}
+export async function requireRegistered(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const user = await currentUser(req);
+    if (!user || user.isGuest) {
+      res.status(user ? 403 : 401).json({ error: 'Архив доступен зарегистрированным пользователям' });
+      return;
+    }
+    next();
+  } catch (e) { next(e); }
 }
 export function toPublic(user: {
   id: number;

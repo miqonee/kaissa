@@ -132,16 +132,7 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
   const today = formatW3CDate(new Date());
 
   // Получаем динамические даты и список активных игроков параллельно
-  const [latestGame, latestRating, activePlayers] = await Promise.all([
-    typeof prisma.game?.findFirst === 'function'
-      ? prisma.game
-          .findFirst({
-            where: { status: { in: ['finished', 'abandoned'] } },
-            orderBy: { endedAt: 'desc' },
-            select: { endedAt: true, startedAt: true },
-          })
-          .catch(() => null)
-      : Promise.resolve(null),
+  const [latestRating, activePlayers] = await Promise.all([
     typeof prisma.ratingHistory?.findFirst === 'function'
       ? prisma.ratingHistory
           .findFirst({
@@ -155,7 +146,6 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
       : Promise.resolve([]),
   ]);
 
-  const historyLastmod = formatW3CDate(latestGame?.endedAt || latestGame?.startedAt || today);
   const leaderboardLastmod = formatW3CDate(latestRating?.createdAt || today);
 
   const makeAlternates = (loc: string): SitemapAlternateLink[] => [
@@ -180,14 +170,6 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
       changefreq: 'hourly',
       priority: 0.8,
       alternates: makeAlternates(`${baseUrl}/leaderboard`),
-    },
-    // Архив партий: ежедневные обновления
-    {
-      loc: `${baseUrl}/history`,
-      lastmod: historyLastmod,
-      changefreq: 'daily',
-      priority: 0.7,
-      alternates: makeAlternates(`${baseUrl}/history`),
     },
     { loc: `${baseUrl}/rules/crazyhouse`, changefreq: 'weekly', priority: 0.9, alternates: makeAlternates(`${baseUrl}/rules/crazyhouse`) },
     // Правила и информация о платформе

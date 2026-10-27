@@ -54,9 +54,10 @@ async function playAsGuest() {
         <p>{{ i18n.t.footer.brandDesc }}</p>
       </div>
       <p v-if="auth.user?.isGuest" class="dim">{{ i18n.locale === 'en' ? 'Choose a name and password to keep this guest’s games. Signing into another account does not merge histories.' : 'Ник и пароль сохранят партии этого гостя. Вход в другой аккаунт не объединяет истории.' }}</p>
+      <p v-if="route.query.redirect === '/history'" class="dim">{{ i18n.locale === 'en' ? 'Sign in or save your guest account to open the game archive.' : 'Войдите или сохраните гостевой аккаунт, чтобы открыть архив партий.' }}</p>
       <form @submit.prevent="submit">
         <div class="form-row">
-          <label class="field-label" for="username">{{ i18n.t.login.usernameLabel }}</label>
+          <label class="field-label" for="username">{{ auth.user?.isGuest && mode === 'register' ? (i18n.locale === 'en' ? 'Choose a new username' : 'Выберите новый ник') : i18n.t.login.usernameLabel }}</label>
           <input id="username" v-model="username" autocomplete="username" :placeholder="i18n.locale === 'en' ? 'e.g. fischer' : 'например, kasparov'" required />
         </div>
         <div class="form-row">

@@ -92,7 +92,7 @@ function submit() {
               :key="info.mode"
               class="mode-card"
               :class="{ active: selectedMode === info.mode }"
-
+              @click="selectedMode = info.mode"
             >
               <label class="mode-card-head">
                 <input v-model="selectedMode" type="radio" name="game-mode" :value="info.mode" :aria-label="modeLabel(info.mode, i18n.locale)" />
@@ -199,7 +199,18 @@ function submit() {
 
 <style scoped>
 .mode-card-head { cursor:pointer; }
-.mode-card input[type="radio"] { width:16px; height:16px; accent-color:var(--accent); flex:0 0 auto; }
+/* Keep native keyboard selection and screen-reader state without a visible radio. */
+.mode-card input[type="radio"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 .mode-card:focus-within { outline:2px solid var(--accent); outline-offset:2px; }
 .create-modal {
   max-width: 620px;
@@ -243,6 +254,7 @@ function submit() {
 }
 
 .mode-card {
+  position: relative;
   border: 1.5px solid var(--line-2);
   border-radius: var(--r-m);
   padding: 12px 14px;

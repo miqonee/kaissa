@@ -52,7 +52,7 @@ for (const [route, variants] of Object.entries(content))
     );
     assert(
       html.includes(
-        `name="robots" content="${route === "/login" ? "noindex, follow" : "index, follow"}"`,
+        `name="robots" content="${["/login", "/history"].includes(route) ? "noindex, follow" : "index, follow"}"`,
       ),
       `${file}: robots`,
     );

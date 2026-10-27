@@ -113,7 +113,7 @@ function render(page, route, locale) {
   setMeta(
     "name",
     "robots",
-    route === "/login" ? "noindex, follow" : "index, follow",
+    ["/login", "/history"].includes(route) ? "noindex, follow" : "index, follow",
   );
   setMeta(
     "name",

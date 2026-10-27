@@ -288,7 +288,7 @@ try {
   assert.equal(profile.body.mode, "bughouse");
   assert.equal(profile.body.ratingHistory.length, 0);
   const archive = await request(
-    `/api/games/archive?mode=team&player=${prefix}&kind=rated`,
+    `/api/games/archive?mode=team&player=${prefix}&kind=rated`, undefined, registered.cookie,
   );
   assert.equal(archive.status, 200);
   assert(archive.body.games.some((g) => g.id === rated.id));
@@ -318,7 +318,7 @@ try {
     },
   });
   const draws = await request(
-    `/api/games/archive?result=draw&player=${users[0].username}`,
+    `/api/games/archive?result=draw&player=${users[0].username}`, undefined, registered.cookie,
   );
   assert.equal(
     draws.body.games.find((g) => g.id === oldDraw.id)?.result,
@@ -327,7 +327,7 @@ try {
   const oldRow = await db.game.findUniqueOrThrow({ where: { id: oldDraw.id } });
   assert.equal(oldRow.result, "*");
   console.log(
-    "OK: public archive, mode/player/rating filters, leaderboard and profile; legacy draws normalized without rewriting history",
+    "OK: registered archive, mode/player/rating filters, leaderboard and profile; legacy draws normalized without rewriting history",
   );
 } finally {
   for (const s of sockets) s.disconnect();

@@ -1,8 +1,9 @@
-import { GAME_MODES, normalizedResult, PROVISIONAL_GAMES, type GameMode } from 'shared';
+import { leaderboard } from '../ratings/leaderboard.js';
+import { GAME_MODES, normalizedResult, type GameMode } from 'shared';
 import type { Prisma } from '@prisma/client';
 import { asyncRoute } from '../http/asyncRoute.js';
 import { Router } from 'express';
-import { currentUser, requireAuth, toPublic } from '../auth/auth.js';
+import { currentUser, requireAuth, requireRegistered, toPublic } from '../auth/auth.js';
 import { prisma } from '../prisma.js';
 import { gamesManager, lobbies } from '../state.js';
 import { presence } from '../socket/presence.js';
@@ -16,13 +17,8 @@ function selectedMode(value: unknown): GameMode {
   return GAME_MODES.includes(value as GameMode) ? value as GameMode : 'team';
 }
 usersRouter.get('/leaderboard', asyncRoute(async (req, res) => {
-  const mode = selectedMode(req.query.mode);
-  const rows = await prisma.modeRating.findMany({
-    where: { mode, user: { isBot: false, isGuest: false }, OR: [{ wins: { gt: 0 } }, { losses: { gt: 0 } }, { draws: { gt: 0 } }] },
-    orderBy: [{ rating: 'desc' }, { userId: 'asc' }], take: 50, include: { user: true },
-  });
-  res.json({ mode, leaderboard: rows.map<LeaderboardRow>(r => ({ userId: r.userId, username: r.user.username, rating: r.rating,
-    wins: r.wins, losses: r.losses, draws: r.draws, provisional: r.wins + r.losses + r.draws < PROVISIONAL_GAMES })) });
+  const mode = req.query.mode === 'all' ? 'all' : selectedMode(req.query.mode);
+  res.json({ mode, leaderboard: await leaderboard(mode) });
 }));
 usersRouter.get('/search', asyncRoute(async (req, res) => {
   const q = String(req.query.q ?? '').trim().slice(0, 30);
@@ -34,9 +30,10 @@ usersRouter.get('/:username', asyncRoute(async (req, res) => {
   const mode = selectedMode(req.query.mode);
   const user = await prisma.user.findUnique({ where: { username: String(req.params.username) }, include: { modeRatings: true } });
   if (!user) return void res.status(404).json({ error: 'Игрок не найден' });
+  const viewer = await currentUser(req);
   const [history, games] = await Promise.all([
     prisma.ratingHistory.findMany({ where: { userId: user.id, mode }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 100 }),
-    prisma.game.findMany({ where: { mode, participants: { some: { userId: user.id } } }, orderBy: { id: 'desc' }, take: 10, include: { participants: { include: { user: true } } } }),
+    viewer && !viewer.isGuest ? prisma.game.findMany({ where: { mode, participants: { some: { userId: user.id } } }, orderBy: { id: 'desc' }, take: 10, include: { participants: { include: { user: true } } } }) : Promise.resolve([]),
   ]);
   const payload: ProfilePayload = { user: toPublic(user), mode, ratingHistory: history.reverse().map(h => ({ at: h.createdAt.toISOString(), rating: h.value })), recentGames: games.map(dbGameToSummary) };
   res.json(payload);
@@ -64,8 +61,8 @@ async function listGames(req: import('express').Request, res: import('express').
   const page = games.slice(0, 30);
   res.json({ games: page.map(dbGameToSummary), nextCursor: games.length > 30 ? page[page.length - 1].id : null });
 }
-gamesRouter.get('/mine', requireAuth, asyncRoute(async (req, res) => { await listGames(req, res, true); }));
-gamesRouter.get('/archive', asyncRoute(async (req, res) => { await listGames(req, res, false); }));
+gamesRouter.get('/mine', requireRegistered, asyncRoute(async (req, res) => { await listGames(req, res, true); }));
+gamesRouter.get('/archive', requireRegistered, asyncRoute(async (req, res) => { await listGames(req, res, false); }));
 
 async function getPgnData(id: number): Promise<{ game: PgnGame; moves: PgnMove[]; mode: string } | null> {
   const game = await prisma.game.findUnique({
@@ -149,7 +146,7 @@ async function getPgnData(id: number): Promise<{ game: PgnGame; moves: PgnMove[]
 }
 
 /** PGN партии: скачивание/анализ во внешних движках */
-gamesRouter.get('/:id/pgn', asyncRoute(async (req, res) => {
+gamesRouter.get('/:id/pgn', requireRegistered, asyncRoute(async (req, res) => {
   const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
   const data = await getPgnData(id);
@@ -175,7 +172,7 @@ gamesRouter.get('/:id/state', asyncRoute((req, res) => {
 }));
 
 /** Прокси для анализа на Lichess через их API https://lichess.org/api/import */
-gamesRouter.post('/:id/lichess-import', requireAuth, asyncRoute(async (req, res) => {
+gamesRouter.post('/:id/lichess-import', requireRegistered, asyncRoute(async (req, res) => {
   const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
   const data = await getPgnData(id);
@@ -213,7 +210,7 @@ gamesRouter.post('/:id/lichess-import', requireAuth, asyncRoute(async (req, res)
 }));
 
 /** Одна партия (для replay) */
-gamesRouter.get('/:id', asyncRoute(async (req, res) => {
+gamesRouter.get('/:id', requireRegistered, asyncRoute(async (req, res) => {
   const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
   const game = await prisma.game.findUnique({

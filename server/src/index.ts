@@ -6,15 +6,19 @@ import { Server as SocketServer } from 'socket.io';
 import { asyncRoute } from './http/asyncRoute.js';
 import { env } from './env.js';
 import { prisma } from './prisma.js';
+import { repairTeamRatings } from './ratings/repairTeam.js';
 import { register, login, logout, me, guest, claim } from './auth/auth.js';
 import { requireAuth } from './auth/auth.js';
 import { adminRouter, promoteConfiguredAdmins } from './admin/adminRouter.js';
 import { lobbyRouter } from './lobby/lobbyRouter.js';
 import { gamesRouter, usersRouter } from './users/usersRouter.js';
 import { registerSocketHandlers } from './socket/router.js';
-import { gamesManager } from './state.js';
+import { gamesManager, lobbies } from './state.js';
+import { cleanupExpiredGuests } from './auth/guestCleanup.js';
+import { presence } from './socket/presence.js';
 import { seedBots } from './ai/botsSeed.js';
 import { demoShowcase, cleanupPureBotGames } from './ai/demoShowcase.js';
+import { profilePages } from './seo/profilePage.js';
 import { seoRouter } from './seo/seoRouter.js';
 
 function createRateLimiter(windowMs: number, maxRequests: number, errorMsg: string) {
@@ -45,6 +49,8 @@ function createRateLimiter(windowMs: number, maxRequests: number, errorMsg: stri
 
 async function main(): Promise<void> {
   await prisma.$connect();
+  const ratingRepair = await repairTeamRatings(true);
+  if (ratingRepair.status === 'applied') console.log(`[ratings] restored 2×2 continuity for ${ratingRepair.players.length} players`);
   await cleanupPureBotGames();
   await gamesManager.cleanupOnBoot();
   await seedBots();
@@ -76,6 +82,7 @@ async function main(): Promise<void> {
 
   // SEO (sitemap.xml, robots.txt)
   app.use(seoRouter);
+  app.use(profilePages);
 
   app.post('/api/auth/guest', authLimiter, asyncRoute(guest));
   app.post('/api/auth/claim', authLimiter, asyncRoute(claim));
@@ -110,6 +117,10 @@ async function main(): Promise<void> {
     pingTimeout: 25_000,
   });
   registerSocketHandlers(io);
+  const cleanGuests = () => cleanupExpiredGuests([...presence.onlineUids(), ...lobbies.memberIds()])
+    .catch(error => console.error('[guest-cleanup]', error));
+  void cleanGuests();
+  setInterval(() => { void cleanGuests(); }, 24 * 60 * 60 * 1000).unref();
   if (env.demoEnabled) demoShowcase.start(gamesManager);
 
   httpServer.listen(env.port, '0.0.0.0', () => {

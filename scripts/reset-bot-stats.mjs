@@ -1,5 +1,5 @@
 // scripts/reset-bot-stats.mjs
-// Скрипт сброса всех партий, ходов и статистики ботов
+// Сброс статистики ботов и завершённых партий исключительно между ботами.
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 import { resolve } from 'path';
@@ -33,20 +33,16 @@ const BOT_NOMINALS = {
 };
 
 async function main() {
-  console.log('🔄 Сброс базы данных: партии, статистика и рейтинг ботов...');
+  console.log('🔄 Сброс статистики ботов; партии и рейтинги людей сохраняются...');
 
-  // 1. Очистка таблиц партий и истории
-  const delMoves = await prisma.gameMove.deleteMany({});
-  console.log(`- Удалено ходов: ${delMoves.count}`);
-
-  const delParticipants = await prisma.gameParticipant.deleteMany({});
-  console.log(`- Удалено участников партий: ${delParticipants.count}`);
-
-  const delHistory = await prisma.ratingHistory.deleteMany({});
-  console.log(`- Удалено записей истории рейтинга: ${delHistory.count}`);
-
-  const delGames = await prisma.game.deleteMany({});
-  console.log(`- Удалено партий: ${delGames.count}`);
+  // Human games, participants, moves and ratings must survive bot maintenance.
+  const delGames = await prisma.game.deleteMany({ where: {
+    status: { not: 'active' },
+    participants: { some: { user: { isBot: true } }, none: { user: { isBot: false } } },
+  } });
+  console.log(`- Удалено завершённых партий только между ботами: ${delGames.count}`);
+  const delHistory = await prisma.ratingHistory.deleteMany({ where: { user: { isBot: true } } });
+  console.log(`- Удалено записей рейтинга ботов: ${delHistory.count}`);
 
   // 2. Сброс статистики ботов
   const botUsers = await prisma.user.findMany({ where: { isBot: true } });
@@ -64,18 +60,6 @@ async function main() {
     });
     console.log(`- Сброшен бот: ${bot.username} (Elo: ${preset?.elo ?? 1200}, Ур: ${preset?.level ?? 4})`);
   }
-
-  // 3. Сброс счетчиков побед/поражений обычных пользователей (если они играли только в тестовые партии)
-  const resetHumans = await prisma.user.updateMany({
-    where: { isBot: false },
-    data: {
-      wins: 0,
-      losses: 0,
-      draws: 0,
-      rating: 1200,
-    },
-  });
-  console.log(`- Сброшена статистика пользователей: ${resetHumans.count}`);
 
   console.log('✅ База данных и статистика ботов успешно очищены!');
   await prisma.$disconnect();

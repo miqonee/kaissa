@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { nextTick } from 'vue';
+import { useI18n } from './stores/i18n';
 import { useAuthStore } from './stores/auth';
 
 export const YANDEX_METRIKA_ID = 113120948;
@@ -107,13 +108,17 @@ export const router = createRouter({
   ],
 });
 
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
+  const i18n = useI18n();
+  if (from.name && i18n.locale === 'en' && !to.query.lang) return { path: to.path, query: { ...to.query, lang: 'en' }, hash: to.hash, replace: true };
+  i18n.setLocale(to.query.lang === 'en' ? 'en' : 'ru', false);
   const auth = useAuthStore();
   if (!auth.checked) await auth.check();
   if (to.name === 'lobby' && !auth.user) {
     try { await auth.ensureGuest(); }
     catch { return { name: 'login', query: { redirect: to.fullPath, guestError: '1' } }; }
   }
+  if (to.name === 'history' && (!auth.user || auth.user.isGuest)) return { name: 'login', query: { redirect: to.fullPath, ...(auth.user?.isGuest ? { claim: '1' } : {}) } };
   const requiresAuth = to.name === 'lobby' || to.name === 'admin';
   if (requiresAuth && !auth.user) {
     return { name: 'login', query: { redirect: to.fullPath } };

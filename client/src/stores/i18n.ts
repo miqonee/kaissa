@@ -20,14 +20,7 @@ export const useI18nStore = defineStore('i18n', () => {
       }
     } catch {}
 
-    // 2. Сохранённое предпочтение в localStorage
-    const saved = localStorage.getItem('kaissa_lang') as Locale | null;
-    if (saved === 'ru' || saved === 'en') return saved;
-
-    // 3. Язык браузера
-    if (navigator.language && !navigator.language.toLowerCase().startsWith('ru')) {
-      return 'en';
-    }
+    // Bare URLs are always Russian, matching the prerendered HTML and canonical.
     return 'ru';
   }
 

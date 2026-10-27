@@ -20,6 +20,7 @@ model User {
   isAdmin      Boolean  @default(false)
   isBot        Boolean  @default(false)
   botLevel     Int?
+  lastSeenAt   DateTime @default(now())
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -30,6 +31,7 @@ model User {
 
   @@index([rating])
   @@index([isBot])
+  @@index([isGuest, lastSeenAt])
 }
 
 model RatingHistory {
@@ -55,6 +57,10 @@ model ModeRating {
   trainingWins Int @default(0)
   trainingLosses Int @default(0)
   trainingDraws Int @default(0)
+  carriedWins Int @default(0)
+  carriedLosses Int @default(0)
+  carriedDraws Int @default(0)
+  carriedRating Int?
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, mode])
@@ -118,4 +124,11 @@ model GameMove {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([gameId, boardIndex, ply])
+}
+
+// One-time data repairs with original values for audit/backup.
+model DataPatch {
+  key String @id
+  appliedAt DateTime @default(now())
+  details Json
 }

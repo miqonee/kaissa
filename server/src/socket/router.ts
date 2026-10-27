@@ -254,6 +254,11 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
         socket.emit('game:state', gamesManager.toGameState(g));
         return;
       }
+      const archiveViewer = ctx ? await prisma.user.findUnique({ where: { id: ctx.uid } }) : null;
+      if (!archiveViewer || archiveViewer.isGuest) {
+        socket.emit('game:unavailable', { gameId: id, error: 'Архив доступен зарегистрированным пользователям' });
+        return;
+      }
       const dbGame = await prisma.game.findUnique({
         where: { id },
         include: { participants: { include: { user: true } }, moves: { orderBy: [{ boardIndex: 'asc' }, { ply: 'asc' }] } },

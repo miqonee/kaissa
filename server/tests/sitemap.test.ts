@@ -78,7 +78,7 @@ describe('SEO & Sitemap Specification', () => {
 
       expect(xml).toContain('<loc>https://duochess.ru/</loc>');
       expect(xml).toContain('<loc>https://duochess.ru/leaderboard</loc>');
-      expect(xml).toContain('<loc>https://duochess.ru/history</loc>');
+      expect(xml).not.toContain('<loc>https://duochess.ru/history</loc>');
       expect(xml).not.toContain('<loc>https://duochess.ru/login</loc>');
       expect(xml).toContain('<loc>https://duochess.ru/rules/crazyhouse</loc>');
       expect(xml).toContain('href="https://duochess.ru/rules/crazyhouse?lang=en"');
@@ -86,7 +86,7 @@ describe('SEO & Sitemap Specification', () => {
       // Check priorities
       expect(xml).toContain('<priority>1.0</priority>'); // Home
       expect(xml).toContain('<priority>0.8</priority>'); // Leaderboard
-      expect(xml).toContain('<priority>0.7</priority>'); // History
+      expect(xml).not.toContain('<priority>0.7</priority>'); // Restricted archive is excluded
       expect(xml).not.toContain('<priority>0.5</priority>'); // Login is noindex.
 
       // Check changefreqs

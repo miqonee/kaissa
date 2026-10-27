@@ -1,3 +1,4 @@
+import { touchGuest } from '../auth/guestCleanup.js';
 import type { Socket } from 'socket.io';
 import { verifyToken } from '../auth/auth.js';
 import { prisma } from '../prisma.js';
@@ -9,6 +10,7 @@ export async function socketAuth(socket: Socket): Promise<AuthedSocket | null> {
   const p = token ? verifyToken(token) : null;
   if (!p) return null;
   const user = await prisma.user.findUnique({ where: { id: p.uid } });
+  if (user && user.sessionVersion === p.sv) await touchGuest(user);
   return user && user.sessionVersion === p.sv ? { uid: user.id, username: user.username, sv: p.sv } : null;
 }
 export function parseCookie(header: string, name: string): string | null {

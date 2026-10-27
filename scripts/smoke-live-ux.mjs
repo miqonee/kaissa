@@ -169,7 +169,7 @@ try {
     await db.ratingHistory.count({ where: { gameId: second.gameId } }),
     0,
   );
-  const archived = await api(`/api/games/${second.gameId}`);
+  const archived = await api(`/api/games/${second.gameId}`, undefined, claimed.cookie);
   assert.equal(
     archived.game.participants.find((p) => p.userId === guest.user.id).isGuest,
     true,

@@ -166,8 +166,8 @@ onBeforeUnmount(() => {
       <p>
         {{
           en
-            ? "Sign in to see your games. The club archive is open to everyone."
-            : "Войдите, чтобы увидеть свои партии. Архив клуба доступен всем."
+            ? "Sign in to see your games. The club archive is available to registered players."
+            : "Войдите, чтобы увидеть свои партии. Архив клуба доступен зарегистрированным игрокам."
         }}
       </p>
       <router-link

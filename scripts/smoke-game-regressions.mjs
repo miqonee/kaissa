@@ -51,7 +51,7 @@ try {
     const invited=event(sockets[1],'game:rematch',s=>s.gameId===gameId);
     const rematch=await api(`/api/games/${gameId}/rematch`,{},cookie(players[0]));assert.equal(rematch.status,200);await invited;
     const spectatorBarrier=event(viewer,'game:state',s=>s.gameId===gameId);viewer.emit('game:watch',gameId);await spectatorBarrier;assert.equal(viewerRematches,0);
-    const archive=await api(`/api/games/${gameId}`);assert.equal(archive.body.game.status,'finished');assert(archive.body.moves.length>=3);
+    const archive=await api(`/api/games/${gameId}`,undefined,cookie(players[0]));assert.equal(archive.body.game.status,'finished');assert(archive.body.moves.length>=3);
     for(const s of [...sockets,viewer])s.disconnect();
     console.log(`OK: ${mode}: ready/start, turns, illegal move rejection, reserves, result, replay data, participant-only rematch (game ${gameId})`);
   }

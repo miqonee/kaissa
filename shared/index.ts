@@ -325,6 +325,13 @@ export interface ProfilePayload {
 }
 
 export interface LeaderboardRow {
+  hasRating?: boolean;
+  unarchivedGames: number;
+  totalGames: number;
+  ratedGames: number;
+  trainingGames: number;
+  legacyGames: number;
+  legacyRating: number;
   provisional?: boolean;
   userId: number;
   username: string;
@@ -344,6 +351,10 @@ export const START_RATING = 1200;
 export const PROVISIONAL_GAMES = 10;
 export type RatingKind = 'rated' | 'bots' | 'guest';
 export interface ModeRating {
+  carriedRating?: number | null;
+  carriedWins?: number;
+  carriedLosses?: number;
+  carriedDraws?: number;
   mode: GameMode;
   rating: number;
   wins: number;

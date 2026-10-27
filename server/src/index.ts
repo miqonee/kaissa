@@ -6,7 +6,6 @@ import { Server as SocketServer } from 'socket.io';
 import { asyncRoute } from './http/asyncRoute.js';
 import { env } from './env.js';
 import { prisma } from './prisma.js';
-import { repairTeamRatings } from './ratings/repairTeam.js';
 import { register, login, logout, me, guest, claim } from './auth/auth.js';
 import { requireAuth } from './auth/auth.js';
 import { adminRouter, promoteConfiguredAdmins } from './admin/adminRouter.js';
@@ -49,8 +48,6 @@ function createRateLimiter(windowMs: number, maxRequests: number, errorMsg: stri
 
 async function main(): Promise<void> {
   await prisma.$connect();
-  const ratingRepair = await repairTeamRatings(true);
-  if (ratingRepair.status === 'applied') console.log(`[ratings] restored 2×2 continuity for ${ratingRepair.players.length} players`);
   await cleanupPureBotGames();
   await gamesManager.cleanupOnBoot();
   await seedBots();

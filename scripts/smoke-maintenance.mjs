@@ -6,6 +6,8 @@ import { execFileSync } from 'node:child_process';
 import { PrismaClient } from '@prisma/client';
 import { cleanupExpiredGuests } from '../server/src/auth/guestCleanup.ts';
 import { leaderboard } from '../server/src/ratings/leaderboard.ts';
+import { loadPlayerRatings, saveGameResult } from '../server/src/ratings/service.ts';
+import { eloDelta } from 'shared';
 const url = new URL(process.env.DATABASE_URL);
 assert(['localhost', '127.0.0.1'].includes(url.hostname) && url.pathname.includes('test'));
 const base = process.env.KAISSA_TEST_BASE_URL;
@@ -119,6 +121,24 @@ try {
   assert.equal(await db.ratingHistory.count({ where: { userId: player.id } }), 1);
   assert.equal(await db.gameParticipant.count({ where: { gameId: mixedGame.id } }), 2);
   console.log('OK: bot reset preserves human/mixed games, lifetime counters and rating history');
+  const teammates = await Promise.all([2, 3, 4].map(n => user(`continuity_${n}`)));
+  const prepared = await loadPlayerRatings([carried, ...teammates].map(u => ({ uid: u.id, username: u.username, rating: u.rating, isBot: false, isGuest: false })), 'team');
+  assert.equal(prepared[0].rating, 1370);
+  const participants = prepared.map((p, index) => ({ ...p, team: index < 2 ? 1 : 2, ratingBefore: p.rating, ratingAfter: null }));
+  const next = await db.game.create({ data: { mode: 'team', ratingKind: 'rated', participants: { create: participants.map(p => ({ userId: p.uid, team: p.team, color: p.team === 1 ? 'w' : 'b', boardIndex: 0, ratingBefore: p.ratingBefore })) } } });
+  games.push(next);
+  const auditCount = await db.dataPatch.count();
+  const nextResult = { id: next.id, mode: 'team', ratingKind: 'rated', participants };
+  await saveGameResult(nextResult, '1-0', 'resign');
+  await saveGameResult(nextResult, '1-0', 'resign');
+  const continued = await db.modeRating.findUniqueOrThrow({ where: { userId_mode: { userId: carried.id, mode: 'team' } } });
+  assert.equal(continued.rating, 1370 + eloDelta(1370, 1200, 1));
+  assert.deepEqual([continued.carriedRating, continued.carriedWins, continued.carriedLosses, continued.wins], [1300, 7, 7, 1]);
+  assert.equal((await leaderboard('team')).find(r => r.userId === carried.id).totalGames, 15);
+  assert.equal(await db.ratingHistory.count({ where: { userId: carried.id, gameId: next.id } }), 1);
+  assert.equal(await db.dataPatch.count(), auditCount);
+  console.log('OK: restored Elo continues normally, inherited totals persist, duplicate results do not count twice, repair audit untouched');
+
 
 } finally {
   await db.game.deleteMany({ where: { id: { in: games.map(g => g.id) } } });

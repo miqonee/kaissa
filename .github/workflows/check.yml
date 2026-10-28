@@ -34,7 +34,6 @@ jobs:
       - run: npm run build
       - run: npm run check:replay -w client && npm run check:seo -w client && npm run check:prerender -w client
       - run: npm run migrate:deploy -w server
-      - run: node --import tsx scripts/smoke-team-rating-repair.mjs
       - name: Integration tests
         run: |
           NODE_ENV=test node server/dist/index.js > /tmp/kaissa-server.log 2>&1 &

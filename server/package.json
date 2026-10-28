@@ -11,8 +11,7 @@
     "test": "vitest run",
     "sitemap:generate": "tsx src/seo/generateStatic.ts",
     "migrate:deploy": "prisma migrate deploy",
-    "generate": "prisma generate",
-    "ratings:repair": "node dist/ratings/repairTeamCli.js"
+    "generate": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^6.2.0",

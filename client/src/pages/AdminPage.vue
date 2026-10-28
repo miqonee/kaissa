@@ -4,6 +4,8 @@ import { fmtDuration, type AdminUserRow, type PlatformMetrics } from 'shared';
 import { api } from '../api/rest';
 import { useAuthStore } from '../stores/auth';
 import { useI18n } from '../stores/i18n';
+import SortableHeader from '../components/SortableHeader.vue';
+import { useTableSort } from '../composables/useTableSort';
 import AppIcon from '../components/AppIcon.vue';
 import { usePageSeo } from '../composables/useSeo';
 
@@ -53,6 +55,28 @@ const displayedPersonalityMetrics = computed(() => {
   return currentPersonalityMetrics.value;
 });
 
+const userSort = useTableSort(users, {
+  id: u => u.id, online: u => u.online, username: u => u.username,
+  rating: u => u.rating, results: u => [u.wins, u.losses], games: u => u.games,
+  createdAt: u => Date.parse(u.createdAt), isAdmin: u => u.isAdmin,
+}, 'id');
+const levelSort = useTableSort(displayedLevelMetrics, {
+  level: b => b.level, elo: b => b.elo, games: b => b.totalGames,
+  results: b => [b.wins, b.losses, b.draws], score: b => b.winRate,
+  endings: b => [b.checkmateCount, b.timeoutCount, b.stalemateCount], moves: b => b.avgMoves,
+}, 'level');
+const personalitySort = useTableSort(displayedPersonalityMetrics, {
+  name: p => p.name, games: p => p.totalGames,
+  results: p => [p.wins, p.losses, p.draws], score: p => p.winRate,
+  endings: p => [p.checkmateCount, p.timeoutCount, p.stalemateCount], moves: p => p.avgMoves,
+}, 'name');
+const userColumns = [
+  ['id', 'ID'], ['online', 'Статус'], ['username', 'Игрок'], ['rating', 'Рейтинг'],
+  ['results', 'В / П'], ['games', 'Партий'], ['createdAt', 'Регистрация'], ['isAdmin', 'Роль'],
+];
+const metricColumns = [['games', 'Игр'], ['results', 'В / П / Н'], ['score', 'Очки'], ['endings', 'М / Ф / П'], ['moves', 'Ср. ходов']];
+const metricTitles: Record<string, string> = { results: 'Сортировка по победам, затем поражениям и ничьим', endings: 'Сортировка по матам, затем флагам и патам', score: 'Очки = (победы + 0.5 × ничьи) / игры', moves: 'Среднее число полуходов в партии' };
+
 const topLevel = computed(() => {
   const list = currentLevelMetrics.value.filter((l) => l.totalGames >= 1 && l.winRate > 0);
   if (!list.length) return null;
@@ -95,7 +119,7 @@ async function loadData() {
 onMounted(loadData);
 
 async function deleteUser(u: AdminUserRow) {
-  if (!confirm(`Вы действительно хотите удалить аккаунт «${u.username}» и ВСЕ его партии?`)) {
+  if (!confirm(`Вы действительно хотите удалить аккаунт «${u.username}» и ВСЕ его партии? Они исчезнут из истории всех участников.`)) {
     return;
   }
   busyId.value = u.id;
@@ -323,18 +347,14 @@ const durationSubtext = computed(() => {
             <table v-if="displayedLevelMetrics.length" class="club">
               <thead>
                 <tr>
-                  <th>Уровень</th>
-                  <th>Номинал Elo</th>
-                  <th>Игр</th>
-                  <th>В / П / Н</th>
-                  <th title="Очки = (победы + 0.5 × ничьи) / игры">Очки</th>
-                  <th title="Мат / Флаг / Пат">М / Ф / П</th>
-                  <th title="Среднее число полуходов в партии">Ср. ходов</th>
+                  <SortableHeader :direction="levelSort.sortDirection('level')" @sort="levelSort.sortBy('level')">Уровень</SortableHeader>
+                  <SortableHeader :direction="levelSort.sortDirection('elo')" @sort="levelSort.sortBy('elo')">Номинал Elo</SortableHeader>
+                  <SortableHeader v-for="[key, label] in metricColumns" :key="key" :title="metricTitles[key]" :direction="levelSort.sortDirection(key)" @sort="levelSort.sortBy(key, 'descending')">{{ label }}</SortableHeader>
                 </tr>
               </thead>
               <tbody>
                 <tr
-                  v-for="b in displayedLevelMetrics"
+                  v-for="b in levelSort.sortedRows.value"
                   :key="b.level"
                   :class="{ 'highlight-top': topLevel?.level === b.level && b.winRate > 0 }"
                 >
@@ -375,17 +395,13 @@ const durationSubtext = computed(() => {
             <table v-if="displayedPersonalityMetrics.length" class="club">
               <thead>
                 <tr>
-                  <th>Персоналия</th>
-                  <th>Игр</th>
-                  <th>В / П / Н</th>
-                  <th title="Очки = (победы + 0.5 × ничьи) / игры">Очки</th>
-                  <th title="Мат / Флаг / Пат">М / Ф / П</th>
-                  <th title="Среднее число полуходов в партии">Ср. ходов</th>
+                  <SortableHeader :direction="personalitySort.sortDirection('name')" @sort="personalitySort.sortBy('name')">Персоналия</SortableHeader>
+                  <SortableHeader v-for="[key, label] in metricColumns" :key="key" :title="metricTitles[key]" :direction="personalitySort.sortDirection(key)" @sort="personalitySort.sortBy(key, 'descending')">{{ label }}</SortableHeader>
                 </tr>
               </thead>
               <tbody>
                 <tr
-                  v-for="p in displayedPersonalityMetrics"
+                  v-for="p in personalitySort.sortedRows.value"
                   :key="p.username"
                   :class="{ 'highlight-top': topPersonality?.username === p.username && p.winRate > 0 }"
                 >
@@ -446,35 +462,29 @@ const durationSubtext = computed(() => {
         <table class="club">
           <thead>
             <tr>
-              <th style="width: 45px;">ID</th>
-              <th>Статус</th>
-              <th>Игрок</th>
-              <th>Рейтинг</th>
-              <th>В / П</th>
-              <th>Партий</th>
-              <th>Регистрация</th>
-              <th>Роль</th>
+              <SortableHeader v-for="[key, label] in userColumns" :key="key" :direction="userSort.sortDirection(key)" :title="key === 'results' ? 'Сортировка по победам, затем поражениям' : undefined" @sort="userSort.sortBy(key, ['username', 'id'].includes(key) ? 'ascending' : 'descending')">{{ label }}</SortableHeader>
               <th style="text-align: right;">Действия</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="u in users" :key="u.id" :class="{ 'is-me': u.id === auth.user?.id }">
+            <tr v-for="u in userSort.sortedRows.value" :key="u.id" :class="{ 'is-me': u.id === auth.user?.id }">
               <td class="mono dim">{{ u.id }}</td>
               <td>
                 <span class="dot" :class="{ on: u.online }" :title="u.online ? 'В сети' : 'Офлайн'"></span>
               </td>
               <td>
-                <strong class="player-name">{{ u.username }}</strong>
+                <router-link class="player-name" :to="`/players/${encodeURIComponent(u.username)}`">{{ u.username }}</router-link>
+                <span v-if="u.isBot || u.isGuest" class="badge dim">{{ u.isBot ? 'Бот' : 'Гость' }}</span>
                 <span v-if="u.id === auth.user?.id" class="badge dim">Вы</span>
               </td>
               <td class="mono" style="font-weight: 700;">{{ u.rating }}</td>
               <td class="mono dim">{{ u.wins }} / {{ u.losses }}</td>
-              <td class="mono dim">{{ u.games }}</td>
+              <td class="mono dim"><router-link :to="{ path: '/history', query: { playerId: u.id, player: u.username } }">{{ u.games }}</router-link></td>
               <td class="mono dim">{{ fmtDate(u.createdAt) }}</td>
               <td>
                 <button
                   class="small ghost"
-                  :disabled="busyId === u.id || u.id === auth.user?.id"
+                  :disabled="busyId !== null || u.id === auth.user?.id || u.isBot || u.isGuest"
                   @click="toggleAdmin(u)"
                   :title="u.isAdmin ? 'Снять права админа' : 'Сделать админом'"
                 >
@@ -486,7 +496,7 @@ const durationSubtext = computed(() => {
                 <div class="admin-actions">
                   <button
                     class="small ghost"
-                    :disabled="busyId === u.id"
+                    :disabled="busyId !== null"
                     @click="resetRating(u)"
                     title="Сбросить рейтинг на 1200"
                   >
@@ -496,7 +506,7 @@ const durationSubtext = computed(() => {
                   <button
                     v-if="u.id !== auth.user?.id"
                     class="small danger"
-                    :disabled="busyId === u.id"
+                    :disabled="busyId !== null"
                     @click="deleteUser(u)"
                     title="Удалить аккаунт и все партии"
                   >

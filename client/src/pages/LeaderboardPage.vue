@@ -5,11 +5,34 @@ import { api } from "../api/rest";
 import { usePageSeo } from "../composables/useSeo";
 import { useI18n } from "../stores/i18n";
 
+import SortableHeader from '../components/SortableHeader.vue';
+import { useTableSort } from '../composables/useTableSort';
+
 const i18n = useI18n();
 const en = computed(() => i18n.locale === "en");
 usePageSeo({ canonical: '/leaderboard' });
 const mode = ref<GameMode | "all">("all");
 const rows = ref<LeaderboardRow[]>([]);
+const rankedRows = computed(() => rows.value.map((row, index) => ({ ...row, rank: index + 1 })));
+const { sortedRows, sortBy, sortDirection, key: sortKey, direction } = useTableSort(rankedRows, {
+  rank: r => r.rank,
+  username: r => r.username,
+  rating: r => (r.hasRating || r.ratedGames) ? r.rating : null,
+  totalGames: r => r.totalGames,
+  wins: r => r.wins,
+  draws: r => r.draws,
+  losses: r => r.losses,
+}, 'rank');
+const columns = computed(() => [
+  { key: 'rank', label: '#', numeric: true },
+  { key: 'username', label: en.value ? 'Player' : 'Игрок', numeric: false },
+  ...(mode.value === 'all' ? [] : [{ key: 'rating', label: 'Elo', numeric: true }]),
+  { key: 'totalGames', label: en.value ? 'Games' : 'Партий', numeric: true },
+  { key: 'wins', label: en.value ? 'W' : 'Победы', numeric: true },
+  { key: 'draws', label: en.value ? 'D' : 'Ничьи', numeric: true },
+  { key: 'losses', label: en.value ? 'L' : 'Поражения', numeric: true },
+]);
+watch(mode, () => { if (mode.value === 'all' && sortKey.value === 'rating') { sortKey.value = 'rank'; direction.value = 'ascending'; } });
 const loading = ref(false);
 const error = ref("");
 let version = 0;
@@ -31,7 +54,7 @@ async function load() {
 watch(mode, load, { immediate: true });
 </script>
 <template>
-  <section class="panel">
+  <section class="panel leaderboard-panel">
     <div class="panel-head">
       <h1>{{ en ? "Player ratings" : "Рейтинг игроков" }}</h1>
     </div>
@@ -62,28 +85,20 @@ watch(mode, load, { immediate: true });
       <table class="club">
         <thead>
           <tr>
-            <th>#</th>
-            <th>{{ en ? "Player" : "Игрок" }}</th>
-            <th v-if="mode !== 'all'">Elo</th>
-            <th>{{ en ? "Total games" : "Всего партий" }}</th>
-            <th>{{ en ? "W" : "Победы" }}</th>
-            <th>{{ en ? "D" : "Ничьи" }}</th>
-            <th>{{ en ? "L" : "Поражения" }}</th>
+            <SortableHeader v-for="column in columns" :key="column.key" :numeric="column.numeric" :direction="sortDirection(column.key)" @sort="sortBy(column.key, column.numeric && column.key !== 'rank' ? 'descending' : 'ascending')">{{ column.label }}</SortableHeader>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(r, index) in rows" :key="r.userId">
-            <td>{{ index + 1 }}</td>
+          <tr v-for="r in sortedRows" :key="r.userId">
+            <td>{{ r.rank }}</td>
             <td>
-              <router-link :to="`/players/${r.username}?mode=${mode}`">{{
+              <router-link :to="`/players/${encodeURIComponent(r.username)}${mode === 'all' ? '' : `?mode=${mode}`}`">{{
                 r.username
               }}</router-link>
             </td>
-            <td v-if="mode !== 'all'">
+            <td v-if="mode !== 'all'" class="rating-cell">
               <strong>{{ (r.hasRating || r.ratedGames) ? r.rating : "—" }}</strong>
-              <span v-if="r.ratedGames && r.provisional" class="badge">{{
-                en ? "Preliminary" : "Предварительный"
-              }}</span>
+              <span v-if="r.ratedGames && r.provisional" class="provisional" :title="en ? 'Preliminary rating' : 'Предварительный рейтинг'" :aria-label="en ? 'Preliminary rating' : 'Предварительный рейтинг'">?</span>
             </td>
             <td><strong>{{ r.totalGames }}</strong></td>
             <td>{{ r.wins }}</td>
@@ -96,17 +111,16 @@ watch(mode, load, { immediate: true });
   </section>
 </template>
 <style scoped>
-.rating-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 16px; }
-h1 {
-  font-size: 22px;
-}
-.rating-rules {
-  padding: 0 16px 16px;
-}
-.rating-rules p {
-  font-size: 14px;
-}
-.table-wrap {
-  overflow-x: auto;
-}
+.rating-tabs { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px; }
+.rating-tabs button { flex: 1 1 auto; }
+h1 { font-size: 22px; }
+.leaderboard-panel .rating-rules { padding: 0 16px 16px; }
+.rating-rules p { margin: 0; font-size: 14px; color: var(--ink-2); }
+.table-wrap { overflow-x: auto; }
+table { min-width: 560px; }
+td { text-align: right; font-variant-numeric: tabular-nums; }
+td:nth-child(2) { text-align: left; overflow-wrap: anywhere; min-width: 140px; }
+.rating-cell { white-space: nowrap; }
+.provisional { margin-left: 4px; color: var(--ink-3); cursor: help; }
+@media (max-width: 560px) { .rating-tabs { display: grid; grid-template-columns: 1fr 1fr; } .rating-tabs button:first-child { grid-column: 1 / -1; } }
 </style>

@@ -4,10 +4,24 @@ import { api, ApiError } from "../api/rest";
 import { resetSocket } from "../api/socket";
 import { trackGoal } from "../utils/analytics";
 let guestJob: Promise<void> | null = null;
+const sessionChecks = new WeakMap<object, Promise<boolean>>();
 export const useAuthStore = defineStore("auth", {
-  state: () => ({ user: null as PublicUser | null, checked: false, revision: 0 }),
+  state: () => ({ user: null as PublicUser | null, checked: false, checking: false, revision: 0 }),
   actions: {
-    async check(): Promise<boolean> {
+    check(): Promise<boolean> {
+      const pending = sessionChecks.get(this);
+      if (pending) return pending;
+      this.checking = true;
+      const job = this.checkSession().finally(() => {
+        if (sessionChecks.get(this) === job) {
+          sessionChecks.delete(this);
+          this.checking = false;
+        }
+      });
+      sessionChecks.set(this, job);
+      return job;
+    },
+    async checkSession(): Promise<boolean> {
       const revision = ++this.revision;
       try {
         const { user } = await api.get<{ user: PublicUser }>("/api/auth/me");
@@ -58,17 +72,22 @@ export const useAuthStore = defineStore("auth", {
         password,
       });
       resetSocket();
+      sessionChecks.delete(this);
+      this.checking = false;
       ++this.revision;
       this.user = res.user;
       this.checked = true;
     },
     async register(username: string, password: string) {
+      if (!this.checked && !await this.check()) throw new ApiError("Не удалось проверить сессию. Попробуйте ещё раз");
       const url = this.user?.isGuest ? "/api/auth/claim" : "/api/auth/register";
       const res = await api.post<{ user: PublicUser }>(url, {
         username,
         password,
       });
       resetSocket();
+      sessionChecks.delete(this);
+      this.checking = false;
       ++this.revision;
       this.user = res.user;
       this.checked = true;

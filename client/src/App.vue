@@ -101,6 +101,7 @@ const connLabel = computed(() => {
               <AppIcon name="log-out" :size="18" />
             </button>
           </template>
+          <span v-else-if="auth.checking" class="header-control" role="status" :aria-label="i18n.locale === 'en' ? 'Checking session' : 'Проверка сессии'">…</span>
           <template v-else>
             <router-link to="/login" class="header-control login-header-btn"><span class="login-full">{{ i18n.locale === 'ru' ? 'Войти / Регистрация' : 'Sign In / Register' }}</span><span class="login-short">{{ i18n.locale === 'ru' ? 'Войти' : 'Sign in' }}</span></router-link>
           </template>

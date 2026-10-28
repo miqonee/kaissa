@@ -1,26 +1,22 @@
 <script setup lang="ts">
 import seoPages from '../content/seo-pages.json';
+import HomeLiveGames from '../components/HomeLiveGames.vue';
 import QuickPlayPanel from '../components/QuickPlayPanel.vue';
-import { useConnectionStore } from '../stores/connection';
 import { trackGoal } from '../utils/analytics';
 import { lobbyCapacity, GAME_MODES, modeLabel as sharedModeLabel } from 'shared';
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import type { LobbySummary, LiveGameInfo, GameMode, TimeControl, TeamMode } from 'shared';
+import type { LobbySummary, GameMode, TimeControl, TeamMode } from 'shared';
 import { getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
-import { getSocket, onSocketResync } from '../api/socket';
+import { useHomeFeed } from '../composables/useHomeFeed';
 import { api } from '../api/rest';
 import { useAuthStore } from '../stores/auth';
 import { useI18n } from '../stores/i18n';
-import ChessBoard from '../components/ChessBoard.vue';
 import CreateLobbyModal from '../components/CreateLobbyModal.vue';
 import AppIcon from '../components/AppIcon.vue';
-import BotHoverCard from '../components/BotHoverCard.vue';
 import { usePageSeo } from '../composables/useSeo';
 
 const i18n = useI18n();
-const connection = useConnectionStore();
-const liveLoaded = ref(false);
 
 usePageSeo({
   title: computed(() => seoPages['/'][i18n.locale].title),
@@ -44,29 +40,7 @@ usePageSeo({
 const router = useRouter();
 const route = useRoute();
 const auth = useAuthStore();
-const lobbies = ref<LobbySummary[]>([]);
-const liveGames = ref<LiveGameInfo[]>([]);
-const loadingLobbies = ref(true);
-const lobbyError = ref('');
 const quickMode = ref<GameMode>('team');
-
-const autoLobbies = computed(() => lobbies.value.filter((l) => l.isAuto).sort((a, b) => a.mode.localeCompare(b.mode)));
-const userLobbies = computed(() => lobbies.value.filter(l => !l.isAuto));
-const humanCount = (lobby: LobbySummary) => lobby.players.filter(p => !p.isBot).length;
-
-const sortedLiveGames = computed(() => {
-  return liveGames.value.slice().sort((a, b) => {
-    // 1. Приоритет партиям с живыми людьми
-    const aHumans = a.players.filter((p) => !p.isBot).length;
-    const bHumans = b.players.filter((p) => !p.isBot).length;
-    if (aHumans !== bHumans) return bHumans - aHumans;
-
-    // 2. Вторичная сортировка: по среднему рейтингу игроков
-    const avgA = a.players.length ? a.players.reduce((s, p) => s + p.rating, 0) / a.players.length : 0;
-    const avgB = b.players.length ? b.players.reduce((s, p) => s + p.rating, 0) / b.players.length : 0;
-    return avgB - avgA;
-  });
-});
 
 const showCreateModal = ref(false);
 const createBusy = ref(false);
@@ -76,63 +50,17 @@ const joinCode = ref('');
 const joinError = ref('');
 const joinBusy = ref(false);
 
-let socket = getSocket();
+const { lobbies, liveGames, liveLoaded, loadingLobbies, lobbyError, loadLobbies, refreshSocket } = useHomeFeed((lobbyId, name) => {
+  const label = name ?? (i18n.locale === 'en' ? 'table' : 'лобби');
+  const text = i18n.locale === 'en' ? `Invitation to “${label}”` : `Приглашение в стол «${label}»`;
+  notifyBrowser(text);
+  showToast(text, () => { if (lobbyId) router.push(`/lobby/${lobbyId}`); });
+});
+const autoLobbies = computed(() => lobbies.value.filter((l) => l.isAuto).sort((a, b) => a.mode.localeCompare(b.mode)));
+const userLobbies = computed(() => lobbies.value.filter(l => !l.isAuto));
 
-async function loadLobbies() {
-  loadingLobbies.value = true; lobbyError.value = '';
-  try {
-    const res = await api.get<{ lobbies: LobbySummary[] }>('/api/lobbies');
-    if (res.lobbies) lobbies.value = res.lobbies;
-  } catch { lobbyError.value = i18n.locale === 'en' ? 'Could not load tables. Check your connection.' : 'Не удалось загрузить столы. Проверьте соединение.'; } finally {
-    loadingLobbies.value = false;
-  }
-}
-function subscribeLive() {
-  // Реконнект сокета теряет комнаты live/lobby-list — подписаться заново
-  offResync = onSocketResync(() => {
-    socket.emit('live:subscribe');
-    socket.emit('lobby-list:subscribe');
-  });
-  socket.on('lobby:list:update', (list) => { lobbies.value = list; lobbyError.value = ''; });
-  socket.on('live:snapshot', (games) => { liveGames.value = games; liveLoaded.value = true; });
-  socket.on('live:new', (g) => {
-    liveGames.value = [g, ...liveGames.value.filter((x) => x.gameId !== g.gameId)];
-  });
-  socket.on('live:update', (g) => {
-    const i = liveGames.value.findIndex((x) => x.gameId === g.gameId);
-    if (i >= 0) liveGames.value.splice(i, 1, g);
-    else liveGames.value.unshift(g);
-  });
-  socket.on('live:end', ({ gameId }) => {
-    liveGames.value = liveGames.value.filter((x) => x.gameId !== gameId);
-  });
-  socket.on('user:notif', (n) => {
-    if (n.type === 'lobby_invite' || n.type === 're_match' || n.type === 'game_invite') {
-      notifyBrowser(`Вас зовут в стол: ${n.lobbyName ?? 'лобби'}`);
-      showToast(`Приглашение в стол «${n.lobbyName ?? 'лобби'}»`, () => {
-        router.push(`/lobby/${n.lobbyId}`);
-      });
-    }
-  });
-  socket.emit('live:subscribe');
-  socket.emit('lobby-list:subscribe');
-}
-onMounted(async () => { subscribeLive(); await loadLobbies(); handleCtaAction(route.query.action); });
-
-let offResync: (() => void) | null = null;
-
-function unsubscribeLive() {
-  offResync?.();
-  offResync = null;
-  socket.off('lobby:list:update');
-  socket.off('live:snapshot');
-  socket.off('live:new');
-  socket.off('live:update');
-  socket.off('live:end');
-  socket.off('user:notif');
-}
-onBeforeUnmount(unsubscribeLive);
-function refreshSocket() { if (socket !== getSocket()) { unsubscribeLive(); socket = getSocket(); subscribeLive(); } }
+onMounted(async () => { await loadLobbies(); handleCtaAction(route.query.action); });
+onBeforeUnmount(() => clearTimeout(toastTimer));
 
 // ---------- Toast ----------
 const toast = ref<{ text: string; action?: () => void } | null>(null);
@@ -219,37 +147,6 @@ watch(
 
 function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale); }
 
-function teamAvgRating(players: { team: number; rating: number }[], team: number): number {
-  const tp = players.filter((p) => p.team === team);
-  if (!tp.length) return 1200;
-  return Math.round(tp.reduce((s, p) => s + p.rating, 0) / tp.length);
-}
-
-function teamPlayers(g: LiveGameInfo, team: number): LiveGameInfo['players'] {
-  return g.players.filter((p) => p.team === team);
-}
-
-function livePlayerLabel(p: LiveGameInfo['players'][number]): string {
-  if (!p.isBot) return p.username;
-  const perso = getBotPersonality(p.username);
-  if (!perso) return i18n.locale === 'en' ? 'Bot' : 'Бот';
-  return (i18n.locale === 'en' && perso.badgeEn) || perso.badge;
-}
-
-function botDisplayName(p: LiveGameInfo['players'][number]): string {
-  if (!p.isBot) return p.username;
-  const perso = getBotPersonality(p.username);
-  if (!perso) return i18n.locale === 'en' ? 'Bot' : 'Бот';
-  const name = (i18n.locale === 'en' && perso.nameEn) || perso.name;
-  const parts = name.split(' ');
-  return parts.length > 1 ? parts[parts.length - 1] : name;
-}
-
-function livePlayerTitle(p: LiveGameInfo['players'][number]): string {
-  if (!p.isBot) return `${p.username} · ${p.rating}`;
-  return getBotTooltip(p.username, p.rating, i18n.locale);
-}
-
 // Краткая сводка игроков лобби: боты — бейджем, люди — ником.
 function lobbyRosterLabel(l: LobbySummary): string {
   return l.players
@@ -282,43 +179,34 @@ function lobbyRosterTitle(l: LobbySummary): string {
     <div class="panel play-panel">
       <QuickPlayPanel v-model="quickMode" :lobby="autoLobbies.find(l => l.mode === quickMode)" :busy="joinBusy" :loading="loadingLobbies" :error="lobbyError" @play="playQuick" @retry="loadLobbies" />
 
-      <section class="invite-panel" :aria-label="i18n.locale === 'en' ? 'Play with friends' : 'Игра с друзьями'">
-        <h2>{{ i18n.locale === 'en' ? 'With friends' : 'С друзьями' }}</h2>
-        <div class="banner-actions">
-          <button class="banner-create-btn" @click="openCreateModal">
-            <AppIcon name="plus" :size="18" :stroke-width="2.4" />
-            {{ i18n.t.home.createTable }}
-          </button>
-
-          <form class="quick-join" @submit.prevent="joinByCode">
-            <input
-              v-model="joinCode"
-              :placeholder="i18n.t.home.tableCodePlaceholder"
-              maxlength="6"
-              class="mono join-input"
-              :aria-label="i18n.t.home.tableCodePlaceholder"
-              @input="joinError = ''"
-            />
-            <button type="submit" class="join-btn" :disabled="!joinCode.trim() || joinBusy">
-              {{ i18n.t.home.joinTable }}
-            </button>
-          </form>
-        </div>
-        <p v-if="joinError" class="error-text banner-error" role="alert">{{ joinError }}</p>
-      </section>
-
     </div>
 
     <!-- Основная сетка -->
     <div class="home-grid">
       <section class="lobbies-col" id="lobbies-section" aria-labelledby="open-lobbies-heading">
         <div class="panel">
-          <div class="panel-head">
-            <h2 id="open-lobbies-heading">{{ i18n.t.home.openTablesHeading }}</h2>
-            <span class="hint">{{ userLobbies.length }} {{ i18n.t.home.tablesCount }}</span>
+          <div class="panel-head open-tables-head">
+            <div class="open-tables-title">
+              <h2 id="open-lobbies-heading">{{ i18n.t.home.openTablesHeading }}</h2>
+              <span class="hint">{{ userLobbies.length }} {{ i18n.t.home.tablesCount }}</span>
+            </div>
+            <form class="quick-join" @submit.prevent="joinByCode">
+              <input
+                v-model="joinCode"
+                :placeholder="i18n.t.home.tableCodePlaceholder"
+                maxlength="6"
+                class="mono join-input"
+                :aria-label="i18n.t.home.tableCodePlaceholder"
+                @input="joinError = ''"
+              />
+              <button type="submit" class="join-btn" :disabled="!joinCode.trim() || joinBusy">
+                {{ i18n.t.home.joinTable }}
+              </button>
+            </form>
+            <p v-if="joinError" class="error-text banner-error" role="alert">{{ joinError }}</p>
           </div>
 
-          <div v-if="lobbyError" class="empty" role="alert"><p>{{ lobbyError }}</p><button @click="loadLobbies">{{ i18n.locale === 'en' ? 'Try again' : 'Повторить' }}</button></div>
+          <div v-if="lobbyError" class="empty" role="alert"><p>{{ lobbyError }}</p></div>
           <div v-else-if="loadingLobbies" class="empty dim" style="padding: 32px 16px;">
             {{ i18n.t.home.loadingTables }}
           </div>
@@ -359,88 +247,17 @@ function lobbyRosterTitle(l: LobbySummary): string {
 
           <div v-else class="empty">
             <p>{{ i18n.locale === 'en' ? 'No public tables yet. Create one to invite your friends.' : 'Публичных столов пока нет. Создайте свой и пригласите друзей.' }}</p>
-            <button class="primary" @click="openCreateModal">{{ i18n.locale === 'en' ? 'Create a table' : 'Создать стол для друзей' }}</button>
+          </div>
+          <div class="table-create-actions">
+            <button class="primary" @click="openCreateModal">
+              <AppIcon name="plus" :size="18" :stroke-width="2.4" />
+              {{ i18n.t.home.createTable }}
+            </button>
           </div>
         </div>
       </section>
       <!-- Текущие live-партии (Lichess TV style) -->
-      <section class="live-col" aria-labelledby="live-games-heading">
-        <div class="panel">
-          <div class="panel-head">
-            <h2 id="live-games-heading">{{ i18n.t.home.liveHeading }}</h2>
-            <span class="badge on" v-if="sortedLiveGames.length">{{ sortedLiveGames.length }} {{ i18n.t.home.liveCount }}</span>
-            <span class="hint" v-else>{{ !liveLoaded ? (i18n.locale === 'en' ? 'Connecting…' : 'Подключаемся…') : i18n.t.home.noLiveGames }}</span>
-          </div>
-
-          <div
-            v-if="sortedLiveGames.length"
-            class="panel-body live-list"
-            :class="{
-              'single-game': sortedLiveGames.length === 1,
-              'multi-games': sortedLiveGames.length >= 2 && sortedLiveGames.length <= 3,
-              'grid-games': sortedLiveGames.length >= 4,
-            }"
-          >
-            <article
-              v-for="g in sortedLiveGames"
-              :key="g.gameId"
-              class="live-game"
-              role="button"
-              tabindex="0"
-              :aria-label="`${i18n.t.home.spectateHint} ${modeLabel(g.mode)}`"
-              @click="router.push(`/game/${g.gameId}`)"
-              @keydown.enter.space.prevent="router.push(`/game/${g.gameId}`)"
-            >
-              <div class="live-boards" :class="{ two: g.mode === 'bughouse' }">
-                <ChessBoard
-                  v-for="(fen, i) in g.fens"
-                  :key="i"
-                  :fen="fen"
-                  :mini="true"
-                  :coordinates="false"
-                  :movable-color="null"
-                />
-              </div>
-              <div class="live-meta">
-                <div class="live-row">
-                  <span class="badge mode-badge">{{ modeLabel(g.mode) }}</span>
-                  <div class="players-line">
-                    <span class="team t1">
-                      <template v-for="(p, pIdx) in teamPlayers(g, 1)" :key="p.username">
-                        <span v-if="pIdx > 0" class="team-sep">/</span>
-                        <BotHoverCard v-if="p.isBot" :username="p.username" :rating="p.rating">
-                          <span class="live-player is-bot">{{ botDisplayName(p) }}</span>
-                        </BotHoverCard>
-                        <span v-else class="live-player">{{ p.username }}</span>
-                      </template>
-                      <small class="mono team-elo">({{ teamAvgRating(g.players, 1) }})</small>
-                    </span>
-                    <span class="vs">vs</span>
-                    <span class="team t2">
-                      <template v-for="(p, pIdx) in teamPlayers(g, 2)" :key="p.username">
-                        <span v-if="pIdx > 0" class="team-sep">/</span>
-                        <BotHoverCard v-if="p.isBot" :username="p.username" :rating="p.rating">
-                          <span class="live-player is-bot">{{ botDisplayName(p) }}</span>
-                        </BotHoverCard>
-                        <span v-else class="live-player">{{ p.username }}</span>
-                      </template>
-                      <small class="mono team-elo">({{ teamAvgRating(g.players, 2) }})</small>
-                    </span>
-                  </div>
-                  <span class="spectate-hint" :title="i18n.t.home.spectateHint">
-                    <AppIcon name="eye" :size="15" />
-                  </span>
-                </div>
-              </div>
-            </article>
-          </div>
-
-          <div v-else class="empty" role="status">
-            <p>{{ connection.state !== 'connected' ? (i18n.locale === 'en' ? 'Reconnecting to live games…' : 'Восстанавливаем трансляцию…') : !liveLoaded ? (i18n.locale === 'en' ? 'Loading live games…' : 'Загружаем текущие партии…') : (i18n.locale === 'en' ? 'No games are being played right now.' : 'Сейчас партий нет.') }}</p>
-            <p class="hint">{{ i18n.locale === 'en' ? 'Start a quick game above or return to watch games later.' : 'Начните быструю игру выше или вернитесь к просмотру позже.' }}</p>
-          </div>
-        </div>
-      </section>
+      <HomeLiveGames :games="liveGames" :live-loaded="liveLoaded" />
 
       <!-- Открытые столы -->
 
@@ -472,11 +289,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
 
 <style scoped>
 .play-panel { box-shadow: none; }
-.invite-panel { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:12px 16px; border-top:1px solid var(--line); }
-.invite-panel h2 { font-family:var(--font-ui); font-size:13px; font-weight:500; color:var(--ink-2); }
-.invite-panel .banner-actions { flex-wrap:wrap; }
 .home-guide {padding:22px;}.home-guide h2 {font-size:22px;margin-bottom:18px;}.guide-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:24px;}.guide-grid h3 {margin-bottom:10px;}.guide-grid p {font-size:14px;color:var(--ink-2);line-height:1.65;}.home-guide nav {display:flex;flex-wrap:wrap;gap:18px;margin-top:16px;}.home-guide a {text-decoration:underline;text-underline-offset:3px;}
-.quick-help { margin:0 0 10px; color:var(--ink-2); font-size:14px; }
 .home {
   display: flex;
   flex-direction: column;
@@ -502,20 +315,10 @@ function lobbyRosterTitle(l: LobbySummary): string {
   margin: 0;
 }
 
-.banner-actions {
+.table-create-actions {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 0 1 auto;
-}
-
-.banner-create-btn {
-  height: var(--control-size);
-  padding: 0 12px;
-  font-size: 13px;
-  font-weight: 600;
-  border-radius: var(--r-s);
-  box-sizing: border-box;
+  justify-content: center;
+  padding: 16px;
 }
 
 .quick-join {
@@ -557,15 +360,13 @@ function lobbyRosterTitle(l: LobbySummary): string {
   gap: 20px;
   align-items: start;
 }
-
-/* Колонки сетки */
 .live-col,
 .lobbies-col {
   display: flex;
   min-width: 0;
 }
 
-.live-col > .panel,
+.live-col :deep(> .panel),
 .lobbies-col > .panel {
   flex: 1;
   display: flex;
@@ -579,167 +380,6 @@ function lobbyRosterTitle(l: LobbySummary): string {
     grid-template-columns: 1fr;
   }
 }
-
-/* Live-партии */
-.live-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.live-list.single-game .live-boards {
-  width: 100%;
-  max-width: 100%;
-  margin: 0;
-}
-
-.live-list.multi-games {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 12px;
-}
-
-.live-list.grid-games {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-@media (max-width: 650px) {
-  .live-list.grid-games {
-    grid-template-columns: 1fr;
-  }
-}
-
-.live-game {
-  cursor: pointer;
-  border: 1px solid var(--line);
-  border-radius: var(--r-m);
-  padding: 10px 12px;
-  background: var(--surface-inset);
-  transition: all 0.15s;
-  touch-action: manipulation;
-}
-
-.live-game:hover {
-  border-color: var(--accent-2);
-  background: var(--surface-2);
-  transform: translateY(-1px);
-}
-
-.live-boards {
-  display: grid;
-  gap: 8px;
-  width: 100%;
-  aspect-ratio: 1;
-}
-
-.live-boards.two {
-  grid-template-columns: 1fr 1fr;
-  aspect-ratio: 2 / 1;
-}
-
-.live-meta {
-  margin-top: 8px;
-  width: 100%;
-  overflow: hidden;
-}
-
-.live-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: nowrap;
-  font-size: 12px;
-  width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.mode-badge {
-  font-size: 11px;
-  padding: 1px 6px;
-  flex-shrink: 0;
-  line-height: 1.3;
-}
-
-.players-line {
-  font-size: 12px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.players-line .vs {
-  color: var(--ink-3);
-  font-size: 11px;
-  font-style: italic;
-  margin: 0 2px;
-  flex-shrink: 0;
-}
-
-.team {
-  color: var(--ink);
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.live-player {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 90px;
-}
-
-.live-player.is-bot {
-  color: var(--accent-2);
-  font-weight: 600;
-  cursor: help;
-}
-
-.team-sep {
-  margin: 0 4px;
-  color: var(--ink-3);
-  font-weight: 400;
-  font-size: 11px;
-}
-
-.team-elo {
-  color: var(--ink-3);
-  margin-left: 2px;
-  font-size: 11px;
-  flex-shrink: 0;
-}
-
-.spectate-hint {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--accent);
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--r-xs);
-  transition: color var(--t-fast), background var(--t-fast);
-}
-
-.live-game:hover .spectate-hint {
-  color: var(--accent-2);
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
-}
-
-/* Карточки столов */
 .lobby-rows {
   display: flex;
   flex-direction: column;
@@ -768,78 +408,6 @@ function lobbyRosterTitle(l: LobbySummary): string {
   background: var(--surface-2);
 }
 
-.auto-lobby-card {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-  background: linear-gradient(135deg, var(--surface-inset) 0%, color-mix(in srgb, var(--felt) 10%, var(--surface-inset)) 100%);
-}
-
-.auto-lobby-card:hover {
-  border-color: var(--accent);
-  background: var(--surface-2);
-}
-
-.auto-chip {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.single-line-card {
-  padding: 8px 12px;
-}
-
-.single-line-main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-.badges-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  min-width: 0;
-  white-space: nowrap;
-}
-
-.live-player + .live-player::before {
-  content: '/';
-  margin: 0 5px;
-  color: var(--ink-3);
-  font-weight: 400;
-}
-
-.live-player.is-bot {
-  color: var(--accent-2);
-  font-weight: 600;
-  cursor: help;
-}
-
-.auto-hint-chip {
-  background: color-mix(in srgb, var(--surface-inset) 85%, var(--line));
-  color: var(--ink-2);
-  border: 1px solid var(--line);
-  font-size: 11px;
-  font-weight: 500;
-  border-radius: 999px;
-  padding: 2px 8px;
-  display: inline-flex;
-  align-items: center;
-}
-
-.auto-lobby-desc {
-  font-size: 11.5px;
-  color: var(--ink-3);
-  margin-top: 1px;
-}
-
 .lobby-players-summary {
   font-size: 11.5px;
   color: var(--ink-3);
@@ -848,34 +416,6 @@ function lobbyRosterTitle(l: LobbySummary): string {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 240px;
-}
-
-.bot-dot {
-  background: var(--ink-3);
-  box-shadow: none;
-}
-
-.lobby-players {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  font-size: 13px;
-}
-
-.lp {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--ink-2);
-}
-
-.lp.offline {
-  opacity: 0.55;
-}
-
-.lp.empty {
-  color: var(--ink-3);
-  font-style: italic;
 }
 
 .seats-indicator {
@@ -901,11 +441,6 @@ function lobbyRosterTitle(l: LobbySummary): string {
   box-shadow: 0 0 4px color-mix(in srgb, var(--ok) 60%, transparent);
 }
 
-.seat-pip.bot {
-  background: var(--ink-3);
-  box-shadow: none;
-}
-
 .lobby-card-meta {
   display: flex;
   align-items: center;
@@ -913,25 +448,16 @@ function lobbyRosterTitle(l: LobbySummary): string {
   flex-shrink: 0;
 }
 
-.lobby-card-meta .tags {
-  display: flex;
-  gap: 6px;
-}
-
 .seats {
   font-size: 12.5px;
   color: var(--ink-2);
   font-weight: 700;
 }
-
-/* На узких экранах карточка стола и баннер перестраиваются вертикально */
 @media (max-width: 768px) {
   .banner-intro h1 {
     font-size: 21px;
   }
 
-  .invite-panel { gap: 8px; }
-  .banner-actions { gap: 8px; }
 }
 
 @media (max-width: 560px) {
@@ -939,12 +465,6 @@ function lobbyRosterTitle(l: LobbySummary): string {
     font-size: 20px;
   }
 
-  .invite-panel { padding: 12px; }
-  .banner-actions { width: 100%; flex-direction: column; align-items: stretch; gap: 8px; }
-
-  .banner-create-btn {
-    width: 100%;
-  }
 
   .quick-join {
     width: 100%;
@@ -961,24 +481,10 @@ function lobbyRosterTitle(l: LobbySummary): string {
     gap: 10px;
   }
 
-  .lobby-card.single-line-card {
-    flex-direction: column;
-  }
-
-  .lobby-card.single-line-card .single-line-main {
-    flex-wrap: wrap;
-  }
-
   .lobby-card-meta {
     justify-content: space-between;
   }
-
-  .lobby-card-meta .tags {
-    flex-wrap: wrap;
-  }
 }
-
-/* Компактное пустое состояние: по центру, без раздутых отступов */
 .lobbies-col .empty,
 .live-col .empty {
   padding: 28px 16px;
@@ -989,8 +495,6 @@ function lobbyRosterTitle(l: LobbySummary): string {
   gap: 12px;
   margin: auto;
 }
-
-/* Toast */
 .toast {
   position: fixed;
   bottom: 24px;
@@ -1008,4 +512,10 @@ function lobbyRosterTitle(l: LobbySummary): string {
   z-index: 2000;
   font-size: 14px;
 }
+[data-theme='light'] .play-panel { background: linear-gradient(120deg, var(--surface), color-mix(in srgb, var(--felt) 3%, var(--surface))); }
+.open-tables-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.lobby-card-main { min-width: 0; }
+.lobby-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.lobby-name { overflow-wrap: anywhere; }
+@media (max-width: 560px) { .open-tables-head .quick-join { flex: 1 1 100%; } .join-input { min-width: 0; } }
 </style>

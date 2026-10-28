@@ -113,7 +113,11 @@ router.beforeEach(async (to, from) => {
   if (from.name && i18n.locale === 'en' && !to.query.lang) return { path: to.path, query: { ...to.query, lang: 'en' }, hash: to.hash, replace: true };
   i18n.setLocale(to.query.lang === 'en' ? 'en' : 'ru', false);
   const auth = useAuthStore();
-  if (!auth.checked) await auth.check();
+  const needsSession = ['lobby', 'history', 'admin', 'login'].includes(String(to.name));
+  if (!auth.checked) {
+    if (needsSession) await auth.check();
+    else void auth.check();
+  }
   if (to.name === 'lobby' && !auth.user) {
     try { await auth.ensureGuest(); }
     catch { return { name: 'login', query: { redirect: to.fullPath, guestError: '1' } }; }

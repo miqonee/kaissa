@@ -285,6 +285,7 @@ adminRouter.get('/users', async (_req, res) => {
     losses: u.losses,
     games: u._count.participations,
     isAdmin: u.isAdmin,
+    isGuest: u.isGuest,
     online: presence.isOnline(u.id),
     createdAt: u.createdAt.toISOString(),
   }));
@@ -300,7 +301,7 @@ adminRouter.delete('/users/:id', async (req, res) => {
 
   const target = await prisma.user.findUnique({ where: { id } });
   if (!target) return void res.status(404).json({ error: 'Игрок не найден' });
-  if (target.isBot || target.isGuest) return void res.status(400).json({ error: 'Нельзя удалить системного бота' });
+  if (target.isBot) return void res.status(400).json({ error: 'Нельзя удалить системного бота' });
 
   // Партии, в которых он участвовал, теряют смысл без него — удаляем целиком
   const parts = await prisma.gameParticipant.findMany({ where: { userId: id }, select: { gameId: true } });
@@ -317,7 +318,7 @@ adminRouter.post('/users/:id/reset', async (req, res) => {
   if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
   const target = await prisma.user.findUnique({ where: { id } });
   if (!target) return void res.status(404).json({ error: 'Игрок не найден' });
-  if (target.isBot || target.isGuest) return void res.status(400).json({ error: 'Нельзя сбросить системного бота' });
+  if (target.isBot) return void res.status(400).json({ error: 'Нельзя сбросить системного бота' });
 
   await prisma.$transaction([
     prisma.ratingHistory.deleteMany({ where: { userId: id } }),

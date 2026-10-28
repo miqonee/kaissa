@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import ChessDiagram from '../components/ChessDiagram.vue';
 import CtaBanner from '../components/CtaBanner.vue';
@@ -120,16 +119,21 @@ usePageSeo({ canonical: '/rules/bughouse' });
             />
 
             <ChessDiagram
-              title="Pawn Wedge Attack on Queen"
+              title="Pawn Fork with Check"
               badge="Pawn Drop"
               badge-color="felt"
-              fen="r1b1k2r/ppp1qppp/2n5/8/4B3/8/PPP2PPP/R1BQK2R w KQkq - 0 1"
-              interactive-fen="r1b1k2r/ppp1qppp/2nP4/8/4B3/8/PPP2PPP/R1BQK2R b KQkq - 0 1"
+              fen="r7/ppk1qppp/8/8/8/8/PPP2PPP/3R2K1 w - - 0 1"
+              interactive-fen="r7/ppk1qppp/3P4/8/8/8/PPP2PPP/3R2K1 b - - 0 1"
               :pocket-white="[{ type: 'p', count: 1 }]"
-              action-label="Drop ♙@d6"
+              action-label="Drop ♙@d6+"
               reset-label="Reset Position"
+              check-square="c7"
               :last-move="[null, 'd6']"
-              caption="White drops a pawn on d6 from reserve. The queen on e7 is attacked, piece coordination is broken, and c7 becomes a critical invasion target."
+              :continuation="[
+                { fen: 'rk6/pp2qppp/3P4/8/8/8/PPP2PPP/3R2K1 w - - 1 2', label: '…Kb8', lastMove: ['c7', 'b8'] },
+                { fen: 'rk6/pp2Pppp/8/8/8/8/PPP2PPP/3R2K1 b - - 0 2', label: 'dxe7', lastMove: ['d6', 'e7'] },
+              ]"
+              caption="P@d6+ attacks the king on c7 and queen on e7 at once. The rook on d1 protects the pawn. After …Kb8, dxe7 wins the queen and sends it to your partner. …Qxd6 also loses the queen to Rxd6; a drop cannot block a pawn check."
             />
           </div>
         </section>
@@ -281,18 +285,23 @@ usePageSeo({ canonical: '/rules/bughouse' });
               caption="Белые берут коня из кармана и выставляют его на поле f7. Чёрный король на h8 заблокирован собственной ладьёй g8 и пешками. Слон c4 прикрывает коня, а от шаха конём закрыться невозможно. Это спёртый мат дропом!"
             />
 
-            <!-- Диаграмма 2: Пешечный дроп-клин -->
+            <!-- Диаграмма 2: Пешечная вилка -->
             <ChessDiagram
-              title="Пешечный клин и атака ферзя"
+              title="Пешечная вилка с шахом"
               badge="Дроп пешки"
               badge-color="felt"
-              fen="r1b1k2r/ppp1qppp/2n5/8/4B3/8/PPP2PPP/R1BQK2R w KQkq - 0 1"
-              interactive-fen="r1b1k2r/ppp1qppp/2nP4/8/4B3/8/PPP2PPP/R1BQK2R b KQkq - 0 1"
+              fen="r7/ppk1qppp/8/8/8/8/PPP2PPP/3R2K1 w - - 0 1"
+              interactive-fen="r7/ppk1qppp/3P4/8/8/8/PPP2PPP/3R2K1 b - - 0 1"
               :pocket-white="[{ type: 'p', count: 1 }]"
-              action-label="Дропнуть ♙@d6"
+              action-label="Дропнуть ♙@d6+"
               reset-label="Вернуть позицию"
+              check-square="c7"
               :last-move="[null, 'd6']"
-              caption="Белые выставляют пешку на d6 из резерва. Чёрный ферзь e7 атакован пешкой, связь фигур чёрных нарушена, а поле c7 становится следующей критической мишенью для вторжения."
+              :continuation="[
+                { fen: 'rk6/pp2qppp/3P4/8/8/8/PPP2PPP/3R2K1 w - - 1 2', label: '…Kb8', lastMove: ['c7', 'b8'] },
+                { fen: 'rk6/pp2Pppp/8/8/8/8/PPP2PPP/3R2K1 b - - 0 2', label: 'dxe7', lastMove: ['d6', 'e7'] },
+              ]"
+              caption="P@d6+ одновременно атакует короля c7 и ферзя e7. Ладья d1 защищает пешку. После …Kb8 белые играют dxe7, выигрывая ферзя и передавая его напарнику. На …Qxd6 следует Rxd6 — ферзь тоже теряется. Закрыться дропом от пешечного шаха нельзя."
             />
           </div>
         </section>

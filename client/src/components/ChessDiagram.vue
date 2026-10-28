@@ -19,6 +19,7 @@ const props = withDefaults(
     badgeColor?: 'felt' | 'brass' | 'ok' | 'bad';
     fen: string;
     interactiveFen?: string;
+    continuation?: { fen: string; label: string; lastMove: readonly string[]; checkSquare?: string }[];
     orientation?: 'white' | 'black';
     pocketWhite?: PocketPiece[];
     pocketBlack?: PocketPiece[];
@@ -41,9 +42,12 @@ const props = withDefaults(
   },
 );
 
-const isPlayed = ref(false);
+const step = ref(0);
+const isPlayed = computed(() => step.value > 0);
+const continuationStep = computed(() => props.continuation?.[step.value - 2]);
 
 const activeFen = computed(() => {
+  if (continuationStep.value) return continuationStep.value.fen;
   if (isPlayed.value && props.interactiveFen) {
     return props.interactiveFen;
   }
@@ -51,11 +55,11 @@ const activeFen = computed(() => {
 });
 
 const activeCheckSquare = computed(() => {
-  return isPlayed.value ? props.checkSquare : null;
+  return continuationStep.value ? continuationStep.value.checkSquare ?? null : isPlayed.value ? props.checkSquare : null;
 });
 
 const activeLastMove = computed(() => {
-  return isPlayed.value ? props.lastMove : null;
+  return continuationStep.value?.lastMove ?? (isPlayed.value ? props.lastMove : null);
 });
 
 function remainingPocket(pieces: PocketPiece[], color: 'w' | 'b'): PocketPiece[] {
@@ -70,7 +74,7 @@ function remainingPocket(pieces: PocketPiece[], color: 'w' | 'b'): PocketPiece[]
 const whitePocket = computed(() => remainingPocket(props.pocketWhite, 'w'));
 const blackPocket = computed(() => remainingPocket(props.pocketBlack, 'b'));
 function toggleMove(): void {
-  isPlayed.value = !isPlayed.value;
+  step.value = isPlayed.value ? 0 : 1;
 }
 </script>
 
@@ -125,6 +129,12 @@ function toggleMove(): void {
         <AppIcon :name="isPlayed ? 'refresh' : 'play'" :size="13" />
         {{ isPlayed ? resetLabel : actionLabel }}
       </button>
+      <button
+        v-if="isPlayed && continuation?.[step - 1]"
+        type="button"
+        class="small brass"
+        @click="step++"
+      >{{ continuation[step - 1].label }}</button>
     </div>
 
     <!-- Семантическая подпись -->

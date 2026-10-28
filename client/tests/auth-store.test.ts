@@ -7,6 +7,31 @@ vi.mock('../src/utils/analytics',()=>({trackGoal:vi.fn()}));
 const user = {id:1,username:'alice',rating:1200,wins:0,losses:0,draws:0,createdAt:'',isAdmin:false};
 beforeEach(()=>{vi.restoreAllMocks();setActivePinia(createPinia());});
 describe('Session resilience',()=>{
+  it('shares an in-flight session check between public navigation and game entry', async () => {
+    const auth = useAuthStore();
+    let resolve!: (value: { user: typeof user }) => void;
+    const get = vi.spyOn(api, 'get').mockImplementation(() => new Promise(r => { resolve = r; }));
+    const first = auth.check();
+    const second = auth.check();
+    expect(auth.checking).toBe(true);
+    expect(get).toHaveBeenCalledTimes(1);
+    resolve({ user });
+    expect(await Promise.all([first, second])).toEqual([true, true]);
+    expect(auth.user?.id).toBe(1);
+    expect(auth.checking).toBe(false);
+  });
+  it('waits for the guest session before registering to preserve its account', async () => {
+    const auth = useAuthStore();
+    let resolve!: (value: { user: typeof user & { isGuest: boolean } }) => void;
+    vi.spyOn(api, 'get').mockImplementation(() => new Promise(r => { resolve = r; }));
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ user });
+    const check = auth.check();
+    const register = auth.register('alice', 'test-password');
+    expect(post).not.toHaveBeenCalled();
+    resolve({ user: { ...user, isGuest: true } });
+    await Promise.all([check, register]);
+    expect(post).toHaveBeenCalledWith('/api/auth/claim', { username: 'alice', password: 'test-password' });
+  });
   it('retains identity when the network/server is unavailable',async()=>{const auth=useAuthStore();auth.user=user;vi.spyOn(api,'get').mockRejectedValue(new ApiError('offline',503));expect(await auth.check()).toBe(false);expect(auth.user?.id).toBe(1);});
   it('clears an expired session only on 401',async()=>{const auth=useAuthStore();auth.user=user;vi.spyOn(api,'get').mockRejectedValue(new ApiError('unauthorized',401));expect(await auth.check()).toBe(true);expect(auth.user).toBeNull();});
   it('does not overwrite a successful login with a stale session response',async()=>{const auth=useAuthStore();let reject!:(e:Error)=>void;vi.spyOn(api,'get').mockImplementation(()=>new Promise((_resolve,r)=>{reject=r;}));vi.spyOn(api,'post').mockResolvedValue({user});const check=auth.check();await auth.login('alice','test-password');reject(new ApiError('old session',401));await check;expect(auth.user?.id).toBe(1);});

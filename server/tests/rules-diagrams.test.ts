@@ -18,8 +18,22 @@ describe('Bughouse rule examples in both languages', () => {
     expect(game.pocketOf(0, 'w')[piece]).toBe(0);
     if (piece === 'n') expect(game.isBughouseCheckmate(0)).toBe(true);
     else {
+      expect(game.boards[0].isCheck()).toBe(true);
       expect(game.boards[0].get('e7')?.type).toBe('q');
       expect(game.boards[0].attackers('e7', 'w')).toContain('d6');
+      expect(game.boards[0].attackers('d6', 'w')).toContain('d1');
+      expect(game.boards[0].moves()).not.toContain('Kxd6');
+      // Every legal defence still loses the queen, including Qxd6.
+      for (const move of game.boards[0].moves({ verbose: true })) {
+        const branch = new BughouseGame([game.fen(0), game.fen(1)]);
+        branch.apply({ board: 0, from: move.from, to: move.to });
+        branch.apply({ board: 0, from: move.piece === 'q' ? 'd1' : 'd6', to: move.piece === 'q' ? 'd6' : 'e7' });
+        expect(branch.pocketOf(1, 'b').q).toBe(1);
+      }
+      game.apply({ board: 0, from: 'c7', to: 'b8' });
+      expect(page).toContain(`fen: '${game.fen(0)}'`);
+      game.apply({ board: 0, from: 'd6', to: 'e7' });
+      expect(page).toContain(`fen: '${game.fen(0)}'`);
     }
   });
 });

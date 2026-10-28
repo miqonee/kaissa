@@ -7,16 +7,19 @@ import { useI18n } from "../stores/i18n";
 import { usePageSeo } from "../composables/useSeo";
 import MatchCard from "../components/MatchCard.vue";
 import GameReplayModal from "../components/GameReplayModal.vue";
+import { useRoute } from 'vue-router';
+const route = useRoute();
 const auth = useAuthStore();
 const i18n = useI18n();
 const en = computed(() => i18n.locale === "en");
 usePageSeo({ canonical: '/history' });
-const tab = ref(auth.user ? "mine" : "all");
+const tab = ref(route.query.playerId || route.query.player ? "all" : auth.user ? "mine" : "all");
 const mode = ref("");
 const opponents = ref("");
 const result = ref("");
 const kind = ref("");
-const player = ref("");
+const player = ref(typeof route.query.player === "string" ? route.query.player : "");
+const playerId = ref(typeof route.query.playerId === "string" ? route.query.playerId : "");
 const games = ref<GameSummary[]>([]);
 const loading = ref(false);
 const error = ref("");
@@ -38,6 +41,7 @@ async function load(more = false) {
     result: result.value,
     kind: kind.value,
     player: player.value,
+    playerId: playerId.value,
   });
   if (more && nextCursor.value) query.set("cursor", String(nextCursor.value));
   try {
@@ -68,6 +72,7 @@ watch(
   { immediate: true },
 );
 watch(player, () => {
+  playerId.value = "";
   ++version;
   loading.value = true;
   clearTimeout(timer);

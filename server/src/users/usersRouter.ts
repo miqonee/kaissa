@@ -43,11 +43,15 @@ export const gamesRouter = Router();
 async function listGames(req: import('express').Request, res: import('express').Response, mine: boolean) {
   const user = mine ? await currentUser(req) : null;
   if (mine && !user) return void res.status(401).json({ error: 'Не авторизован' });
-  const and: Prisma.GameWhereInput[] = [{ participants: { some: { user: { isBot: false } } } }];
+  const playerId = Number(req.query.playerId);
+  const exactPlayer = Number.isSafeInteger(playerId) && playerId > 0;
+  const and: Prisma.GameWhereInput[] = exactPlayer
+    ? [{ participants: { some: { userId: playerId } } }]
+    : [{ participants: { some: { user: { isBot: false } } } }];
   if (user) and.push({ participants: { some: { userId: user.id } } });
   if (req.query.mode && GAME_MODES.includes(req.query.mode as GameMode)) and.push({ mode: String(req.query.mode) });
   const q = String(req.query.player ?? '').trim().slice(0, 30);
-  if (q) and.push({ participants: { some: { user: { username: { contains: q, mode: 'insensitive' } } } } });
+  if (q && !exactPlayer) and.push({ participants: { some: { user: { username: { contains: q, mode: 'insensitive' } } } } });
   if (req.query.kind === 'rated') and.push({ ratingKind: 'rated' });
   if (req.query.kind === 'training') and.push({ ratingKind: { in: ['bots', 'guest'] } });
   if (req.query.opponents === 'humans') for (const team of [1, 2]) and.push({ participants: { some: { team, user: { isBot: false } } } });

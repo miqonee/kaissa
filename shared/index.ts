@@ -47,6 +47,7 @@ export interface PublicUser {
 
 /** Строка списка пользователей в админке */
 export interface AdminUserRow {
+  isGuest?: boolean;
   id: number;
   username: string;
   rating: number;

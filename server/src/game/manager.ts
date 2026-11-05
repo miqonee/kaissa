@@ -36,6 +36,7 @@ import { TeamGame } from './teamGame.js';
 import { clockOnMove, clockSnapshot, initClock, type ClockState } from './clock.js';
 import {
   initMultiClock,
+  MULTI_TURN_LIMIT_MS,
   multiClockOnMove,
   multiClockSnapshot,
   multiClockSwitchSeat,
@@ -301,10 +302,16 @@ export class GamesManager {
     return this.games.get(id);
   }
 
-  /** Найти активную партию, где uid — участник */
+  /** Найти активную партию, где uid — действующий участник (не выбывший в FFA) */
   activeGameOf(uid: number): number | null {
     for (const g of this.games.values()) {
-      if (g.status === 'active' && g.participants.some((p) => p.uid === uid)) return g.id;
+      if (g.status !== 'active') continue;
+      const p = g.participants.find((x) => x.uid === uid);
+      if (!p) continue;
+      if (g.engine instanceof MultiChess && p.seat !== undefined && g.engine.seatStatus(p.seat) !== 'active') {
+        continue;
+      }
+      return g.id;
     }
     return null;
   }
@@ -382,7 +389,9 @@ export class GamesManager {
             : new TeamGame();
       const clockCount = opts.mode === 'bughouse' ? 2 : 1;
       const clocks = Array.from({ length: clockCount }, () => initClock(baseMs, incMs));
-      const multiClock = isMultiplayer(opts.mode) ? initMultiClock(cap, baseMs, incMs) : undefined;
+      const multiClock = isMultiplayer(opts.mode)
+        ? initMultiClock(cap, baseMs, incMs, noClock ? MULTI_TURN_LIMIT_MS : undefined)
+        : undefined;
 
       const game: ActiveGame = {
         ratingKind: kind,
@@ -449,7 +458,7 @@ export class GamesManager {
     }
 
     const now = Date.now();
-    if (g.timeControl.kind === 'clock' && g.multiClock && g.multiClock.active !== null) {
+    if (g.multiClock && g.multiClock.active !== null) {
       const snap = multiClockSnapshot(g.multiClock, now);
       const activeSeat = g.multiClock.active;
       if (snap.remainingMs[activeSeat] <= 0) {
@@ -476,7 +485,7 @@ export class GamesManager {
     }
 
     let clocksAfterJson: string | null = null;
-    if (g.timeControl.kind === 'clock' && g.multiClock) {
+    if (g.multiClock) {
       const nextSeat = outcome.over ? null : mc.turn();
       const r = multiClockOnMove(g.multiClock, p.seat, nextSeat, now);
       if (r.flagged) {
@@ -786,14 +795,15 @@ export class GamesManager {
         }
       }
 
-      if (g.timeControl.kind === 'clock') {
-        if (g.engine instanceof MultiChess && g.multiClock && g.multiClock.active !== null) {
-          const snap = multiClockSnapshot(g.multiClock, now);
-          if (snap.remainingMs[g.multiClock.active] <= 0) {
-            await this.handleMultiFlag(g, g.multiClock.active, now);
-          }
-          return;
+      if (g.engine instanceof MultiChess && g.multiClock && g.multiClock.active !== null) {
+        const snap = multiClockSnapshot(g.multiClock, now);
+        if (snap.remainingMs[g.multiClock.active] <= 0) {
+          await this.handleMultiFlag(g, g.multiClock.active, now);
         }
+        return;
+      }
+
+      if (g.timeControl.kind === 'clock') {
         for (let b = 0; b < g.clocks.length; b++) {
           const clock = g.clocks[b];
           if (clock?.active && (clock.active === 'w' ? clock.whiteMs : clock.blackMs) - (now - clock.sinceMs) <= 0) {
@@ -833,6 +843,13 @@ export class GamesManager {
       if (outcome.over) {
         await this.finish(g, 'ffa', (outcome.endReason ?? 'resign') as EndReason, 0);
       } else {
+        const remainingHumans = g.participants.filter(
+          (hp) => !hp.isBot && hp.seat !== undefined && g.engine instanceof MultiChess && g.engine.seatStatus(hp.seat) === 'active' && !g.disconnected.has(hp.uid),
+        );
+        if (remainingHumans.length === 0) {
+          await this.finish(g, 'ffa', 'resign', 0);
+          return;
+        }
         this.io?.to(this.gameRoom(g.id)).emit('game:state', this.toGameState(g));
         this.io?.to('live').emit('live:update', this.liveInfo(g));
         this.triggerBotTurn(g.id);

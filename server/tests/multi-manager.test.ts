@@ -76,6 +76,33 @@ describe('GamesManager multiplayer FFA modes', () => {
     expect(g.status).toBe('active');
     expect((g.engine as MultiChess).seatStatus(1)).toBe('resigned');
     expect(m.toGameState(g).turnUserIds).toEqual([3]);
+    // Resigned player is no longer blocked by activeGameOf and can join a new table
+    expect(m.activeGameOf(2)).toBeNull();
+    expect(m.activeGameOf(3)).toBe(id);
+  });
+
+  it('enforces 5-minute per-turn limit when timeControl is none and eliminates AFK player after 5 minutes', async () => {
+    const m = new GamesManager();
+    const id = await m.createGame({
+      mode: 'four-player',
+      timeControl: { kind: 'none', baseMin: 0, incSec: 0 },
+      team1: [],
+      team2: [],
+      seats: [player(1), player(2), player(3), player(4)],
+    });
+
+    // Player 1 makes the first move within 30s -> starts 5-minute turn timer for Player 2
+    expect(await m.applyMultiMove(id, 1, { from: 'g2', to: 'g4' })).toEqual({ ok: true });
+    const g = m.getActive(id)!;
+    expect(m.toGameState(g).multi?.clocksMs[1]).toBe(5 * 60_000);
+
+    // Advance 5 minutes + 1s -> Player 2 times out and is eliminated, turn passes to Player 3 with fresh 5 minutes
+    await vi.advanceTimersByTimeAsync(5 * 60_000 + 1000);
+    await m.checkFlags();
+    expect((g.engine as MultiChess).seatStatus(1)).toBe('timeout');
+    expect(m.activeGameOf(2)).toBeNull();
+    expect(m.toGameState(g).turnUserIds).toEqual([3]);
+    expect(m.toGameState(g).multi?.clocksMs[2]).toBeGreaterThan(4 * 60_000);
   });
 
   it('rolls back board and clocks if prisma.gameMove.create fails', async () => {

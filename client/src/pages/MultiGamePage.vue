@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type {
   ChatMessage,
@@ -63,6 +63,24 @@ const rematchBusy = ref(false);
 const rematchInvite = ref<string | null>(null);
 const lastMove = ref<(string | null)[] | null>(null);
 const boardRef = ref<InstanceType<typeof MultiBoard> | null>(null);
+const topbarRef = ref<HTMLElement | null>(null);
+let autoScrolled = false;
+
+function scrollToBoardTop(): void {
+  if (autoScrolled || typeof window === 'undefined') return;
+  autoScrolled = true;
+  void nextTick(() => {
+    setTimeout(() => {
+      const el = topbarRef.value;
+      if (el) {
+        const y = el.getBoundingClientRect().top + window.scrollY - 6;
+        if (y > 4) {
+          window.scrollTo({ top: y, behavior: 'smooth' });
+        }
+      }
+    }, 60);
+  });
+}
 
 const myId = computed(() => auth.user?.id ?? 0);
 const canViewArchive = computed(() => !!auth.user && !auth.user.isGuest);
@@ -394,6 +412,7 @@ function hydrateFromState(st: GameState): void {
   }
   if (st.status !== 'active') showResult.value = true;
   rebuildLocalClocks();
+  scrollToBoardTop();
 }
 
 function requestWatch(retries = 3): void {
@@ -492,7 +511,7 @@ onBeforeUnmount(() => {
 <template>
   <div v-if="state" class="multi-game-page" :class="state.mode">
     <!-- Compact 1-line Header Bar -->
-    <header class="multi-topbar panel">
+    <header ref="topbarRef" class="multi-topbar panel">
       <div class="topbar-left">
         <router-link to="/" class="back-link">
           <AppIcon name="arrow-left" :size="14" />
@@ -759,10 +778,10 @@ onBeforeUnmount(() => {
 
 .board-stage {
   position: relative;
-  width: min(100vw - 24px, calc(100dvh - 108px));
-  height: min(100vw - 24px, calc(100dvh - 108px));
-  max-width: 920px;
-  max-height: 920px;
+  width: min(100vw - 280px, calc(100dvh - 86px));
+  height: min(100vw - 280px, calc(100dvh - 86px));
+  max-width: 880px;
+  max-height: 880px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -771,13 +790,13 @@ onBeforeUnmount(() => {
 .seat-card {
   position: absolute;
   z-index: 5;
-  width: min(21%, 188px);
-  padding: 7px 9px;
+  width: 184px;
+  padding: 7px 10px;
   border-radius: 10px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: rgba(20, 24, 31, 0.92);
+  background: rgba(20, 24, 31, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
   transition: border-color 0.15s ease, opacity 0.15s ease;
@@ -793,35 +812,35 @@ onBeforeUnmount(() => {
   filter: grayscale(0.5);
 }
 
-/* 4-player cross board cutout corners */
+/* 4-player cross board cutout corners — shifted further horizontally away from the board */
 .board-stage.four-player .seat-card.pos-bottom {
-  right: 1%;
-  bottom: 1.5%;
+  right: -76px;
+  bottom: 2%;
 }
 .board-stage.four-player .seat-card.pos-left {
-  left: 1%;
-  bottom: 1.5%;
+  left: -76px;
+  bottom: 2%;
 }
 .board-stage.four-player .seat-card.pos-top {
-  left: 1%;
-  top: 1.5%;
+  left: -76px;
+  top: 2%;
 }
 .board-stage.four-player .seat-card.pos-right {
-  right: 1%;
-  top: 1.5%;
+  right: -76px;
+  top: 2%;
 }
 
-/* 3-player hexagonal board corners */
+/* 3-player hexagonal board corners — shifted further horizontally away from the board */
 .board-stage.three-player .seat-card.pos-bottom {
-  right: 2%;
+  right: -88px;
   bottom: 2%;
 }
 .board-stage.three-player .seat-card.pos-top-left {
-  left: 2%;
+  left: -88px;
   top: 2%;
 }
 .board-stage.three-player .seat-card.pos-top-right {
-  right: 2%;
+  right: -88px;
   top: 2%;
 }
 

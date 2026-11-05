@@ -1,18 +1,28 @@
 import { PREMOVE_LAG_COMPENSATION_MS } from './clock.js';
 
+export const MULTI_TURN_LIMIT_MS = 5 * 60_000;
+
 export interface MultiClockState {
   remainingMs: number[];
   active: number | null;
   sinceMs: number;
   incMs: number;
+  perTurnLimitMs?: number;
 }
 
-export function initMultiClock(seats: number, baseMs: number, incMs: number): MultiClockState {
+export function initMultiClock(
+  seats: number,
+  baseMs: number,
+  incMs: number,
+  perTurnLimitMs?: number,
+): MultiClockState {
+  const initialMs = perTurnLimitMs ?? baseMs;
   return {
-    remainingMs: Array.from({ length: seats }, () => baseMs),
+    remainingMs: Array.from({ length: seats }, () => initialMs),
     active: null,
     sinceMs: 0,
     incMs,
+    ...(perTurnLimitMs !== undefined ? { perTurnLimitMs } : {}),
   };
 }
 
@@ -37,6 +47,9 @@ export function multiClockOnMove(
 ): { clock: MultiClockState; flagged: boolean } {
   const remainingMs = [...c.remainingMs];
   if (c.active === null) {
+    if (c.perTurnLimitMs !== undefined && nextSeat !== null) {
+      remainingMs[nextSeat] = c.perTurnLimitMs;
+    }
     return {
       clock: {
         ...c,
@@ -48,6 +61,9 @@ export function multiClockOnMove(
     };
   }
   if (c.active !== moverSeat) {
+    if (c.perTurnLimitMs !== undefined && nextSeat !== null) {
+      remainingMs[nextSeat] = c.perTurnLimitMs;
+    }
     return { clock: { ...c, remainingMs, active: nextSeat, sinceMs: atMs }, flagged: false };
   }
   const elapsed = Math.max(0, atMs - c.sinceMs);
@@ -55,6 +71,9 @@ export function multiClockOnMove(
   const rem = Math.max(0, remainingMs[moverSeat] - effective);
   if (rem <= 0) {
     remainingMs[moverSeat] = 0;
+    if (c.perTurnLimitMs !== undefined && nextSeat !== null) {
+      remainingMs[nextSeat] = c.perTurnLimitMs;
+    }
     return {
       clock: {
         ...c,
@@ -65,7 +84,10 @@ export function multiClockOnMove(
       flagged: true,
     };
   }
-  remainingMs[moverSeat] = rem + c.incMs;
+  remainingMs[moverSeat] = c.perTurnLimitMs !== undefined ? c.perTurnLimitMs : rem + c.incMs;
+  if (c.perTurnLimitMs !== undefined && nextSeat !== null) {
+    remainingMs[nextSeat] = c.perTurnLimitMs;
+  }
   return {
     clock: {
       ...c,
@@ -83,9 +105,13 @@ export function multiClockSwitchSeat(
   atMs: number,
 ): MultiClockState {
   const snap = multiClockSnapshot(c, atMs);
+  const remainingMs = [...snap.remainingMs];
+  if (c.perTurnLimitMs !== undefined && nextSeat !== null) {
+    remainingMs[nextSeat] = c.perTurnLimitMs;
+  }
   return {
     ...c,
-    remainingMs: snap.remainingMs,
+    remainingMs,
     active: nextSeat,
     sinceMs: atMs,
   };

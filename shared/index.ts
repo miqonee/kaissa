@@ -33,7 +33,7 @@ export function modeLabel(mode: GameMode, locale = 'ru'): string {
   })[mode];
 }
 export const defaultTimeControl = (mode: GameMode): TimeControl =>
-  isMultiplayer(mode)
+  false && isMultiplayer(mode)
     ? { kind: 'clock', baseMin: 5, incSec: 3 }
     : mode === 'team'
       ? { kind: 'clock', baseMin: 3, incSec: 0 }

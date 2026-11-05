@@ -45,11 +45,11 @@ const tcPresets = computed<{ label: string; tc: TimeControl }[]>(() => [
   { label: i18n.t.createModal.tc10plus5, tc: { kind: 'clock', baseMin: 10, incSec: 5 } },
   { label: i18n.t.createModal.tcNoClock, tc: { kind: 'none', baseMin: 0, incSec: 0 } },
 ]);
-const modeTc = ref<Record<GameMode, number>>({ team: 0, bughouse: 5, crazyhouse: 5, 'crazyhouse-team': 5, 'four-player': 3, 'three-player': 3 });
+const modeTc = ref<Record<GameMode, number>>({ team: 0, bughouse: 5, crazyhouse: 5, 'crazyhouse-team': 5, 'four-player': 5, 'three-player': 5 });
 const availableTcPresets = computed(() =>
-  isMultiplayer(selectedMode.value)
-    ? tcPresets.value.filter((p) => p.tc.kind === 'clock')
-    : tcPresets.value,
+  tcPresets.value,
+  // All time controls allowed in all modes
+  // end availableTcPresets
 );
 const selectedTcIdx = computed({
   get: () => {

@@ -64,7 +64,7 @@ export class Lobby {
     this.code = data.code;
     this.name = data.name;
     this.mode = data.mode;
-    this.timeControl = isMultiplayer(data.mode) && data.timeControl.kind === 'none'
+    this.timeControl = false && isMultiplayer(data.mode) && data.timeControl.kind === 'none'
       ? defaultTimeControl(data.mode)
       : data.timeControl;
     this.private = data.private;
@@ -775,7 +775,7 @@ export class LobbiesManager {
     const m = lobby.members.get(uid);
     if (!m || m.isBot || (!lobby.isQuick && !m.host)) return;
     if (!tc || !['none', 'clock'].includes(tc.kind) || !Number.isInteger(tc.baseMin) || !Number.isInteger(tc.incSec) || (tc.kind === 'none' ? tc.baseMin !== 0 || tc.incSec !== 0 : tc.baseMin < 1 || tc.baseMin > 120 || tc.incSec < 0 || tc.incSec > 60)) return;
-    if (isMultiplayer(lobby.mode) && tc.kind === 'none') return;
+    // All time controls (including 'none' with 5m per-turn limit) are allowed in multiplayer
     lobby.timeControl = tc;
     if (lobby.isQuick) this.resetAutoCountdown(lobby, true);
     this.broadcastState(lobby);

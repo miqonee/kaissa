@@ -66,9 +66,9 @@ const tcOptions = computed<{ label: string; tc: TimeControl }[]>(() => {
     { label: '10+5', tc: { kind: 'clock', baseMin: 10, incSec: 5 } },
     { label: i18n.t.createModal.tcNoClock, tc: { kind: 'none', baseMin: 0, incSec: 0 } },
   ];
-  return lobby.value && isMultiplayer(lobby.value.mode)
-    ? all.filter((o) => o.tc.kind === 'clock')
-    : all;
+  return all; //
+  // All presets allowed
+  // in all modes
 });
 
 function isCurrentTc(tc: TimeControl): boolean {

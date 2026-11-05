@@ -1,6 +1,6 @@
 import { Chess, type Square } from 'chess.js';
 import { CrazyhouseGame } from 'shared/crazyhouse';
-import { hasPockets, isCrazyhouse } from 'shared';
+import { hasPockets, isCrazyhouse, isMultiplayer, MultiChess, type MultiMode } from 'shared';
 import { BughouseGame } from 'shared/bughouse';
 import type { DropPieceType } from 'shared';
 import { DEFAULT_POCKET, type GameSummary, type MoveRecord, type PieceType, type Pocket } from 'shared';
@@ -106,6 +106,7 @@ function fallbackSan(mv: MoveRecord): string {
  * и плеер просто показывает их как есть, не падая.
  */
 export function buildReplay(game: GameSummary, rawMoves: MoveRecord[]): ReplayData {
+  if (isMultiplayer(game.mode)) return buildMultiReplay(game, rawMoves);
   if (hasPockets(game.mode) && (game.rulesVersion ?? 0) >= 2) return buildBughouseReplay(game, rawMoves);
   const boardsCount: 1 | 2 = game.mode === 'bughouse' ? 2 : 1;
   const moves = [...rawMoves].sort((a, b) => a.ply - b.ply);
@@ -220,6 +221,38 @@ export function buildReplay(game: GameSummary, rawMoves: MoveRecord[]): ReplayDa
 }
 
 /** v2 uses exactly the same transfer, promotion and drop rules as live play. */
+function buildMultiReplay(game: GameSummary, records: MoveRecord[]): ReplayData {
+  const engine = new MultiChess(game.mode as MultiMode);
+  const initialFen = engine.serialize();
+  const views: ReplayMoveView[] = [];
+  const frames: ReplayFrame[] = [
+    {
+      ply: 0,
+      boards: [{ fen: initialFen, lastMove: [null, null], check: null }],
+      pockets: null,
+    },
+  ];
+  [...records].sort((a, b) => a.ply - b.ply).forEach((rec, index) => {
+    const fen = rec.fenAfter || frames[frames.length - 1]!.boards[0].fen;
+    views.push({
+      index,
+      boardIndex: 0,
+      ply: rec.ply,
+      userId: rec.userId,
+      san: rec.from + '–' + rec.to,
+      from: rec.from,
+      to: rec.to,
+      ok: true,
+    });
+    frames.push({
+      ply: index + 1,
+      boards: [{ fen, lastMove: [rec.from, rec.to], check: null }],
+      pockets: null,
+    });
+  });
+  return { game, moves: views, frames, boardsCount: 1 };
+}
+
 function buildBughouseReplay(game: GameSummary, records: MoveRecord[]): ReplayData {
   const engine = isCrazyhouse(game.mode) ? new CrazyhouseGame(game.mode === 'crazyhouse-team') : new BughouseGame();
   const boards: (0 | 1)[] = game.mode === 'bughouse' ? [0, 1] : [0];

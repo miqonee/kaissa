@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { getBotPersonality, modeLabel as sharedModeLabel, type GameMode, type LiveGameInfo } from 'shared';
+import { getBotPersonality, isMultiplayer, modeLabel as sharedModeLabel, type GameMode, type LiveGameInfo, type MultiMode } from 'shared';
 import { useConnectionStore } from '../stores/connection';
 import { useI18n } from '../stores/i18n';
 import ChessBoard from './ChessBoard.vue';
+import MultiBoard from './MultiBoard.vue';
 import BotHoverCard from './BotHoverCard.vue';
 import AppIcon from './AppIcon.vue';
 const props = defineProps<{ games: LiveGameInfo[]; liveLoaded: boolean }>();
@@ -78,19 +79,38 @@ function botDisplayName(p: LiveGameInfo['players'][number]): string {
               @keydown.enter.space.prevent="router.push(`/game/${g.gameId}`)"
             >
               <div class="live-boards" :class="{ two: g.mode === 'bughouse' }">
-                <ChessBoard
-                  v-for="(fen, i) in g.fens"
-                  :key="i"
-                  :fen="fen"
+                <MultiBoard
+                  v-if="isMultiplayer(g.mode)"
+                  :mode="g.mode as MultiMode"
+                  :fen="g.fens[0] ?? null"
                   :mini="true"
-                  :coordinates="false"
-                  :movable-color="null"
                 />
+                <template v-else>
+                  <ChessBoard
+                    v-for="(fen, i) in g.fens"
+                    :key="i"
+                    :fen="fen"
+                    :mini="true"
+                    :coordinates="false"
+                    :movable-color="null"
+                  />
+                </template>
               </div>
               <div class="live-meta">
                 <div class="live-row">
                   <span class="badge mode-badge">{{ modeLabel(g.mode) }}</span>
-                  <div class="players-line">
+                  <div v-if="isMultiplayer(g.mode)" class="players-line">
+                    <span class="team t1">
+                      <template v-for="(p, pIdx) in g.players" :key="p.username">
+                        <span v-if="pIdx > 0" class="team-sep">·</span>
+                        <BotHoverCard v-if="p.isBot" :username="p.username" :rating="p.rating">
+                          <span class="live-player is-bot">{{ botDisplayName(p) }}</span>
+                        </BotHoverCard>
+                        <span v-else class="live-player">{{ p.username }}</span>
+                      </template>
+                    </span>
+                  </div>
+                  <div v-else class="players-line">
                     <span class="team t1">
                       <template v-for="(p, pIdx) in teamPlayers(g, 1)" :key="p.username">
                         <span v-if="pIdx > 0" class="team-sep">/</span>

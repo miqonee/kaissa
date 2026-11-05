@@ -6,12 +6,26 @@ import type {
   GameResult,
   GameState,
   LiveGameInfo,
+  MultiColor,
+  MultiMode,
   PieceType,
   Pocket,
+  SeatStatus,
   Team,
   TimeControl,
 } from 'shared';
-import { DEFAULT_POCKET, hasPockets, isCrazyhouse, lobbyCapacity, eloDelta, eloToLevel, type DropPieceType } from 'shared';
+import {
+  DEFAULT_POCKET,
+  hasPockets,
+  isCrazyhouse,
+  isMultiplayer,
+  lobbyCapacity,
+  eloDelta,
+  eloToLevel,
+  MultiChess,
+  SEAT_COLORS,
+  type DropPieceType,
+} from 'shared';
 import { loadPlayerRatings, ratingKind, saveGameResult } from '../ratings/service.js';
 import { prisma } from '../prisma.js';
 import { presence } from '../socket/presence.js';
@@ -20,8 +34,16 @@ import { CrazyhouseGame } from 'shared/crazyhouse';
 import { chooseCrazyhouseMove } from '../ai/crazyhouse.js';
 import { TeamGame } from './teamGame.js';
 import { clockOnMove, clockSnapshot, initClock, type ClockState } from './clock.js';
+import {
+  initMultiClock,
+  multiClockOnMove,
+  multiClockSnapshot,
+  multiClockSwitchSeat,
+  type MultiClockState,
+} from './multiClock.js';
 import { chooseBotMove, getBotThinkingDelayMs } from '../ai/engine.js';
 import { chooseBughouseMove, bughouseThinkingDelay } from '../ai/bughouse.js';
+import { chooseMultiMove, multiBotThinkingDelayMs } from '../ai/multi.js';
 import { botStatsTracker } from '../ai/botStats.js';
 
 // ============================================================
@@ -31,6 +53,7 @@ import { botStatsTracker } from '../ai/botStats.js';
 //   Доска 0: team1 — белые, team2 — чёрные.
 //   Доска 1: team2 — белые, team1 — чёрные.
 // Team 2v2: одна доска, члены команды чередуются (moveSlot).
+// Multi FFA (3 / 4 игрока): одна доска MultiChess, ходы по кругу.
 // ============================================================
 
 export const PREMOVE_LAG_COMPENSATION_MS = 100;
@@ -50,6 +73,7 @@ export interface CreateGameOpts {
   timeControl: TimeControl;
   team1: ParticipantSetup[];
   team2: ParticipantSetup[];
+  seats?: ParticipantSetup[];
   isDemo?: boolean;
   fixedId?: number;
 }
@@ -67,6 +91,11 @@ interface ActiveParticipant {
   isBot?: boolean;
   botLevel?: number | null;
   botJitter?: number;
+  seat?: number;
+  multiColor?: MultiColor;
+  score?: number | null;
+  place?: number | null;
+  outcome?: SeatStatus | string | null;
 }
 
 interface ActiveGame {
@@ -80,8 +109,9 @@ interface ActiveGame {
   mode: GameMode;
   timeControl: TimeControl;
   participants: ActiveParticipant[];
-  engine: TeamGame | BughouseGame;
+  engine: TeamGame | BughouseGame | MultiChess;
   clocks: ClockState[];
+  multiClock?: MultiClockState;
   ply: number;
   startedAt: number;
   status: 'active' | 'finished' | 'abandoned';
@@ -95,7 +125,7 @@ interface ActiveGame {
   boardsStarted: [boolean, boolean];
 }
 
-const TEAM_COLORS_BUGHOUSE: Record<Team, Record<Board, SideColor>> = {
+const TEAM_COLORS_BUGHOUSE: Record<1 | 2, Record<Board, SideColor>> = {
   1: { 0: 'w', 1: 'b' },
   2: { 0: 'b', 1: 'w' },
 };
@@ -127,6 +157,9 @@ export class GamesManager {
   }
 
   private positionKey(g: ActiveGame, board: Board): string {
+    if (g.engine instanceof MultiChess) {
+      return `${g.instance}:${g.botEpoch}:${g.engine.serialize()}`;
+    }
     return `${g.instance}:${g.botEpoch}:${g.engine instanceof BughouseGame ? g.engine.engineFen(board) : g.engine.fen()}`;
   }
 
@@ -174,6 +207,40 @@ export class GamesManager {
     const g = this.games.get(gameId);
     if (!g || g.status !== 'active') return;
     const state = this.toGameState(g);
+
+    if (g.engine instanceof MultiChess) {
+      const turnUid = state.turnUserIds[0];
+      const participant = g.participants.find(p => p.uid === turnUid);
+      if (!participant?.isBot || !this.botMayMove(g, 0)) return;
+      const key = `${gameId}:${g.instance}:0`;
+      if (this.botTimers.has(key) || this.botPending.has(key)) return;
+      const remaining = g.timeControl.kind === 'clock' && participant.seat !== undefined
+        ? state.multi?.clocksMs[participant.seat]
+        : undefined;
+      const delay = multiBotThinkingDelayMs(remaining, Boolean(g.isDemo));
+      const timer = setTimeout(async () => {
+        this.botTimers.delete(key);
+        this.botPending.add(key);
+        try {
+          const current = this.games.get(gameId);
+          if (current !== g || current.status !== 'active' || !(current.engine instanceof MultiChess)) return;
+          if (this.toGameState(current).turnUserIds[0] !== participant.uid) return;
+          const fingerprint = this.positionKey(current, 0);
+          const move = chooseMultiMove(current.engine.snapshot(), participant.ratingBefore);
+          if (move) {
+            await this.applyMultiMove(gameId, participant.uid, move, fingerprint);
+          }
+        } catch (error) {
+          console.warn('[AI] Multi bot turn failed:', error);
+        } finally {
+          this.botPending.delete(key);
+          if (this.games.get(gameId) === g) this.triggerBotTurn(gameId);
+        }
+      }, delay);
+      this.botTimers.set(key, timer);
+      return;
+    }
+
     for (let b = 0; b < (g.mode === 'bughouse' ? 2 : 1); b++) {
       const board = b as Board;
       const participant = g.participants.find(p => p.uid === state.turnUserIds[b]);
@@ -201,7 +268,7 @@ export class GamesManager {
               boardIndex: board, from: isDrop(move) ? '-' : move.from, to: move.to,
               ...(isDrop(move) ? { dropPiece: move.piece } : { promotion: move.promotion }),
             }, fingerprint);
-          } else {
+          } else if (current.engine instanceof TeamGame) {
             const move = await chooseBotMove(current.engine.fen(), { username: participant.username, elo: participant.ratingBefore, level: participant.botLevel ?? undefined }, participant.botJitter);
             if (move) await this.applyMove(gameId, participant.uid, { boardIndex: board, from: move.from, to: move.to, promotion: move.promotion }, fingerprint);
           }
@@ -245,20 +312,34 @@ export class GamesManager {
   // ---------------- Создание ----------------
 
   async createGame(opts: CreateGameOpts): Promise<number> {
-    const humans = [...opts.team1, ...opts.team2].filter(p => !p.isBot).map(p => p.uid);
+    const allInputs = opts.seats ?? [...opts.team1, ...opts.team2];
+    const humans = allInputs.filter(p => !p.isBot).map(p => p.uid);
     if (humans.some(uid => this.startingUsers.has(uid) || this.activeGameOf(uid) !== null)) throw new Error('Участник уже играет другую партию');
     humans.forEach(uid => this.startingUsers.add(uid));
     try {
-      const team1 = opts.team1.slice(0, lobbyCapacity(opts.mode) / 2);
-      const team2 = opts.team2.slice(0, lobbyCapacity(opts.mode) / 2);
-      if (team1.length !== lobbyCapacity(opts.mode) / 2 || team2.length !== team1.length || new Set([...team1, ...team2].map(p => p.uid)).size !== lobbyCapacity(opts.mode)) throw new Error('Неверный состав игроков');
+      const cap = lobbyCapacity(opts.mode);
+      let participants: ActiveParticipant[];
+      if (isMultiplayer(opts.mode)) {
+        const rawSeats = (opts.seats ?? [...opts.team1, ...opts.team2]).slice(0, cap);
+        if (rawSeats.length !== cap || new Set(rawSeats.map(p => p.uid)).size !== cap) {
+          throw new Error('Неверный состав игроков');
+        }
+        const loaded = await loadPlayerRatings(rawSeats, opts.mode);
+        participants = buildMultiParticipants(opts.mode, loaded);
+      } else {
+        const team1 = opts.team1.slice(0, cap / 2);
+        const team2 = opts.team2.slice(0, cap / 2);
+        if (team1.length !== cap / 2 || team2.length !== team1.length || new Set([...team1, ...team2].map(p => p.uid)).size !== cap) {
+          throw new Error('Неверный состав игроков');
+        }
+        participants = buildParticipants(opts.mode, await loadPlayerRatings(team1, opts.mode), await loadPlayerRatings(team2, opts.mode));
+      }
 
       const noClock = opts.timeControl.kind === 'none';
       const baseMs = opts.timeControl.baseMin * 60_000;
       const incMs = opts.timeControl.incSec * 1000;
 
-      const participants = buildParticipants(opts.mode, await loadPlayerRatings(team1, opts.mode), await loadPlayerRatings(team2, opts.mode));
-      const kind = ratingKind(participants);
+      const kind = ratingKind(participants, opts.mode);
       let gameId: number;
 
       if (opts.isDemo && opts.fixedId) {
@@ -282,6 +363,9 @@ export class GamesManager {
                 moveSlot: p.moveSlot,
                 ratingBefore: p.ratingBefore,
                 wasGuest: Boolean(p.isGuest),
+                ...(p.seat !== undefined ? { seat: p.seat } : {}),
+                ...(p.score !== undefined ? { score: p.score } : {}),
+                ...(p.outcome !== undefined ? { outcome: p.outcome } : {}),
               })),
             },
           },
@@ -289,9 +373,16 @@ export class GamesManager {
         gameId = dbGame.id;
       }
 
-      const engine = opts.mode === 'bughouse' ? new BughouseGame() : isCrazyhouse(opts.mode) ? new CrazyhouseGame(opts.mode === 'crazyhouse-team') : new TeamGame();
+      const engine = isMultiplayer(opts.mode)
+        ? MultiChess.create(opts.mode)
+        : opts.mode === 'bughouse'
+          ? new BughouseGame()
+          : isCrazyhouse(opts.mode)
+            ? new CrazyhouseGame(opts.mode === 'crazyhouse-team')
+            : new TeamGame();
       const clockCount = opts.mode === 'bughouse' ? 2 : 1;
       const clocks = Array.from({ length: clockCount }, () => initClock(baseMs, incMs));
+      const multiClock = isMultiplayer(opts.mode) ? initMultiClock(cap, baseMs, incMs) : undefined;
 
       const game: ActiveGame = {
         ratingKind: kind,
@@ -304,6 +395,7 @@ export class GamesManager {
         participants,
         engine,
         clocks,
+        multiClock,
         ply: 0,
         startedAt: Date.now(),
         status: 'active',
@@ -329,6 +421,151 @@ export class GamesManager {
 
   // ---------------- Ходы ----------------
 
+  applyMultiMove(
+    gameId: number,
+    uid: number,
+    data: { from: string; to: string },
+    expectedPosition?: string,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    return this.serialize(gameId, () => this.applyMultiMoveNow(gameId, uid, data, expectedPosition));
+  }
+
+  private async applyMultiMoveNow(
+    gameId: number,
+    uid: number,
+    data: { from: string; to: string },
+    expectedPosition?: string,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    const g = this.games.get(gameId);
+    if (!g || g.status !== 'active' || g.pendingFinish) return { ok: false, error: 'Партия завершена или сохраняется' };
+    if (!(g.engine instanceof MultiChess)) return { ok: false, error: 'Неверный режим партии' };
+    const p = g.participants.find((x) => x.uid === uid);
+    if (!p || p.seat === undefined) return { ok: false, error: 'Вы не участник' };
+    if (!data || typeof data.from !== 'string' || typeof data.to !== 'string') {
+      return { ok: false, error: 'Некорректный ход' };
+    }
+    if (expectedPosition !== undefined && this.positionKey(g, 0) !== expectedPosition) {
+      return { ok: false, error: 'Позиция изменилась' };
+    }
+
+    const now = Date.now();
+    if (g.timeControl.kind === 'clock' && g.multiClock && g.multiClock.active !== null) {
+      const snap = multiClockSnapshot(g.multiClock, now);
+      const activeSeat = g.multiClock.active;
+      if (snap.remainingMs[activeSeat] <= 0) {
+        await this.handleMultiFlag(g, activeSeat, now);
+        return { ok: false, error: 'Время вышло' };
+      }
+    }
+
+    const mc = g.engine;
+    if (mc.turn() !== p.seat) return { ok: false, error: 'Сейчас не ваш ход' };
+    if (mc.seatStatus(p.seat) !== 'active') return { ok: false, error: 'Вы уже выбыли из партии' };
+
+    const before = mc.snapshot();
+    const prevMultiClock = g.multiClock
+      ? { ...g.multiClock, remainingMs: [...g.multiClock.remainingMs] }
+      : undefined;
+    const prevPly = g.ply;
+
+    let outcome;
+    try {
+      outcome = mc.move(p.seat, data.from, data.to);
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'Недопустимый ход' };
+    }
+
+    let clocksAfterJson: string | null = null;
+    if (g.timeControl.kind === 'clock' && g.multiClock) {
+      const nextSeat = outcome.over ? null : mc.turn();
+      const r = multiClockOnMove(g.multiClock, p.seat, nextSeat, now);
+      if (r.flagged) {
+        g.engine = MultiChess.fromSnapshot(before);
+        await this.handleMultiFlag(g, p.seat, now);
+        return { ok: false, error: 'Время вышло' };
+      }
+      g.multiClock = r.clock;
+      const snap = multiClockSnapshot(g.multiClock, now);
+      clocksAfterJson = JSON.stringify(snap.remainingMs);
+    }
+
+    const serializedFen = mc.serialize();
+    g.ply += 1;
+    try {
+      if (!g.isDemo) {
+        await prisma.gameMove.create({
+          data: {
+            gameId: g.id,
+            boardIndex: 0,
+            ply: g.ply,
+            userId: uid,
+            from: data.from,
+            to: data.to,
+            promotion: outcome.promoted ? 'q' : null,
+            dropPiece: null,
+            fenAfter: serializedFen,
+            clocksAfter: clocksAfterJson,
+          },
+        });
+      }
+    } catch (error) {
+      g.engine = MultiChess.fromSnapshot(before);
+      g.multiClock = prevMultiClock;
+      g.ply = prevPly;
+      console.error('[game] Could not save multi move:', error);
+      return { ok: false, error: 'Не удалось сохранить ход. Попробуйте ещё раз' };
+    }
+
+    g.boardsStarted[0] = true;
+    this.syncMultiParticipants(g);
+
+    if (outcome.over) {
+      await this.finish(g, 'ffa', (outcome.endReason ?? 'last-standing') as EndReason, 0);
+    }
+
+    this.io?.to(this.gameRoom(g.id)).emit('game:state', this.toGameState(g));
+    if (g.status === 'active') this.io?.to('live').emit('live:update', this.liveInfo(g));
+    if (g.status === 'active' && !g.pendingFinish) {
+      this.triggerBotTurn(g.id);
+    }
+    return { ok: true };
+  }
+
+  private syncMultiParticipants(g: ActiveGame): void {
+    if (!(g.engine instanceof MultiChess)) return;
+    const mc = g.engine;
+    const places = mc.placements();
+    for (const p of g.participants) {
+      if (p.seat !== undefined) {
+        p.score = mc.scoreOf(p.seat);
+        p.outcome = mc.seatStatus(p.seat);
+        p.place = places[p.seat];
+      }
+    }
+  }
+
+  private async handleMultiFlag(g: ActiveGame, flaggedSeat: number, now: number): Promise<void> {
+    if (!(g.engine instanceof MultiChess) || g.status !== 'active') return;
+    const mc = g.engine;
+    const outcome = mc.eliminate(flaggedSeat, 'timeout');
+    if (g.multiClock) {
+      g.multiClock.remainingMs[flaggedSeat] = 0;
+      g.multiClock = multiClockSwitchSeat(g.multiClock, outcome.over ? null : mc.turn(), now);
+    }
+    this.syncMultiParticipants(g);
+    const flaggedPlayer = g.participants.find(p => p.seat === flaggedSeat);
+    if (flaggedPlayer) {
+      this.systemMessage(g, `У игрока ${flaggedPlayer.username} вышло время`);
+    }
+    if (outcome.over) {
+      await this.finish(g, 'ffa', (outcome.endReason ?? 'timeout') as EndReason, 0);
+    } else {
+      this.io?.to(this.gameRoom(g.id)).emit('game:state', this.toGameState(g));
+      this.io?.to('live').emit('live:update', this.liveInfo(g));
+      this.triggerBotTurn(g.id);
+    }
+  }
+
   applyMove(
     gameId: number, uid: number,
     data: { boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType },
@@ -344,6 +581,7 @@ export class GamesManager {
   ): Promise<{ ok: true } | { ok: false; error: string }> {
     const g = this.games.get(gameId);
     if (!g || g.status !== 'active' || g.pendingFinish) return { ok: false, error: 'Партия завершена или сохраняется' };
+    if (g.engine instanceof MultiChess) return { ok: false, error: 'Используйте game:multi-move' };
     const p = g.participants.find((x) => x.uid === uid);
     if (!p) return { ok: false, error: 'Вы не участник' };
     if (g.pacing?.paused) return { ok: false, error: 'Партия на паузе' };
@@ -400,7 +638,7 @@ export class GamesManager {
     // Часы
     let clocksAfter: [number, number] | null = null;
     if (g.timeControl.kind === 'clock') {
-      const moverColor = g.mode === 'bughouse' ? TEAM_COLORS_BUGHOUSE[p.team][data.boardIndex as Board] : p.color;
+      const moverColor = g.mode === 'bughouse' ? TEAM_COLORS_BUGHOUSE[p.team as 1 | 2][data.boardIndex as Board] : p.color;
       const r = clockOnMove(g.clocks[data.boardIndex], moverColor, now);
       g.clocks[data.boardIndex] = r.clock;
       if (r.flagged) {
@@ -549,6 +787,13 @@ export class GamesManager {
       }
 
       if (g.timeControl.kind === 'clock') {
+        if (g.engine instanceof MultiChess && g.multiClock && g.multiClock.active !== null) {
+          const snap = multiClockSnapshot(g.multiClock, now);
+          if (snap.remainingMs[g.multiClock.active] <= 0) {
+            await this.handleMultiFlag(g, g.multiClock.active, now);
+          }
+          return;
+        }
         for (let b = 0; b < g.clocks.length; b++) {
           const clock = g.clocks[b];
           if (clock?.active && (clock.active === 'w' ? clock.whiteMs : clock.blackMs) - (now - clock.sinceMs) <= 0) {
@@ -576,6 +821,24 @@ export class GamesManager {
     if (!g || g.status !== 'active') return;
     const p = g.participants.find((x) => x.uid === uid);
     if (!p) return;
+    if (g.engine instanceof MultiChess) {
+      if (p.seat === undefined || g.engine.seatStatus(p.seat) !== 'active') return;
+      const now = Date.now();
+      const outcome = g.engine.eliminate(p.seat, 'resigned');
+      if (g.multiClock) {
+        g.multiClock = multiClockSwitchSeat(g.multiClock, outcome.over ? null : g.engine.turn(), now);
+      }
+      this.syncMultiParticipants(g);
+      this.systemMessage(g, `${p.username} сдался и выбыл из партии`);
+      if (outcome.over) {
+        await this.finish(g, 'ffa', (outcome.endReason ?? 'resign') as EndReason, 0);
+      } else {
+        this.io?.to(this.gameRoom(g.id)).emit('game:state', this.toGameState(g));
+        this.io?.to('live').emit('live:update', this.liveInfo(g));
+        this.triggerBotTurn(g.id);
+      }
+      return;
+    }
     await this.finish(g, p.team === 1 ? '0-1' : '1-0', 'resign', p.boardIndex);
   }
 
@@ -585,6 +848,12 @@ export class GamesManager {
       g.pendingFinish = { result, reason, board };
       this.cancelBotTimers(g.id);
       g.clocks = g.clocks.map(c => ({ ...c, ...clockSnapshot(c, Date.now()), active: null }));
+      if (g.multiClock) {
+        g.multiClock = multiClockSwitchSeat(g.multiClock, null, Date.now());
+      }
+      if (g.engine instanceof MultiChess) {
+        this.syncMultiParticipants(g);
+      }
     }
     const pending = g.pendingFinish;
     result = pending.result; reason = pending.reason;
@@ -602,7 +871,9 @@ export class GamesManager {
     }
     g.status = 'finished'; g.result = result; g.reason = reason; g.endBoardIndex = pending.board;
     g.pendingFinish = undefined;
-    if (g.participants.every(p => p.isBot)) botStatsTracker.recordBotGame(g.participants, result, reason, g.ply);
+    if (!isMultiplayer(g.mode) && g.participants.every(p => p.isBot)) {
+      botStatsTracker.recordBotGame(g.participants, result, reason, g.ply);
+    }
 
     this.io?.to(this.gameRoom(g.id)).emit('game:end', {
       ratingKind: g.ratingKind, endBoardIndex: g.endBoardIndex,
@@ -768,9 +1039,11 @@ export class GamesManager {
 
   liveInfo(g: ActiveGame): LiveGameInfo {
     const fens =
-      g.mode === 'bughouse'
-        ? [(g.engine as BughouseGame).fen(0), (g.engine as BughouseGame).fen(1)]
-        : [g.engine instanceof BughouseGame ? g.engine.fen(0) : g.engine.fen()];
+      g.engine instanceof MultiChess
+        ? [g.engine.serialize()]
+        : g.mode === 'bughouse'
+          ? [(g.engine as BughouseGame).fen(0), (g.engine as BughouseGame).fen(1)]
+          : [g.engine instanceof BughouseGame ? g.engine.fen(0) : g.engine.fen()];
     return {
       gameId: g.id,
       isDemo: Boolean(g.isDemo),
@@ -797,8 +1070,51 @@ export class GamesManager {
   // ---------------- Состояние ----------------
 
   toGameState(g: ActiveGame): GameState {
-    const isBug = g.mode === 'bughouse';
     const now = Date.now();
+
+    if (g.engine instanceof MultiChess) {
+      this.syncMultiParticipants(g);
+      const mc = g.engine;
+      const snapClock = g.multiClock
+        ? multiClockSnapshot(g.multiClock, now)
+        : { remainingMs: g.participants.map(() => 0), active: null, running: false };
+      const turnSeat = mc.turn();
+      const activePlayer =
+        g.status === 'active' && !g.pendingFinish
+          ? g.participants.find((p) => p.seat === turnSeat)
+          : undefined;
+      return {
+        gameId: g.id,
+        ratingKind: g.ratingKind,
+        endBoardIndex: g.endBoardIndex,
+        savingResult: Boolean(g.pendingFinish),
+        rulesVersion: g.rulesVersion,
+        mode: g.mode,
+        status: g.status,
+        result: g.result,
+        reason: g.reason,
+        timeControl: g.timeControl,
+        participants: g.participants.map(toParticipantInfo),
+        fens: [mc.serialize()],
+        pockets: null,
+        moveNumber: g.ply,
+        turns: ['w'],
+        turnUserIds: [activePlayer?.uid ?? 0],
+        clocks: [[snapClock.remainingMs[0] ?? 0, snapClock.remainingMs[1] ?? 0]],
+        clocksActive: [snapClock.active !== null ? 'w' : null],
+        startedAt: g.startedAt,
+        chat: g.chat.slice(-50),
+        multi: {
+          snapshot: mc.snapshot(),
+          clocksMs: snapClock.remainingMs,
+          clockActiveSeat: snapClock.active,
+          checkedKingSquares: mc.checkedKings(),
+          legalMoves: g.status === 'active' && !g.pendingFinish ? mc.legalMovesRecord(turnSeat) : {},
+        },
+      };
+    }
+
+    const isBug = g.mode === 'bughouse';
     const fens = isBug
       ? [(g.engine as BughouseGame).fen(0), (g.engine as BughouseGame).fen(1)]
       : [g.engine instanceof BughouseGame ? g.engine.fen(0) : g.engine.fen()];
@@ -890,7 +1206,7 @@ export class GamesManager {
       rating: p.user.isBot ? p.ratingBefore : (p.user.modeRatings.find(r => r.mode === p.game.mode)?.rating ?? 1200),
       isGuest: p.user.isGuest,
       team: p.team,
-      seat: p.boardIndex * 2 + p.moveSlot,
+      seat: p.seat ?? (p.boardIndex * 2 + p.moveSlot),
       isBot: p.user.isBot,
       botLevel: p.user.isBot ? eloToLevel(p.ratingBefore) : p.user.botLevel,
     }));
@@ -903,7 +1219,7 @@ export class GamesManager {
 
 // ---------------- Вспомогательные ----------------
 
-function teamOfBoardColor(board: Board, color: SideColor): Team {
+function teamOfBoardColor(board: Board, color: SideColor): 1 | 2 {
   // Доска 0: w=team1, b=team2. Доска 1: w=team2, b=team1.
   if (board === 0) return color === 'w' ? 1 : 2;
   return color === 'w' ? 2 : 1;
@@ -922,7 +1238,35 @@ function toParticipantInfo(p: ActiveParticipant): import('shared').GameParticipa
     isGuest: p.isGuest,
     isBot: p.isBot,
     botLevel: p.botLevel,
+    ...(p.seat !== undefined ? { seat: p.seat } : {}),
+    ...(p.multiColor !== undefined ? { multiColor: p.multiColor } : {}),
+    ...(p.score !== undefined ? { score: p.score } : {}),
+    ...(p.place !== undefined ? { place: p.place } : {}),
+    ...(p.outcome !== undefined ? { outcome: p.outcome } : {}),
   };
+}
+
+function buildMultiParticipants(mode: MultiMode, seats: ParticipantSetup[]): ActiveParticipant[] {
+  const colors = SEAT_COLORS[mode];
+  return seats.map((s, idx) => ({
+    uid: s.uid,
+    username: s.username,
+    team: (idx + 1) as Team,
+    color: idx % 2 === 0 ? 'w' : 'b',
+    boardIndex: 0,
+    moveSlot: 0,
+    ratingBefore: s.rating,
+    ratingAfter: null,
+    isGuest: s.isGuest,
+    isBot: s.isBot,
+    botLevel: s.botLevel,
+    botJitter: (Math.random() * 2 - 1) * 0.05,
+    seat: idx,
+    multiColor: colors[idx],
+    score: 0,
+    place: idx + 1,
+    outcome: 'active',
+  }));
 }
 
 function buildParticipants(mode: GameMode, team1: ParticipantSetup[], team2: ParticipantSetup[]): ActiveParticipant[] {

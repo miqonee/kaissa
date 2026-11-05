@@ -1,9 +1,15 @@
 import type { GameState, ServerToClientEvents } from 'shared';
+import { isMultiplayer } from 'shared';
 export type MoveUpdate = Parameters<ServerToClientEvents['game:move']>[0];
 export type EndUpdate = Parameters<ServerToClientEvents['game:end']>[0];
 export function applyMoveUpdate(state: GameState, move: MoveUpdate): void {
   if (move.gameId !== state.gameId || !move.fenAfter) return;
   state.fens[move.boardIndex] = move.fenAfter;
+  if (isMultiplayer(state.mode)) {
+    state.moveNumber = (state.moveNumber ?? 0) + 1;
+    if (move.turnUserIds) state.turnUserIds = move.turnUserIds;
+    return;
+  }
   const color = move.fenAfter.split(' ')[1] as 'w' | 'b';
   state.turns[move.boardIndex] = color;
   // Slots and reserves must be updated before the next mover is derived.
@@ -29,4 +35,7 @@ export function applyEndUpdate(state: GameState, event: EndUpdate): void {
   state.savingResult = false;
   state.clocksActive = state.clocksActive.map(() => null);
   state.turnUserIds = state.turnUserIds.map(() => 0);
+  if (state.multi) {
+    state.multi.clockActiveSeat = null;
+  }
 }

@@ -10,5 +10,5 @@
     "rootDir": ".",
     "esModuleInterop": true
   },
-  "include": ["*.ts"]
+  "include": ["*.ts", "multi/**/*.ts"]
 }

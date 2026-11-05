@@ -46,7 +46,7 @@ class BotStatsTracker {
    * Зафиксировать результат чисто ботовской партии
    */
   recordBotGame(
-    participants: { username: string; ratingBefore?: number; botLevel?: number | null; team: 1 | 2 }[],
+    participants: { username: string; ratingBefore?: number; botLevel?: number | null; team: number }[],
     result: string,
     reason: string | null,
     plyCount: number,

@@ -1,5 +1,8 @@
 import {
   eloDelta,
+  expectedScoreElo,
+  ELO_K,
+  isMultiplayer,
   START_RATING,
   type GameMode,
   type GameResult,
@@ -15,17 +18,48 @@ export interface RatingPlayer {
   ratingAfter: number | null;
   isBot?: boolean;
   isGuest?: boolean;
+  seat?: number | null;
+  score?: number | null;
+  place?: number | null;
+  outcome?: string | null;
 }
+
 export function ratingKind(
   players: Pick<RatingPlayer, "team" | "isBot" | "isGuest">[],
+  mode?: GameMode,
 ): RatingKind {
   if (players.some((p) => p.isGuest)) return "guest";
+  if (mode && isMultiplayer(mode)) {
+    const humans = players.filter((p) => !p.isBot);
+    return humans.length >= 2 ? "rated" : "bots";
+  }
   return [1, 2].every((team) =>
     players.some((p) => p.team === team && !p.isBot),
   )
     ? "rated"
     : "bots";
 }
+
+/**
+ * Compute pairwise Elo delta for player `me` against all other human players in a multiplayer FFA game.
+ */
+export function multiplayerEloDelta(
+  me: { uid: number; ratingBefore: number; place?: number | null },
+  humanPlayers: { uid: number; ratingBefore: number; place?: number | null }[],
+): number {
+  const others = humanPlayers.filter((o) => o.uid !== me.uid);
+  if (others.length === 0) return 0;
+  const myPlace = me.place ?? 99;
+  let sum = 0;
+  for (const opp of others) {
+    const oppPlace = opp.place ?? 99;
+    const actual: 0 | 0.5 | 1 = myPlace < oppPlace ? 1 : myPlace > oppPlace ? 0 : 0.5;
+    const expected = expectedScoreElo(me.ratingBefore, opp.ratingBefore);
+    sum += actual - expected;
+  }
+  return Math.round((ELO_K / others.length) * sum);
+}
+
 export async function loadPlayerRatings<
   T extends {
     uid: number;
@@ -70,6 +104,7 @@ export async function saveGameResult(
     try {
       return await prisma.$transaction(
         async (tx) => {
+          const isMulti = isMultiplayer(game.mode);
           const won = result === "1-0" ? 1 : result === "0-1" ? 2 : null;
           const changed = await tx.game.updateMany({
             where: { id: game.id, status: "active" },
@@ -92,6 +127,7 @@ export async function saveGameResult(
             }));
           }
           const ratings = [];
+          const humanParticipants = game.participants.filter((o) => !o.isBot);
           for (const p of game.participants) {
             let before = p.ratingBefore,
               after = before;
@@ -103,19 +139,23 @@ export async function saveGameResult(
                 update: {},
               });
               const rated = game.ratingKind === "rated";
-              const win = won === p.team ? 1 : 0,
-                loss = won !== null && won !== p.team ? 1 : 0,
-                draw = won === null ? 1 : 0;
+              const win = isMulti ? (p.place === 1 ? 1 : 0) : (won === p.team ? 1 : 0);
+              const loss = isMulti ? (p.place !== 1 ? 1 : 0) : (won !== null && won !== p.team ? 1 : 0);
+              const draw = isMulti ? 0 : (won === null ? 1 : 0);
               // ratingBefore is the immutable snapshot taken when this match started.
               let delta = 0;
               if (rated) {
-                const opponents = game.participants.filter(
-                  (o) => o.team !== p.team && !o.isBot,
-                );
-                const average =
-                  opponents.reduce((sum, o) => sum + o.ratingBefore, 0) /
-                  opponents.length;
-                delta = eloDelta(before, average, draw ? 0.5 : win ? 1 : 0);
+                if (isMulti) {
+                  delta = multiplayerEloDelta(p, humanParticipants);
+                } else {
+                  const opponents = game.participants.filter(
+                    (o) => o.team !== p.team && !o.isBot,
+                  );
+                  const average =
+                    opponents.reduce((sum, o) => sum + o.ratingBefore, 0) /
+                    opponents.length;
+                  delta = eloDelta(before, average, draw ? 0.5 : win ? 1 : 0);
+                }
               }
               after = Math.max(100, before + delta);
               await tx.modeRating.update({
@@ -154,7 +194,14 @@ export async function saveGameResult(
             }
             await tx.gameParticipant.update({
               where: { gameId_userId: { gameId: game.id, userId: p.uid } },
-              data: { ratingBefore: before, ratingAfter: after },
+              data: {
+                ratingBefore: before,
+                ratingAfter: after,
+                ...(p.seat !== undefined ? { seat: p.seat } : {}),
+                ...(p.score !== undefined ? { score: p.score } : {}),
+                ...(p.place !== undefined ? { place: p.place } : {}),
+                ...(p.outcome !== undefined ? { outcome: p.outcome } : {}),
+              },
             });
             ratings.push({ uid: p.uid, before, after });
           }

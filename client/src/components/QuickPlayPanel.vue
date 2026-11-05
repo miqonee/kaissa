@@ -51,6 +51,20 @@ const modes = computed(() => ({
       : "Одна доска · резерв команды",
     rule: "/rules/crazyhouse",
   },
+  "four-player": {
+    name: en.value ? "4 Players" : "4 игрока",
+    detail: en.value
+      ? "14×14 cross board · 4 colors FFA"
+      : "Доска-крест 14×14 · 4 цвета",
+    rule: "/rules/duo",
+  },
+  "three-player": {
+    name: en.value ? "3 Players" : "3 игрока",
+    detail: en.value
+      ? "Hexagonal board · 3 colors FFA"
+      : "Шестиугольная доска · 3 цвета",
+    rule: "/rules/duo",
+  },
 }));
 const selected = computed(() => modes.value[props.modelValue]);
 const clock = computed(

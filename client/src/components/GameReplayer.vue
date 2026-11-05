@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { modeLabel as sharedModeLabel, type GameMode } from 'shared';
+import { isMultiplayer, modeLabel as sharedModeLabel, type GameMode, type MultiMode } from 'shared';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { GameSummary, MoveRecord, PieceType, Pocket } from 'shared';
 import { detectOpening, timeControlLabel } from 'shared';
 import { useI18n } from '../stores/i18n';
 import ChessBoard from './ChessBoard.vue';
+import MultiBoard from './MultiBoard.vue';
 import PocketBar from './PocketBar.vue';
 import AppIcon from './AppIcon.vue';
 import { buildMoveRows, buildReplay, type ReplayMoveView } from '../game/replay';
@@ -301,7 +302,14 @@ function pieceLabel(t: PieceType): string {
             :selected="null"
           />
 
+          <MultiBoard
+            v-if="isMultiplayer(game.mode)"
+            :mode="game.mode as MultiMode"
+            :fen="fenOf(b - 1)"
+            :last-move="lastMoveOf(b - 1)"
+          />
           <ChessBoard
+            v-else
             :fen="fenOf(b - 1)"
             :orientation="orientationOf(b - 1)"
             :movable-color="null"

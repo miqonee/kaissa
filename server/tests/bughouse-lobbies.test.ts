@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../src/ratings/service.js', async importOriginal => ({ ...await importOriginal<typeof import('../src/ratings/service.js')>(), loadPlayerRatings: vi.fn(async players => players) }));
-import { lobbyCapacity } from 'shared';
+import { GAME_MODES, lobbyCapacity } from 'shared';
 import { LobbiesManager } from '../src/lobby/lobbies.js';
 import { prisma } from '../src/prisma.js';
 const bots = Array.from({ length: 6 }, (_, i) => ({ id: 100 + i, username: `bot_${i}`, isBot: true, rating: 1200 }));
@@ -54,7 +54,7 @@ describe('Bughouse quick tables', () => {
     const manager = new LobbiesManager();
     await Promise.all([manager.ensureAutoLobby(), manager.ensureAutoLobby()]);
     const tables = manager.publicList();
-    expect(tables).toHaveLength(4);
+    expect(tables).toHaveLength(GAME_MODES.length);
     expect(tables.find(l => l.mode === 'bughouse')?.timeControl).toEqual({ kind: 'none', baseMin: 0, incSec: 0 });
     expect(tables.find(l => l.mode === 'team')?.timeControl).toEqual({ kind: 'clock', baseMin: 3, incSec: 0 });
     expect(tables.every(l => l.members.size === lobbyCapacity(l.mode) && l.autoCountdown === null)).toBe(true);

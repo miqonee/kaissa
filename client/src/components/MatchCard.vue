@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { modeLabel, timeControlLabel, type GameSummary } from "shared";
+import { isMultiplayer, modeLabel, timeControlLabel, type GameSummary } from "shared";
 import { useI18n } from "../stores/i18n";
 import { matchOutcome, ratingLabel, endReason } from "../utils/match";
 import { openLichessAnalysis } from "../api/lichess";
@@ -16,6 +16,10 @@ const i18n = useI18n();
 const en = computed(() => i18n.locale === "en");
 const myTeam = computed(
   () => props.game.participants.find((p) => p.userId === props.viewerId)?.team,
+);
+const isMulti = computed(() => isMultiplayer(props.game.mode));
+const sortedMultiParticipants = computed(() =>
+  [...props.game.participants].sort((a, b) => (a.place ?? 99) - (b.place ?? 99)),
 );
 const teams = computed(() => [myTeam.value ?? 1, myTeam.value === 2 ? 1 : 2]);
 const date = computed(() =>
@@ -49,7 +53,41 @@ const date = computed(() =>
       </div>
       <small class="dim">#{{ game.id }} · {{ date }}</small>
     </header>
-    <div class="teams">
+    <div v-if="isMulti" class="teams multi-standings">
+      <section
+        v-for="p in sortedMultiParticipants"
+        :key="p.userId"
+        :class="{ yours: p.userId === viewerId }"
+      >
+        <div class="player">
+          <div class="player-identity">
+            <strong v-if="p.place" class="mono">#{{ p.place }}</strong>
+            <router-link :to="`/players/${encodeURIComponent(p.username)}`">{{ p.username }}</router-link>
+            <span v-if="p.userId === viewerId" class="badge">{{ en ? "You" : "Вы" }}</span>
+            <span v-if="p.isBot || p.isGuest" class="badge">{{ p.isBot ? (en ? "Bot" : "Бот") : (en ? "Guest" : "Гость") }}</span>
+            <span v-if="p.score != null" class="badge mono">{{ p.score }} {{ en ? "pts" : "очк." }}</span>
+          </div>
+          <div class="player-rating mono" v-if="!p.isBot && !p.isGuest">
+            <template
+              v-if="
+                game.status === 'finished' &&
+                p.ratingAfter != null &&
+                (game.ratingKind === 'rated' || !game.ratingKind)
+              "
+            >{{ p.ratingBefore }} → {{ p.ratingAfter }}
+              <strong
+                :class="{
+                  positive: p.ratingAfter > p.ratingBefore,
+                  negative: p.ratingAfter < p.ratingBefore,
+                }"
+              >({{ p.ratingAfter > p.ratingBefore ? "+" : "" }}{{ p.ratingAfter - p.ratingBefore }})</strong>
+            </template>
+            <template v-else>{{ p.ratingBefore }}</template>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div v-else class="teams">
       <section
         v-for="team in teams"
         :key="team"
@@ -154,8 +192,8 @@ const date = computed(() =>
       >
       <div v-else-if="!compact" class="match-actions">
         <button class="small brass" @click="emit('replay', game.id)">{{ en ? 'Replay' : 'Смотреть партию' }}</button>
-        <a class="button small ghost" :href="`/api/games/${game.id}/pgn?download=1`">{{ en ? 'Download PGN' : 'Скачать PGN' }}</a>
-        <button v-if="game.mode !== 'bughouse'" class="small ghost" :disabled="analyzing" @click="analyze">{{ analyzing ? (en ? 'Opening…' : 'Открываем…') : (en ? 'Analyze on Lichess' : 'Анализ на Lichess') }}</button>
+        <a v-if="!isMulti" class="button small ghost" :href="`/api/games/${game.id}/pgn?download=1`">{{ en ? 'Download PGN' : 'Скачать PGN' }}</a>
+        <button v-if="game.mode !== 'bughouse' && !isMulti" class="small ghost" :disabled="analyzing" @click="analyze">{{ analyzing ? (en ? 'Opening…' : 'Открываем…') : (en ? 'Analyze on Lichess' : 'Анализ на Lichess') }}</button>
       </div>
     </footer>
   </article>

@@ -16,6 +16,10 @@
     "./crazyhouse": {
       "types": "./dist/crazyhouse.d.ts",
       "default": "./dist/crazyhouse.js"
+    },
+    "./multi": {
+      "types": "./dist/multi/index.d.ts",
+      "default": "./dist/multi/index.js"
     }
   },
   "scripts": {

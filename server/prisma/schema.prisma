@@ -72,10 +72,10 @@ model Game {
   rulesVersion   Int?
   ratingKind     String?   // null: historical common rating; rated | bots | guest
   endBoardIndex  Int?
-  mode           String    // 'team' | 'bughouse'
+  mode           String    // 'team' | 'bughouse' | 'crazyhouse' | 'crazyhouse-team' | 'four-player' | 'three-player'
   status         String    @default("active") // active | finished | abandoned
-  result         String    @default("*")     // '1-0' | '0-1' | '*'
-  reason         String?    // checkmate | resign | timeout | stalemate | material | repetition | fifty | abandoned
+  result         String    @default("*")     // '1-0' | '0-1' | '1/2-1/2' | 'ffa' | '*'
+  reason         String?    // checkmate | resign | timeout | stalemate | material | repetition | fifty | last-standing | points-lead | abandoned
   baseMin        Int       @default(0)
   incSec         Int       @default(0)
   noClock        Boolean   @default(false)
@@ -92,13 +92,17 @@ model GameParticipant {
   id            Int     @id @default(autoincrement())
   gameId        Int
   userId        Int
-  team          Int     // 1 | 2
+  team          Int     // 1 | 2 | 3 | 4
   color         String  // 'w' | 'b'
   boardIndex    Int     // 0 для team, 0/1 для bughouse
   moveSlot      Int     @default(0) // порядок хода в team-режиме
   ratingBefore  Int
   ratingAfter   Int?
   wasGuest      Boolean @default(false)
+  seat          Int?
+  score         Int?
+  place         Int?
+  outcome       String?
 
   game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

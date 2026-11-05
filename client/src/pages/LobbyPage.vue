@@ -3,7 +3,7 @@ import { trackGoal } from '../utils/analytics';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { ChatMessage, LobbySummary, TimeControl } from 'shared';
-import { GAME_MODES, lobbyCapacity, hasPockets, modeLabel as sharedModeLabel, type GameMode, eloToLevel, getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
+import { GAME_MODES, isMultiplayer, lobbyCapacity, hasPockets, modeLabel as sharedModeLabel, type GameMode, eloToLevel, getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
 import { getSocket, onSocketResync } from '../api/socket';
 import { useAuthStore } from '../stores/auth';
 import { useI18n } from '../stores/i18n';
@@ -56,15 +56,20 @@ const isPausedByMe = computed(() => {
   return lobby.value.pausedBy?.includes(auth.user.id) ?? false;
 });
 
-const tcOptions = computed<{ label: string; tc: TimeControl }[]>(() => [
-  { label: '1+0', tc: { kind: 'clock', baseMin: 1, incSec: 0 } },
-  { label: '3+0', tc: { kind: 'clock', baseMin: 3, incSec: 0 } },
-  { label: '3+2', tc: { kind: 'clock', baseMin: 3, incSec: 2 } },
-  { label: '5+0', tc: { kind: 'clock', baseMin: 5, incSec: 0 } },
-  { label: '5+3', tc: { kind: 'clock', baseMin: 5, incSec: 3 } },
-  { label: '10+5', tc: { kind: 'clock', baseMin: 10, incSec: 5 } },
-  { label: i18n.t.createModal.tcNoClock, tc: { kind: 'none', baseMin: 0, incSec: 0 } },
-]);
+const tcOptions = computed<{ label: string; tc: TimeControl }[]>(() => {
+  const all: { label: string; tc: TimeControl }[] = [
+    { label: '1+0', tc: { kind: 'clock', baseMin: 1, incSec: 0 } },
+    { label: '3+0', tc: { kind: 'clock', baseMin: 3, incSec: 0 } },
+    { label: '3+2', tc: { kind: 'clock', baseMin: 3, incSec: 2 } },
+    { label: '5+0', tc: { kind: 'clock', baseMin: 5, incSec: 0 } },
+    { label: '5+3', tc: { kind: 'clock', baseMin: 5, incSec: 3 } },
+    { label: '10+5', tc: { kind: 'clock', baseMin: 10, incSec: 5 } },
+    { label: i18n.t.createModal.tcNoClock, tc: { kind: 'none', baseMin: 0, incSec: 0 } },
+  ];
+  return lobby.value && isMultiplayer(lobby.value.mode)
+    ? all.filter((o) => o.tc.kind === 'clock')
+    : all;
+});
 
 function isCurrentTc(tc: TimeControl): boolean {
   if (!lobby.value) return false;
@@ -350,7 +355,7 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
           </div>
 
           <!-- Режим команд (для хоста обычных столов) -->
-          <div v-else-if="isHost" class="team-mode-selector">
+          <div v-else-if="isHost && !isMultiplayer(lobby.mode)" class="team-mode-selector">
             <span class="dim tiny">{{ i18n.locale === 'en' ? 'Team mode:' : 'Режим команд:' }}</span>
             <div class="team-mode-pills">
               <button
@@ -423,7 +428,7 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
                     <AppIcon name="crown" :size="12" /> {{ i18n.locale === 'en' ? 'Host' : 'Хост' }}
                   </span>
                 </div>
-                <div v-if="lobby.teamMode === 'manual'" class="team-picker">
+                <div v-if="lobby.teamMode === 'manual' && !isMultiplayer(lobby.mode)" class="team-picker">
                   <button
                     type="button"
                     class="tiny pill"

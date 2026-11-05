@@ -2,7 +2,16 @@ import type { Server, Socket } from 'socket.io';
 import type { Ack, ClientToServerEvents, ServerToClientEvents } from 'shared';
 import { Chess } from 'chess.js';
 import { CrazyhouseGame } from 'shared/crazyhouse';
-import { normalizedResult, isCrazyhouse, hasPockets, type GameMode } from 'shared';
+import {
+  normalizedResult,
+  isCrazyhouse,
+  isMultiplayer,
+  hasPockets,
+  MultiChess,
+  SEAT_COLORS,
+  type GameMode,
+  type MultiMode,
+} from 'shared';
 import { BughouseGame } from 'shared/bughouse';
 import type { Pocket, DropPieceType, PieceType } from 'shared';
 import { gamesManager, lobbies } from '../state.js';
@@ -231,6 +240,26 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
       cb?.({ ok: true });
     }));
 
+    socket.on('game:multi-move', safeAsync(async (data, cb) => {
+      if (!ctx) {
+        cb?.({ ok: false, error: 'Требуется авторизация' });
+        return;
+      }
+      if (typeof data?.gameId !== 'number') {
+        cb?.({ ok: false, error: 'Некорректные данные' });
+        return;
+      }
+      const r = await gamesManager.applyMultiMove(data.gameId, ctx.uid, {
+        from: String(data.from),
+        to: String(data.to),
+      });
+      if (!r.ok) {
+        cb?.({ ok: false, error: r.error });
+        return;
+      }
+      cb?.({ ok: true });
+    }));
+
     socket.on('game:resign', (gameId) => {
       if (ctx) void gamesManager.resign(Number(gameId), ctx.uid);
     });
@@ -265,6 +294,69 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
       });
       if (!dbGame) { socket.emit('game:unavailable', { gameId: id, error: 'Партия не найдена' }); return; }
       if (dbGame) {
+        const mode = dbGame.mode as GameMode;
+        if (isMultiplayer(mode)) {
+          const initialMc = MultiChess.create(mode);
+          const lastFen = dbGame.moves.at(-1)?.fenAfter ?? initialMc.serialize();
+          const parsed = MultiChess.deserializeBoard(lastFen);
+          const snap = initialMc.snapshot();
+          if (parsed) {
+            snap.board = parsed.board;
+            snap.turn = parsed.turn;
+            snap.scores = parsed.scores;
+            snap.status = parsed.status;
+            snap.lastMove = parsed.lastMove;
+          }
+          const colors = SEAT_COLORS[mode as MultiMode];
+          socket.emit('game:state', {
+            gameId: dbGame.id,
+            rulesVersion: dbGame.rulesVersion,
+            ratingKind: dbGame.ratingKind as import('shared').RatingKind | null,
+            endBoardIndex: dbGame.endBoardIndex,
+            mode,
+            timeControl: { kind: dbGame.noClock ? 'none' : 'clock', baseMin: dbGame.baseMin, incSec: dbGame.incSec },
+            fens: [lastFen],
+            turns: ['w'],
+            clocks: [[0, 0]],
+            clocksActive: [null],
+            turnUserIds: [0],
+            participants: dbGame.participants.map((p: any, idx: number) => {
+              const seat = p.seat ?? idx;
+              return {
+                userId: p.userId,
+                username: p.user.username,
+                isGuest: p.wasGuest,
+                isBot: p.user.isBot,
+                botLevel: p.user.botLevel,
+                team: p.team as any,
+                color: p.color as any,
+                boardIndex: 0,
+                moveSlot: 0,
+                ratingBefore: p.ratingBefore,
+                ratingAfter: p.ratingAfter,
+                seat,
+                multiColor: colors[seat] ?? 'red',
+                score: p.score ?? snap.scores[seat] ?? 0,
+                place: p.place ?? idx + 1,
+                outcome: p.outcome ?? snap.status[seat] ?? 'active',
+              };
+            }),
+            pockets: null,
+            status: dbGame.status as any,
+            result: dbGame.result as any,
+            reason: dbGame.reason as any,
+            moveNumber: dbGame.moves.length,
+            startedAt: dbGame.startedAt.getTime(),
+            multi: {
+              snapshot: snap,
+              clocksMs: Array.from({ length: colors.length }, () => 0),
+              clockActiveSeat: null,
+              checkedKingSquares: [],
+              legalMoves: {},
+            },
+          });
+          return;
+        }
         const lastFen0 = dbGame.moves.filter((m: { boardIndex: number; fenAfter: string }) => m.boardIndex === 0).at(-1)?.fenAfter || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
         const lastFen1 = dbGame.moves.filter((m: { boardIndex: number; fenAfter: string }) => m.boardIndex === 1).at(-1)?.fenAfter || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
         let moves: string[] | undefined;

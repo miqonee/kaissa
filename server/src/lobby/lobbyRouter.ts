@@ -1,8 +1,8 @@
 import { asyncRoute } from '../http/asyncRoute.js';
 import { Router } from 'express';
 import { z } from 'zod';
-import type { CreateLobbyPayload, GameMode } from 'shared';
-import { GAME_MODES } from 'shared';
+import type { CreateLobbyPayload } from 'shared';
+import { GAME_MODES, isMultiplayer } from 'shared';
 import { currentUser, requireAuth } from '../auth/auth.js';
 import { lobbies } from '../state.js';
 
@@ -34,6 +34,9 @@ lobbyRouter.post('/', requireAuth, asyncRoute(async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return void res.status(400).json({ error: 'Некорректные данные' });
   const payload = parsed.data as CreateLobbyPayload;
+  if (isMultiplayer(payload.mode) && payload.timeControl.kind === 'none') {
+    return void res.status(400).json({ error: 'В режимах на 3 и 4 игрока обязателен контроль времени с часами' });
+  }
   const { lobby, code } = lobbies.create(
     { uid: user.id, username: user.username, rating: user.modeRatings.find(r => r.mode === payload.mode)?.rating ?? 1200, isGuest: user.isGuest },
     payload,
@@ -71,4 +74,3 @@ lobbyRouter.post('/:id/join', requireAuth, asyncRoute(async (req, res) => {
   if (!r.ok) return void res.status(409).json({ error: r.error });
   res.json({ lobby: lobby.summary() });
 }));
-

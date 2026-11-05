@@ -1,5 +1,5 @@
 import { leaderboard } from '../ratings/leaderboard.js';
-import { GAME_MODES, normalizedResult, type GameMode } from 'shared';
+import { GAME_MODES, isMultiplayer, normalizedResult, SEAT_COLORS, type GameMode, type MultiMode } from 'shared';
 import type { Prisma } from '@prisma/client';
 import { asyncRoute } from '../http/asyncRoute.js';
 import { Router } from 'express';
@@ -58,7 +58,22 @@ async function listGames(req: import('express').Request, res: import('express').
   if (req.query.opponents === 'bots') and.push({ OR: [1, 2].map(team => ({ participants: { none: { team, user: { isBot: false } } } })) });
   if (req.query.result === 'draw') and.push({ status: 'finished', OR: [{ result: '1/2-1/2' }, { result: '*', reason: { in: ['stalemate', 'material', 'repetition', 'fifty'] } }] });
   if (req.query.result === 'abandoned') and.push({ status: 'abandoned' });
-  if (user && ['win', 'loss'].includes(String(req.query.result))) and.push({ status: 'finished', OR: [1, 2].map(team => ({ result: (req.query.result === 'win' ? team === 1 : team === 2) ? '1-0' : '0-1', participants: { some: { userId: user.id, team } } })) });
+  if (user && ['win', 'loss'].includes(String(req.query.result))) {
+    const isWin = req.query.result === 'win';
+    and.push({
+      status: 'finished',
+      OR: [
+        ...[1, 2].map(team => ({
+          result: (isWin ? team === 1 : team === 2) ? '1-0' : '0-1',
+          participants: { some: { userId: user.id, team } },
+        })),
+        {
+          result: 'ffa',
+          participants: { some: { userId: user.id, place: isWin ? 1 : { gt: 1 } } },
+        },
+      ],
+    });
+  }
   const cursor = Number(req.query.cursor);
   if (Number.isSafeInteger(cursor) && cursor > 0) and.push({ id: { lt: cursor } });
   const games = await prisma.game.findMany({ where: { AND: and }, orderBy: { id: 'desc' }, take: 31, include: { participants: { include: { user: true } } } });
@@ -155,6 +170,7 @@ gamesRouter.get('/:id/pgn', requireRegistered, asyncRoute(async (req, res) => {
   if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
   const data = await getPgnData(id);
   if (!data) return void res.status(404).json({ error: 'Партия не найдена' });
+  if (isMultiplayer(data.mode as GameMode)) return void res.status(404).json({ error: 'PGN недоступен для режимов на 3 и 4 игрока' });
 
   const boardQuery = req.query.board !== undefined ? parseInt(String(req.query.board), 10) : undefined;
   const pgn = buildPgn(data.game, data.moves, boardQuery);
@@ -182,7 +198,9 @@ gamesRouter.post('/:id/lichess-import', requireRegistered, asyncRoute(async (req
   const data = await getPgnData(id);
   if (!data) return void res.status(404).json({ error: 'Партия не найдена' });
 
-  if (data.mode === 'bughouse') return void res.status(400).json({ error: 'Для багхауса используйте встроенный плеер обеих досок' });
+  if (data.mode === 'bughouse' || isMultiplayer(data.mode as GameMode)) {
+    return void res.status(400).json({ error: 'Используйте встроенный плеер для просмотра этой партии' });
+  }
 
   const pgn = buildPgn(data.game, data.moves);
 
@@ -308,36 +326,51 @@ type DbGame = {
     moveSlot: number;
     ratingBefore: number;
     ratingAfter: number | null;
+    seat?: number | null;
+    score?: number | null;
+    place?: number | null;
+    outcome?: string | null;
     user: { username: string; isBot?: boolean; botLevel?: number | null };
   }[];
 };
 
 function dbGameToSummary(game: DbGame): GameSummary {
+  const mode = game.mode as GameMode;
+  const isMulti = isMultiplayer(mode);
+  const colors = isMulti ? SEAT_COLORS[mode as MultiMode] : null;
   return {
     id: game.id,
     rulesVersion: game.rulesVersion,
     ratingKind: game.ratingKind as GameSummary['ratingKind'],
     endBoardIndex: game.endBoardIndex,
-    mode: game.mode as GameMode,
+    mode,
     status: game.status as 'active' | 'finished' | 'abandoned',
     result: normalizedResult({ status: game.status as GameSummary['status'], result: game.result as GameSummary['result'], reason: game.reason as GameSummary['reason'] }),
     reason: (game.reason as GameSummary['reason']) ?? null,
     timeControl: game.noClock
       ? { kind: 'none', baseMin: 0, incSec: 0 }
       : { kind: 'clock', baseMin: game.baseMin, incSec: game.incSec },
-    participants: game.participants.map((p) => ({
-      userId: p.userId,
-      username: p.user.username,
-      isGuest: p.wasGuest,
-      isBot: p.user.isBot,
-      botLevel: p.user.botLevel,
-      team: p.team as 1 | 2,
-      color: p.color as 'w' | 'b',
-      boardIndex: p.boardIndex as 0 | 1,
-      moveSlot: p.moveSlot as 0 | 1,
-      ratingBefore: p.ratingBefore,
-      ratingAfter: p.ratingAfter,
-    })),
+    participants: game.participants.map((p, idx) => {
+      const seat = p.seat ?? (isMulti ? idx : undefined);
+      return {
+        userId: p.userId,
+        username: p.user.username,
+        isGuest: p.wasGuest,
+        isBot: p.user.isBot,
+        botLevel: p.user.botLevel,
+        team: p.team as 1 | 2 | 3 | 4,
+        color: (p.color === 'b' ? 'b' : 'w') as 'w' | 'b',
+        boardIndex: p.boardIndex as 0 | 1,
+        moveSlot: p.moveSlot as 0 | 1,
+        ratingBefore: p.ratingBefore,
+        ratingAfter: p.ratingAfter,
+        ...(seat !== undefined ? { seat } : {}),
+        ...(colors && seat !== undefined ? { multiColor: colors[seat] ?? 'red' } : {}),
+        ...(p.score !== undefined ? { score: p.score } : {}),
+        ...(p.place !== undefined ? { place: p.place } : {}),
+        ...(p.outcome !== undefined ? { outcome: p.outcome } : {}),
+      };
+    }),
     startedAt: game.startedAt.toISOString(),
     endedAt: game.endedAt?.toISOString() ?? null,
   };

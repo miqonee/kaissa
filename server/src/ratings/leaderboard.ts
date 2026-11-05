@@ -21,8 +21,8 @@ export async function leaderboard(mode: GameMode | 'all'): Promise<LeaderboardRo
       GREATEST(COALESCE(MAX(r.wins + r.losses + r.draws), 0), COUNT(g.id) FILTER (WHERE g."ratingKind" = 'rated'))::int AS "ratedGames",
       COUNT(g.id) FILTER (WHERE g."ratingKind" IN ('bots', 'guest'))::int AS "trainingGames",
       COUNT(g.id) FILTER (WHERE g."ratingKind" IS NULL)::int AS "legacyGames",
-      COUNT(g.id) FILTER (WHERE (g.result = '1-0' AND p.team = 1) OR (g.result = '0-1' AND p.team = 2))::int AS wins,
-      COUNT(g.id) FILTER (WHERE (g.result = '1-0' AND p.team = 2) OR (g.result = '0-1' AND p.team = 1))::int AS losses,
+      COUNT(g.id) FILTER (WHERE (g.result = '1-0' AND p.team = 1) OR (g.result = '0-1' AND p.team = 2) OR (g.result = 'ffa' AND p.place = 1))::int AS wins,
+      COUNT(g.id) FILTER (WHERE (g.result = '1-0' AND p.team = 2) OR (g.result = '0-1' AND p.team = 1) OR (g.result = 'ffa' AND p.place > 1))::int AS losses,
       COUNT(g.id) FILTER (WHERE g.result = '1/2-1/2' OR (g.result = '*' AND g.reason IN ('stalemate', 'material', 'repetition', 'fifty')))::int AS draws
     FROM "User" u
     LEFT JOIN "GameParticipant" p ON p."userId" = u.id

@@ -10,7 +10,7 @@ import type {
   TeamMode,
   TimeControl,
 } from 'shared';
-import { GAME_MODES, lobbyCapacity, defaultTimeControl, modeLabel, eloToLevel } from 'shared';
+import { GAME_MODES, isMultiplayer, lobbyCapacity, defaultTimeControl, modeLabel, eloToLevel } from 'shared';
 import { loadPlayerRatings } from '../ratings/service.js';
 import { presence } from '../socket/presence.js';
 import { prisma } from '../prisma.js';
@@ -64,7 +64,9 @@ export class Lobby {
     this.code = data.code;
     this.name = data.name;
     this.mode = data.mode;
-    this.timeControl = data.timeControl;
+    this.timeControl = isMultiplayer(data.mode) && data.timeControl.kind === 'none'
+      ? defaultTimeControl(data.mode)
+      : data.timeControl;
     this.private = data.private;
     this.teamMode = data.teamMode || 'auto';
     this.rematchOf = rematchOf ?? null;
@@ -693,7 +695,7 @@ export class LobbiesManager {
 
   setTeamChoice(lobbyId: string, uid: number, team: 1 | 2 | null): void {
     const lobby = this.lobbies.get(lobbyId);
-    if (!lobby || lobby.teamMode !== 'manual') return;
+    if (!lobby || isMultiplayer(lobby.mode) || lobby.teamMode !== 'manual') return;
     const m = lobby.members.get(uid);
     if (!m) return;
 
@@ -717,7 +719,7 @@ export class LobbiesManager {
 
   setTeamMode(lobbyId: string, uid: number, teamMode: TeamMode): void {
     const lobby = this.lobbies.get(lobbyId);
-    if (!lobby) return;
+    if (!lobby || isMultiplayer(lobby.mode)) return;
     const m = lobby.members.get(uid);
     if (!m?.host) return;
     lobby.teamMode = teamMode;
@@ -773,6 +775,7 @@ export class LobbiesManager {
     const m = lobby.members.get(uid);
     if (!m || m.isBot || (!lobby.isQuick && !m.host)) return;
     if (!tc || !['none', 'clock'].includes(tc.kind) || !Number.isInteger(tc.baseMin) || !Number.isInteger(tc.incSec) || (tc.kind === 'none' ? tc.baseMin !== 0 || tc.incSec !== 0 : tc.baseMin < 1 || tc.baseMin > 120 || tc.incSec < 0 || tc.incSec > 60)) return;
+    if (isMultiplayer(lobby.mode) && tc.kind === 'none') return;
     lobby.timeControl = tc;
     if (lobby.isQuick) this.resetAutoCountdown(lobby, true);
     this.broadcastState(lobby);
@@ -1008,25 +1011,23 @@ export class LobbiesManager {
 
     lobby.started = true;
     let gameId: number;
+    const toSetup = (m: LobbyMember) => ({
+      uid: m.uid,
+      username: m.username,
+      rating: m.rating,
+      isGuest: m.isGuest,
+      isBot: m.isBot,
+      botLevel: m.isBot ? eloToLevel(m.rating) : m.botLevel,
+    });
+    const shuffledSeats = isMultiplayer(lobby.mode)
+      ? [...membersList].sort(() => Math.random() - 0.5).map(toSetup)
+      : undefined;
     try { gameId = await this.games!.createGame({
       mode: lobby.mode,
       timeControl: lobby.timeControl,
-      team1: team1.map((m) => ({
-        uid: m.uid,
-        username: m.username,
-        rating: m.rating,
-        isGuest: m.isGuest,
-      isBot: m.isBot,
-        botLevel: m.isBot ? eloToLevel(m.rating) : m.botLevel,
-      })),
-      team2: team2.map((m) => ({
-        uid: m.uid,
-        username: m.username,
-        rating: m.rating,
-        isGuest: m.isGuest,
-      isBot: m.isBot,
-        botLevel: m.isBot ? eloToLevel(m.rating) : m.botLevel,
-      })),
+      team1: shuffledSeats ? [] : team1.map(toSetup),
+      team2: shuffledSeats ? [] : team2.map(toSetup),
+      ...(shuffledSeats ? { seats: shuffledSeats } : {}),
     }); } catch (error) {
       lobby.started = false;
       console.error('[lobby] Could not start game:', error);
@@ -1106,7 +1107,7 @@ export class LobbiesManager {
     );
 
     // Автоматически переносим ботов из предыдущей игры
-    if (players.every(p => p.team === 1 || p.team === 2)) {
+    if (!isMultiplayer(opts.mode) && players.every(p => p.team === 1 || p.team === 2)) {
       lobby.rematchTeams = [1, 2].map(team => players.filter(p => p.team === team).sort((a, b) => (a.seat ?? 0) - (b.seat ?? 0)).map(p => p.uid)) as [number[], number[]];
     }
     for (const p of players) {

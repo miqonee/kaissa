@@ -2,18 +2,42 @@
 // «Каисса» — общие типы фронтенда и бэкенда
 // ============================================================
 
-export type Team = 1 | 2;
+import type { MultiSnapshot, SeatStatus } from './multi/engine.js';
 
-export const GAME_MODES = ['team', 'bughouse', 'crazyhouse', 'crazyhouse-team'] as const;
+export type Team = 1 | 2 | 3 | 4;
+
+export const GAME_MODES = ['team', 'bughouse', 'crazyhouse', 'crazyhouse-team', 'four-player', 'three-player'] as const;
 export type GameMode = typeof GAME_MODES[number];
+export type MultiMode = 'four-player' | 'three-player';
+export type MultiColor = 'red' | 'blue' | 'yellow' | 'green';
+
+export const SEAT_COLORS: Record<MultiMode, readonly MultiColor[]> = {
+  'four-player': ['red', 'blue', 'yellow', 'green'],
+  'three-player': ['red', 'blue', 'yellow'],
+};
+
 export const isCrazyhouse = (mode: GameMode): boolean => mode === 'crazyhouse' || mode === 'crazyhouse-team';
-export const hasPockets = (mode: GameMode): boolean => mode !== 'team';
-export const lobbyCapacity = (mode: GameMode): number => mode === 'crazyhouse' ? 2 : 4;
+export const isMultiplayer = (mode: GameMode): mode is MultiMode => mode === 'four-player' || mode === 'three-player';
+export const hasPockets = (mode: GameMode): boolean => mode === 'bughouse' || isCrazyhouse(mode);
+export const lobbyCapacity = (mode: GameMode): number =>
+  mode === 'crazyhouse' ? 2 : mode === 'three-player' ? 3 : 4;
 export function modeLabel(mode: GameMode, locale = 'ru'): string {
-  return ({ team: locale === 'en' ? 'One board 2×2' : 'Одна доска 2×2', bughouse: locale === 'en' ? 'Bughouse' : 'Багхаус', crazyhouse: 'Crazyhouse 1×1', 'crazyhouse-team': 'Crazyhouse 2×2' })[mode];
+  const en = locale === 'en';
+  return ({
+    team: en ? 'One board 2×2' : 'Одна доска 2×2',
+    bughouse: en ? 'Bughouse' : 'Багхаус',
+    crazyhouse: 'Crazyhouse 1×1',
+    'crazyhouse-team': 'Crazyhouse 2×2',
+    'four-player': en ? '4 Players FFA' : '4 игрока (FFA)',
+    'three-player': en ? '3 Players FFA' : '3 игрока (FFA)',
+  })[mode];
 }
-export const defaultTimeControl = (mode: GameMode): TimeControl => mode === 'team'
-  ? { kind: 'clock', baseMin: 3, incSec: 0 } : { kind: 'none', baseMin: 0, incSec: 0 };
+export const defaultTimeControl = (mode: GameMode): TimeControl =>
+  isMultiplayer(mode)
+    ? { kind: 'clock', baseMin: 5, incSec: 3 }
+    : mode === 'team'
+      ? { kind: 'clock', baseMin: 3, incSec: 0 }
+      : { kind: 'none', baseMin: 0, incSec: 0 };
 
 // Контроль времени: без часов либо base+increment (минуты/секунды)
 export interface TimeControl {
@@ -94,7 +118,7 @@ export interface LobbySummary {
 
 export type GameStatus = 'active' | 'finished' | 'abandoned';
 
-export type GameResult = '1-0' | '0-1' | '1/2-1/2' | '*';
+export type GameResult = '1-0' | '0-1' | '1/2-1/2' | '*' | 'ffa';
 
 export type EndReason =
   | 'checkmate'      // мат
@@ -104,6 +128,8 @@ export type EndReason =
   | 'material'        // недостаток материала (только 'team')
   | 'repetition'      // троекратное повторение (только 'team')
   | 'fifty'           // правило 50 ходов (только 'team')
+  | 'last-standing'   // остался один активный игрок (FFA)
+  | 'points-lead'     // недосягаемый отрыв по очкам (FFA)
   | 'abandoned';      // сервер умер / все ушли
 
 export interface GameParticipantInfo {
@@ -118,6 +144,20 @@ export interface GameParticipantInfo {
   ratingAfter: number | null;
   isBot?: boolean;
   botLevel?: number | null;
+  /** Для режимов 3/4 игроков (FFA) */
+  seat?: number | null;
+  multiColor?: MultiColor | null;
+  score?: number | null;
+  place?: number | null;
+  outcome?: SeatStatus | string | null;
+}
+
+export interface MultiStatePayload {
+  snapshot: MultiSnapshot;
+  clocksMs: number[];
+  clockActiveSeat: number | null;
+  checkedKingSquares: string[];
+  legalMoves: Record<string, string[]>;
 }
 
 export interface GameSummary {
@@ -184,6 +224,7 @@ export type ClientToServerEvents = {
 
   // Игра
   'game:move': (data: { gameId: number; boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType }, cb: (res: Ack<null>) => void) => void;
+  'game:multi-move': (data: { gameId: number; from: string; to: string }, cb: (res: Ack<null>) => void) => void;
   'game:resign': (gameId: number) => void;
   'game:chat': (gameId: number, text: string) => void;
 
@@ -297,6 +338,8 @@ export interface GameState {
   clocksActive: ('w' | 'b' | null)[];
   startedAt: number;
   chat?: ChatMessage[];
+  /** Полное состояние для режимов 3 и 4 игрока (FFA) */
+  multi?: MultiStatePayload;
 }
 
 // ---------- Live-трансляция (главная) ----------
@@ -475,7 +518,49 @@ export const MODE_INFO: ModeInfo[] = [
       'Партия завершается матом, патом, сдачей или флагом.',
     ],
   },
+  {
+    mode: 'four-player',
+    title: '4 игрока (FFA)',
+    short: 'Крестообразная доска 14×14, 4 цвета, каждый сам за себя на очки.',
+    shortEn: '14×14 cross board, 4 colours, free-for-all played for points.',
+    rules: [
+      'Четыре игрока (красные, синие, жёлтые, зелёные) ходят по очереди по часовой стрелке.',
+      'Очки за взятия живых фигур: пешка 1, конь 3, слон 5, ладья 5, ферзь 9, мат +20.',
+      'Пешки превращаются в ферзя (стоимостью 1 очко при взятии) на 8-й линии от своего края.',
+      'Фигуры выбывшего игрока становятся серыми, остаются на доске, не дают шах и стоят 0 очков.',
+      'Побеждает игрок, набравший больше всех очков к концу партии.',
+    ],
+    rulesEn: [
+      'Four players (Red, Blue, Yellow, Green) move in clockwise order.',
+      'Points for live captures: pawn 1, knight 3, bishop 5, rook 5, queen 9, checkmate +20.',
+      'Pawns promote to a 1-point queen on the 8th rank from their starting edge.',
+      'Eliminated players’ pieces turn grey, remain on the board, do not give check and are worth 0 points.',
+      'The player with the highest score at the end wins.',
+    ],
+  },
+  {
+    mode: 'three-player',
+    title: '3 игрока (FFA)',
+    short: 'Шестиугольная доска на 96 клеток, 3 цвета, каждый сам за себя на очки.',
+    shortEn: '96-square hexagonal board, 3 colours, free-for-all played for points.',
+    rules: [
+      'Три игрока (красные, синие, жёлтые) сражаются на шестиугольной доске из 96 клеток.',
+      'Очки за взятия живых фигур: пешка 1, конь 3, слон 3, ладья 5, ферзь 9, мат +20.',
+      'Пешки превращаются в ферзя на первой горизонтали любого соперника.',
+      'Фигуры выбывшего игрока становятся серыми и приносят 0 очков при взятии.',
+      'Места распределяются по набранным очкам.',
+    ],
+    rulesEn: [
+      'Three players (Red, Blue, Yellow) battle on a 96-square hexagonal board.',
+      'Points for live captures: pawn 1, knight 3, bishop 3, rook 5, queen 9, checkmate +20.',
+      'Pawns promote to a queen on the first rank of either opponent.',
+      'Eliminated players’ pieces turn grey and are worth 0 points when captured.',
+      'Final placements are decided by total points.',
+    ],
+  },
 ];
+
+export * from './multi/index.js';
 
 // ---------- Боты и ИИ ----------
 

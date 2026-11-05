@@ -29,7 +29,7 @@ export const router = createRouter({
     {
       path: '/game/:id',
       name: 'game',
-      component: () => import('./pages/GamePage.vue'),
+      component: () => import('./pages/GameRoute.vue'),
       meta: { title: (to: any) => `Партия #${to.params.id} | Каисса` },
     },
     {

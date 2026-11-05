@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { MODE_INFO, modeLabel, type GameMode, type TeamMode, type TimeControl } from 'shared';
+import { MODE_INFO, isMultiplayer, modeLabel, type GameMode, type TeamMode, type TimeControl } from 'shared';
 import { useI18n } from '../stores/i18n';
 import { useDialog } from '../composables/useDialog';
 import AppIcon from './AppIcon.vue';
@@ -29,6 +29,8 @@ const expandedRules = ref<Record<GameMode, boolean>>({
   team: false,
   crazyhouse: false,
   'crazyhouse-team': false,
+  'four-player': false,
+  'three-player': false,
 });
 
 function toggleRules(mode: GameMode) {
@@ -43,8 +45,21 @@ const tcPresets = computed<{ label: string; tc: TimeControl }[]>(() => [
   { label: i18n.t.createModal.tc10plus5, tc: { kind: 'clock', baseMin: 10, incSec: 5 } },
   { label: i18n.t.createModal.tcNoClock, tc: { kind: 'none', baseMin: 0, incSec: 0 } },
 ]);
-const modeTc = ref<Record<GameMode, number>>({ team: 0, bughouse: 5, crazyhouse: 5, 'crazyhouse-team': 5 });
-const selectedTcIdx = computed({ get: () => modeTc.value[selectedMode.value], set: value => { modeTc.value[selectedMode.value] = value; } });
+const modeTc = ref<Record<GameMode, number>>({ team: 0, bughouse: 5, crazyhouse: 5, 'crazyhouse-team': 5, 'four-player': 3, 'three-player': 3 });
+const availableTcPresets = computed(() =>
+  isMultiplayer(selectedMode.value)
+    ? tcPresets.value.filter((p) => p.tc.kind === 'clock')
+    : tcPresets.value,
+);
+const selectedTcIdx = computed({
+  get: () => {
+    const idx = modeTc.value[selectedMode.value] ?? 0;
+    return idx >= availableTcPresets.value.length ? 3 : idx;
+  },
+  set: (value) => {
+    modeTc.value[selectedMode.value] = value;
+  },
+});
 
 function submit() {
   if (props.busy) return;
@@ -123,7 +138,7 @@ function submit() {
           <label class="field-label">{{ i18n.t.createModal.timeControlLabel }}</label>
           <div class="tc-grid">
             <button
-              v-for="(p, i) in tcPresets"
+              v-for="(p, i) in availableTcPresets"
               :key="p.label"
               type="button"
               class="tc-btn"
@@ -137,7 +152,7 @@ function submit() {
         </div>
 
         <!-- Режим распределения команд -->
-        <div class="form-row">
+        <div v-if="!isMultiplayer(selectedMode)" class="form-row">
           <label class="field-label">{{ i18n.t.createModal.teamBalanceLabel }}</label>
           <div class="tc-grid">
             <button

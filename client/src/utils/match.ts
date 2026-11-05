@@ -1,4 +1,4 @@
-import { normalizedResult, type GameSummary } from "shared";
+import { isMultiplayer, normalizedResult, type GameSummary } from "shared";
 export function matchOutcome(
   game: GameSummary,
   viewerId?: number,
@@ -10,6 +10,23 @@ export function matchOutcome(
     return en
       ? "Abandoned · no rating change"
       : "Не завершена · без изменения рейтинга";
+  if (isMultiplayer(game.mode)) {
+    const me = game.participants.find((p) => p.userId === viewerId);
+    if (me && me.place != null) {
+      const pts = me.score ?? 0;
+      return en
+        ? `#${me.place} place · ${pts} pts`
+        : `${me.place}-е место · ${pts} очк.`;
+    }
+    const winner = game.participants.find((p) => p.place === 1);
+    if (winner) {
+      const pts = winner.score ?? 0;
+      return en
+        ? `Winner: ${winner.username} (${pts} pts)`
+        : `Победил ${winner.username} (${pts} очк.)`;
+    }
+    return en ? "FFA finished" : "Партия завершена";
+  }
   const result = normalizedResult(game);
   if (result === "1/2-1/2") return en ? "Draw" : "Ничья";
   if (result === "*") return en ? "Result unavailable" : "Результат не указан";
@@ -63,6 +80,8 @@ export function endReason(game: GameSummary, locale = "ru"): string {
         repetition: "Threefold repetition",
         fifty: "50-move rule",
         abandoned: "Game interrupted",
+        "last-standing": "Last player standing",
+        "points-lead": "Victory by points",
       }
     : {
         checkmate: "Мат",
@@ -76,6 +95,8 @@ export function endReason(game: GameSummary, locale = "ru"): string {
         repetition: "Троекратное повторение",
         fifty: "Правило 50 ходов",
         abandoned: "Партия прервана",
+        "last-standing": "Последний выживший",
+        "points-lead": "Победа по очкам",
       };
   const reason = reasons[game.reason ?? ""] ?? "";
   return (

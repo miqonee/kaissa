@@ -1,63 +1,63 @@
 {
   "/": {
     "ru": {
-      "title": "Командные шахматы онлайн — 2×2, Багхаус и Crazyhouse | Каисса",
-      "description": "Играйте в шахматы 2 на 2, Багхаус и Crazyhouse с друзьями или ботами. Быстрый вход без регистрации, приглашения по ссылке, рейтинг по режимам и просмотр партий.",
-      "heading": "Командные шахматы с друзьями",
-      "intro": "Выберите один из четырёх форматов и начните играть без регистрации. Боты заполняют свободные места: собирать всех друзей одновременно не обязательно.",
+      "title": "Командные шахматы онлайн — 2×2, Багхаус, Crazyhouse, 3 и 4 игрока | Каисса",
+      "description": "Играйте в шахматы 2 на 2, Багхаус, Crazyhouse и шахматы на троих и четверых (3 и 4 игрока) с друзьями или ботами. Быстрый вход без регистрации, рейтинг Elo и просмотр партий.",
+      "heading": "Командные и многопользовательские шахматы с друзьями",
+      "intro": "Выберите один из шести форматов и начните играть без регистрации. Боты заполняют свободные места: собирать всех друзей одновременно не обязательно.",
       "sections": [
         {
-          "heading": "Четыре способа играть",
+          "heading": "Шесть способов играть",
           "paragraphs": [
             "2×2: одна доска, два игрока в каждой команде. Напарники по очереди ходят фигурами одного цвета.",
             "Багхаус: две доски, четыре игрока. Взятая фигура переходит в резерв напарника, который играет другим цветом на соседней доске.",
-            "Crazyhouse 1×1: взятые фигуры становятся вашим резервом; вместо обычного хода их можно выставить на доску.",
-            "Crazyhouse 2×2: одна доска, общий резерв команды и чередование ходов напарников. Это командный вариант клуба, а не багхаус."
+            "Crazyhouse 1×1 и 2×2: взятые фигуры становятся резервом; вместо обычного хода их можно выставить на доску в одиночку или с напарником.",
+            "Шахматы на 3 и 4 игроков (каждый за себя): у каждого свой цвет фигур на крестообразной доске 14×14 (4 игрока) или шестиугольной доске из 96 клеток (3 игрока). Побеждает набравший больше очков за взятия и маты."
           ]
         },
         {
           "heading": "Пригласите друга или начните с ботами",
           "paragraphs": [
-            "Быстрая игра открывает готовый стол выбранного режима. В лобби можно дождаться друзей, выбрать время и распределение команд. Поделиться столом можно ссылкой или шестизначным кодом.",
+            "Быстрая игра открывает готовый стол выбранного режима. В лобби можно дождаться друзей, выбрать время и распределение мест. Поделиться столом можно ссылкой или шестизначным кодом.",
             "Гостевая сессия связана с браузером. Чтобы не потерять доступ к истории, сохраните аккаунт, выбрав ник и пароль."
           ]
         },
         {
           "heading": "Понятный рейтинг и история",
           "paragraphs": [
-            "У каждого режима свой Elo. Матчи с гостями и игры только против ботов считаются тренировочными и не меняют публичный рейтинг.",
-            "В архиве видны составы команд, причины завершения и изменение рейтинга. Встроенный плеер воспроизводит ходы, а в багхаусе — обе доски и карманы."
+            "У каждого режима (2×2, Багхаус, Crazyhouse, 3 игрока, 4 игрока) свой Elo. Матчи с гостями и игры только против ботов считаются тренировочными и не меняют публичный рейтинг.",
+            "В архиве видны все участники, очки, причины завершения и изменение рейтинга. Встроенный плеер воспроизводит ходы всех режимов."
           ]
         }
       ]
     },
     "en": {
-      "title": "Team Chess Online — 2v2, Bughouse & Crazyhouse | Kaissa",
-      "description": "Play 2v2 team chess, Bughouse and Crazyhouse with friends or bots. Start as a guest, invite a teammate, track ratings by mode and replay your games.",
-      "heading": "Play chess together",
-      "intro": "Choose one of four formats and start without registering. Bots fill empty seats, so you do not need to gather everyone at the same time.",
+      "title": "Team & Multiplayer Chess Online — 2v2, Bughouse, Crazyhouse, 3 & 4 Players | Kaissa",
+      "description": "Play 2v2 team chess, Bughouse, Crazyhouse, 3-player hexagonal chess and 4-player chess with friends or bots. Start as a guest, track Elo ratings by mode and replay games.",
+      "heading": "Play team and multiplayer chess together",
+      "intro": "Choose one of six formats and start without registering. Bots fill empty seats, so you do not need to gather everyone at the same time.",
       "sections": [
         {
-          "heading": "Four ways to play",
+          "heading": "Six ways to play",
           "paragraphs": [
             "2v2: four players share one board. Teammates alternate moves with the same colour.",
             "Bughouse: four players use two boards. Captured pieces go to your teammate’s reserve on the other board. Partners play opposite colours.",
-            "Crazyhouse 1v1: captures become your own reserve. On your turn, drop a reserve piece instead of making a regular move.",
-            "Crazyhouse 2v2: teammates share a reserve and alternate turns on one board. This is Kaissa’s team variant, not Bughouse."
+            "Crazyhouse 1v1 & 2v2: captures enter your reserve on the same board, played solo or alternating turns with a partner.",
+            "3-Player & 4-Player Free-For-All: each player controls their own colour on a 14×14 cross board (4 players) or 96-cell hexagonal board (3 players), competing for points from captures and checkmates."
           ]
         },
         {
           "heading": "Invite friends or start with bots",
           "paragraphs": [
-            "Quick play opens a prepared table. In the lobby, wait for friends or choose the clock and teams. Share a table link or a six-character code.",
+            "Quick play opens a prepared table. In the lobby, wait for friends or choose the clock and seats. Share a table link or a six-character code.",
             "Guest access belongs to this browser. Choose a username and password to keep access to your games on other devices."
           ]
         },
         {
           "heading": "Ratings and replays",
           "paragraphs": [
-            "Each mode has its own Elo. Games involving guests and games against bots only are training games and do not affect public ratings.",
-            "The archive shows both teams, the result, its reason and rating changes. Replays include moves, reserves and both boards in Bughouse."
+            "Each mode (2v2, Bughouse, Crazyhouse, 3-Player, 4-Player) has its own Elo. Games involving guests and games against bots only are training games and do not affect public ratings.",
+            "The archive shows participants, scores, ending reasons and rating changes. Replays include moves across all board formats."
           ]
         }
       ]
@@ -181,45 +181,103 @@
       ]
     }
   },
-  "/about": {
+  "/rules/multiplayer": {
     "ru": {
-      "title": "О Каиссе — командные шахматы с друзьями и ботами",
-      "description": "Каисса — клуб командных шахмат: 2×2, Багхаус и Crazyhouse, гостевой вход, рейтинги по режимам и просмотр сыгранных партий.",
-      "heading": "О клубе Каисса",
-      "intro": "Каисса помогает играть в шахматы вместе: в паре на одной доске или командой на двух. Начать можно одному, заполнив свободные места ботами.",
+      "title": "Правила шахмат на 3 и 4 игроков онлайн — каждый за себя | Каисса",
+      "description": "Как играть в шахматы на троих (шестиугольная доска 96 клеток) и на четверых (крестообразная доска 14×14): цвета армий, очки за взятия и маты, серые фигуры и контроль времени.",
+      "heading": "Правила шахмат на троих и четверых (Free-For-All)",
+      "intro": "В режимах на 3 и 4 игроков каждый участник управляет армией своего цвета в формате «каждый за себя». Победитель определяется по сумме очков за срубленные фигуры и поставленные маты.",
       "sections": [
         {
-          "heading": "Что доступно",
+          "heading": "Доска на 4 игроков (крест 14×14) и на 3 игроков (гексагон)",
           "paragraphs": [
-            "Четыре режима, приватные столы по ссылке, чат, серверные часы, гостевой вход и постоянные аккаунты. Интерфейс доступен на русском и английском.",
-            "Для обычных шахмат используется Stockfish, для вариантов с резервом — Fairy-Stockfish. Сила ботов в нестандартных режимах не является подтверждённым Elo."
+            "В шахматах на четверых используется крестообразная доска 14×14 без углов 3×3 (160 клеток). Четыре цвета (Красные, Синие, Жёлтые, Зелёные) ходят по часовой стрелке, а пешки превращаются в ферзя на 8-й горизонтали своего движения.",
+            "В шахматах на троих используется шестиугольная доска из 96 четырёхугольных клеток (три сектора 4×8). Ладьи переходят через рёбра клеток, а слоны движутся по диагоналям через вершины и центральное разветвление."
           ]
         },
         {
-          "heading": "Рейтинг и история",
+          "heading": "Начисление очков и выбывание",
           "paragraphs": [
-            "Рейтинги разделены по режимам. История хранит команды и результат; плеер позволяет вернуться к ходам и резервам. Исходный код проекта открыт на GitHub."
+            "За взятие живых фигур начисляются очки: пешка +1, конь +3, слон +5, ладья +5, ферзь +9. Постановка мата королю соперника приносит +20 очков, а одновременный шах двум королям даёт бонус +5 очков.",
+            "Фигуры выбывшего игрока (после мата, сдачи или истечения времени) становятся нейтральными серыми: они не ходят, не дают шах и приносят 0 очков при взятии."
+          ]
+        },
+        {
+          "heading": "Регламент времени",
+          "paragraphs": [
+            "По умолчанию партии на 3 и 4 игроков идут без общего таймера на партию: на первый ход даётся 30 секунд, а на каждый следующий ход — до 5 минут, после чего неактивный игрок выбывает. В лобби также можно выбрать блиц или рапид с часами."
           ]
         }
       ]
     },
     "en": {
-      "title": "About Kaissa — Team Chess with Friends and Bots",
-      "description": "Kaissa is a team chess club with 2v2, Bughouse and Crazyhouse, guest play, separate mode ratings and game replays.",
+      "title": "3-Player & 4-Player Chess Rules Online — Free-For-All | Kaissa",
+      "description": "Learn 3-player hexagonal chess (96 cells) and 4-player cross-board chess (14×14): army colors, point scoring for captures and checkmates, grey pieces, and turn rules.",
+      "heading": "3-Player & 4-Player Free-For-All chess rules",
+      "intro": "In 3-player and 4-player modes, every player commands their own colour in a Free-For-All battle. Standings are decided by total points earned from captures and checkmates.",
+      "sections": [
+        {
+          "heading": "4-Player Cross Board (14×14) & 3-Player Hexagonal Board",
+          "paragraphs": [
+            "4-player chess uses a 14×14 cross-shaped board with 3×3 corners removed (160 squares). Red, Blue, Yellow and Green move clockwise, and pawns promote to a Queen on their 8th rank of advance.",
+            "3-player chess uses a 96-cell three-wing hexagonal board. Rooks move orthogonally across cell edges and central seams, while bishops move diagonally through cell vertices and branch through the center."
+          ]
+        },
+        {
+          "heading": "Scoring system and eliminated armies",
+          "paragraphs": [
+            "Capturing live pieces awards points: Pawn +1, Knight +3, Bishop +5, Rook +5, Queen +9. Delivering checkmate awards +20 points, and checking two enemy kings in one move grants a +5 bonus.",
+            "When a player is checkmated, resigns or times out, their remaining pieces turn neutral grey: they no longer move, do not give check, and yield 0 points when captured."
+          ]
+        },
+        {
+          "heading": "Time control",
+          "paragraphs": [
+            "By default, 3-player and 4-player tables run without a total game clock: players have 30 seconds for the first move and up to 5 minutes per turn before timeout elimination. Blitz and rapid clocks can also be selected in the lobby."
+          ]
+        }
+      ]
+    }
+  },
+  "/about": {
+    "ru": {
+      "title": "О Каиссе — командные шахматы и режимы на 3 и 4 игроков",
+      "description": "Каисса — клуб командных и многопользовательских шахмат: 2×2, Багхаус, Crazyhouse, шахматы на 3 и 4 игроков, гостевой вход, рейтинги Elo и реплеи.",
+      "heading": "О клубе Каисса",
+      "intro": "Каисса помогает играть в шахматы вместе: в паре 2×2, на двух досках в багхаус или каждый за себя втроём и вчетвером. Начать можно одному, заполнив свободные места ботами.",
+      "sections": [
+        {
+          "heading": "Что доступно",
+          "paragraphs": [
+            "Шесть режимов (2×2, Багхаус, Crazyhouse 1×1 и 2×2, 3 игрока, 4 игрока), приватные столы по ссылке, чат, серверные часы, гостевой вход и постоянные аккаунты. Интерфейс доступен на русском и английском.",
+            "Для классических и резервных режимов используются Stockfish и Fairy-Stockfish, а для режимов на 3 и 4 игроков — специализированные FFA-боты."
+          ]
+        },
+        {
+          "heading": "Рейтинг и история",
+          "paragraphs": [
+            "Рейтинги разделены по всем шести режимам. История хранит участников, набранные очки и результат; плеер позволяет воспроизвести ходы любой партии. Исходный код проекта открыт на GitHub."
+          ]
+        }
+      ]
+    },
+    "en": {
+      "title": "About Kaissa — Team Chess & 3/4-Player Modes with Friends and Bots",
+      "description": "Kaissa is an online chess club with 2v2, Bughouse, Crazyhouse, and 3-player & 4-player Free-For-All modes, guest play, separate Elo ratings and game replays.",
       "heading": "About Kaissa",
-      "intro": "Kaissa is built for playing chess together, as partners on one board or as a team on two boards. You can also start alone with bots in the empty seats.",
+      "intro": "Kaissa is built for playing chess together — as partners on one or two boards, or in 3-player and 4-player Free-For-All battles. You can also start alone with bots in the empty seats.",
       "sections": [
         {
           "heading": "Available features",
           "paragraphs": [
-            "Four modes, private invitation links, chat, server clocks, guest play and permanent accounts. The interface is available in Russian and English.",
-            "Standard chess uses Stockfish; reserve variants use Fairy-Stockfish. Bot strength in nonstandard modes is not a verified Elo rating."
+            "Six game modes (2v2, Bughouse, Crazyhouse 1v1 & 2v2, 3-Player, 4-Player), private invitation links, chat, server clocks, guest play and permanent accounts. Available in Russian and English.",
+            "Standard chess uses Stockfish, reserve variants use Fairy-Stockfish, and 3/4-player modes feature dedicated Free-For-All tactical bots."
           ]
         },
         {
           "heading": "Ratings and history",
           "paragraphs": [
-            "Ratings are separate for each mode. The archive records both teams and the result; the replayer revisits moves and reserves. The source code is available on GitHub."
+            "Ratings are separate for each of the six modes. The archive records participants, scores and outcomes; the replayer revisits moves across all board topologies. Source code is on GitHub."
           ]
         }
       ]
@@ -227,33 +285,33 @@
   },
   "/leaderboard": {
     "ru": {
-      "title": "Рейтинг игроков по режимам | Каисса",
-      "description": "Таблица лидеров Каиссы: отдельный Elo для 2×2, Багхауса и Crazyhouse. Рейтинговые матчи отделены от тренировок с ботами и гостями.",
+      "title": "Рейтинг игроков по режимам — 2×2, Багхаус, 3 и 4 игрока | Каисса",
+      "description": "Таблица лидеров Каиссы: отдельный Elo для 2×2, Багхауса, Crazyhouse и шахмат на 3 и 4 игроков. Рейтинговые матчи отделены от тренировок с ботами и гостями.",
       "heading": "Рейтинг игроков по режимам",
-      "intro": "Таблица лидеров Каиссы: отдельный Elo для 2×2, Багхауса и Crazyhouse. Рейтинговые матчи отделены от тренировок с ботами и гостями.",
+      "intro": "Таблица лидеров Каиссы: отдельный Elo для 2×2, Багхауса, Crazyhouse и шахмат на 3 и 4 игроков. Рейтинговые матчи отделены от тренировок с ботами и гостями.",
       "sections": []
     },
     "en": {
-      "title": "Ratings by Game Mode | Kaissa",
-      "description": "Kaissa leaderboards with separate Elo ratings for 2v2, Bughouse and Crazyhouse. Rated matches are separate from bot and guest training games.",
+      "title": "Ratings by Game Mode — 2v2, Bughouse, 3 & 4 Players | Kaissa",
+      "description": "Kaissa leaderboards with separate Elo ratings for 2v2, Bughouse, Crazyhouse, 3-Player and 4-Player chess. Rated matches are separate from bot and guest training games.",
       "heading": "Ratings by Game Mode",
-      "intro": "Kaissa leaderboards with separate Elo ratings for 2v2, Bughouse and Crazyhouse. Rated matches are separate from bot and guest training games.",
+      "intro": "Kaissa leaderboards with separate Elo ratings for 2v2, Bughouse, Crazyhouse, 3-Player and 4-Player chess. Rated matches are separate from bot and guest training games.",
       "sections": []
     }
   },
   "/history": {
     "ru": {
-      "title": "История партий и составы команд | Каисса",
-      "description": "Архив партий Каиссы: кто с кем играл, результат, причина завершения и изменение рейтинга. Фильтры по режиму, участникам и соперникам, реплеи и PGN.",
+      "title": "История партий и реплеи матчей | Каисса",
+      "description": "Архив партий Каиссы: участники, очки, результат, причина завершения и изменение рейтинга во всех режимах (2×2, Багхаус, Crazyhouse, 3 и 4 игрока).",
       "heading": "История партий и составы команд",
-      "intro": "Архив завершённых партий доступен зарегистрированным игрокам. Войдите или сохраните гостевой аккаунт, чтобы смотреть составы команд, результаты и повторы.",
+      "intro": "Архив завершённых партий доступен зарегистрированным игрокам. Войдите или сохраните гостевой аккаунт, чтобы смотреть составы, результаты и повторы.",
       "sections": []
     },
     "en": {
-      "title": "Match History and Team Rosters | Kaissa",
-      "description": "Explore Kaissa games: both teams, results, ending reasons and rating changes. Filter by mode, player and opponent type, watch replays and download PGN.",
+      "title": "Match History and Game Replays | Kaissa",
+      "description": "Explore Kaissa games across 2v2, Bughouse, Crazyhouse, 3-Player and 4-Player modes: rosters, scores, results, ending reasons, rating changes and replays.",
       "heading": "Match History and Team Rosters",
-      "intro": "Explore completed games after signing in or saving your guest account. Registered players can view teams, results and replays.",
+      "intro": "Explore completed games after signing in or saving your guest account. Registered players can view rosters, results and replays.",
       "sections": []
     }
   },

@@ -31,8 +31,8 @@ usePageSeo({ canonical: '/about' });
       <h1 itemprop="headline">{{ i18n.locale === 'en' ? 'About Kaissa Platform' : 'О платформе Каисса' }}</h1>
       <p class="article-lead" itemprop="description">
         {{ i18n.locale === 'en'
-          ? 'Kaissa offers team chess on one board, Bughouse on two boards and Crazyhouse 1v1 or 2v2 with reserves. Play with people or bots.'
-          : 'Каисса — площадка для командных шахмат на одной доске, багхауса на двух досках и Crazyhouse 1×1 или 2×2 с резервом. Играйте с людьми или ботами.' }}
+          ? 'Kaissa offers team chess on one board, Bughouse on two boards, Crazyhouse 1v1 or 2v2 with reserves, and 3-player & 4-player Free-For-All chess. Play with people or bots.'
+          : 'Каисса — площадка для командных шахмат на одной доске, багхауса на двух досках, Crazyhouse 1×1 или 2×2 с резервом и шахмат на 3 и 4 игроков (каждый за себя). Играйте с людьми или ботами.' }}
       </p>
     </header>
 
@@ -69,6 +69,7 @@ usePageSeo({ canonical: '/about' });
             </router-link>
           </p>
           <h3>3. Crazyhouse 1v1 & 2v2</h3><p>Captures change colour and enter your own reserve on the same board. Play standard 1v1 or Kaissa's team format: partners alternate moves and share a reserve.</p><p><router-link to="/rules/crazyhouse" class="button ghost small">Crazyhouse rules</router-link></p>
+          <h3>4. 3-Player & 4-Player Chess (Free-For-All)</h3><p>Every player controls their own colour on a 14×14 cross board (4 players) or a 96-cell hexagonal board (3 players), earning points for captures and checkmates.</p><p><router-link to="/rules/multiplayer" class="button ghost small">{{ i18n.t.footer.rulesMultiplayer }}</router-link></p>
         </section>
 
         <section class="article-section">
@@ -141,6 +142,7 @@ usePageSeo({ canonical: '/about' });
             </router-link>
           </p>
           <h3>3. Crazyhouse 1×1 и 2×2</h3><p>Взятые фигуры меняют цвет и попадают в свой резерв на той же доске. В 1×1 играет один против одного; в командном формате клуба 2×2 партнёры чередуют ходы и делят резерв.</p><p><router-link to="/rules/crazyhouse" class="button ghost small">Правила Crazyhouse</router-link></p>
+          <h3>4. Шахматы на 3 и 4 игроков (Free-For-All)</h3><p>Каждый игрок управляет армией своего цвета на крестообразной доске 14×14 (4 игрока) или шестиугольной доске из 96 клеток (3 игрока), набирая очки за взятия и маты.</p><p><router-link to="/rules/multiplayer" class="button ghost small">{{ i18n.t.footer.rulesMultiplayer }}</router-link></p>
         </section>
 
         <!-- Секция: Возможности -->

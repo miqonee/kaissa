@@ -285,6 +285,16 @@ usePageSeo({ canonical: '/rules/duo' });
             </span>
           </router-link>
 
+          <router-link to="/rules/multiplayer" class="related-card">
+            <span class="related-card-badge">{{ i18n.locale === 'en' ? '3 & 4 Players' : '3 и 4 игрока' }}</span>
+            <h4>{{ i18n.t.footer.rulesMultiplayer }}</h4>
+            <p>{{ i18n.locale === 'en' ? 'Free-For-All on a 14×14 cross board or 96-cell hexagonal board.' : 'Каждый за себя на крестообразной доске 14×14 или шестиугольной доске на троих.' }}</p>
+            <span class="related-card-arrow">
+              {{ i18n.locale === 'en' ? '3 & 4 Player Rules' : 'Правила 3 и 4 игрока' }}
+              <AppIcon name="arrow-right" :size="13" />
+            </span>
+          </router-link>
+
           <router-link to="/about" class="related-card">
             <span class="related-card-badge">{{ i18n.locale === 'en' ? 'About Platform' : 'О проекте' }}</span>
             <h4>{{ i18n.t.footer.about }}</h4>

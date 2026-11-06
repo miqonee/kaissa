@@ -369,15 +369,40 @@ const pageTitle = computed(() => {
   const id = route.params.id;
   const en = i18n.locale === 'en';
   if (!state.value) return `${en ? 'Match' : 'Партия'} #${id} | ${i18n.t.nav.brand}`;
-  return `${en ? 'Match' : 'Партия'} #${id} (${modeLabel(state.value.mode, i18n.locale)}) | ${i18n.t.nav.brand}`;
+  const mode = modeLabel(state.value.mode, i18n.locale);
+  const names = state.value.participants.map((p) => p.username).filter(Boolean).join(' vs ');
+  if (names) {
+    return `${en ? 'Match' : 'Партия'} #${id} (${mode}): ${names} | ${i18n.t.nav.brand}`;
+  }
+  return `${en ? 'Match' : 'Партия'} #${id} (${mode}) | ${i18n.t.nav.brand}`;
+});
+
+const pageOgDescription = computed(() => {
+  const id = route.params.id;
+  const en = i18n.locale === 'en';
+  if (!state.value) {
+    return en ? `Online match #${id} view on Kaissa chess club.` : `Онлайн-просмотр партии #${id} на платформе Каисса.`;
+  }
+  const mode = modeLabel(state.value.mode, i18n.locale);
+  const tc = timeControlLabel(state.value.timeControl);
+  const names = state.value.participants.map((p) => p.username).filter(Boolean).join(' vs ');
+  const statusText =
+    state.value.status === 'active'
+      ? (en ? 'Free-For-All game in progress' : 'Партия в игре (каждый за себя)')
+      : resultHeadline() || (en ? 'Game finished' : 'Партия завершена');
+  return en
+    ? `Match #${id} [${mode}, ${tc}]: ${names}. ${statusText}. Watch online on Kaissa.`
+    : `Партия #${id} [${mode}, ${tc}]: ${names}. ${statusText}. Смотрите онлайн на платформе Каисса.`;
 });
 
 usePageSeo({
   title: pageTitle,
-  description: pageTitle,
+  description: pageOgDescription,
   ogTitle: pageTitle,
-  ogDescription: pageTitle,
+  ogDescription: pageOgDescription,
   canonical: computed(() => `/game/${route.params.id}`),
+  ogImage: 'https://duochess.ru/og-image.png',
+  twitterCard: 'summary_large_image',
 });
 
 // ---------- Socket Lifecycle ----------

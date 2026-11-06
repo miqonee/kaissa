@@ -30,6 +30,7 @@ const links = (locale) => {
     ["/rules/duo", "2×2"],
     ["/rules/bughouse", en ? "Bughouse" : "Багхаус"],
     ["/rules/crazyhouse", "Crazyhouse"],
+    ["/rules/multiplayer", en ? "3 & 4 Players" : "3 и 4 игрока"],
     ["/leaderboard", en ? "Ratings" : "Рейтинг"],
     ["/history", en ? "Game archive" : "Архив"],
     ["/about", en ? "About" : "О клубе"],
@@ -119,8 +120,8 @@ function render(page, route, locale) {
     "name",
     "keywords",
     locale === "en"
-      ? "team chess, bughouse, crazyhouse, 2v2 chess, Kaissa"
-      : "командные шахматы, багхаус, crazyhouse, шахматы 2 на 2, Каисса",
+      ? "team chess, bughouse, crazyhouse, 2v2 chess, 3 player chess, 4 player chess, Kaissa"
+      : "командные шахматы, багхаус, crazyhouse, шахматы 2 на 2, шахматы на троих, шахматы на четверых, шахматы на 3 игрока, шахматы на 4 игрока, Каисса",
   );
   for (const prefix of ["og", "twitter"]) {
     const attr = prefix === "og" ? "property" : "name";

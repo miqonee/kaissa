@@ -14,9 +14,9 @@ export const DEFAULT_DESCRIPTION =
 export const DEFAULT_DESCRIPTION_EN =
   publicPages['/'].en.description;
 export const DEFAULT_KEYWORDS =
-  'шахматы на двоих, шахматы на двоих онлайн, играть в шахматы на двоих, шахматы 2 на 2, командные шахматы, шахматы 2х2, багхаус, шведские шахматы, шахматы вдвоем, каисса';
+  'шахматы на двоих, шахматы на двоих онлайн, играть в шахматы на двоих, шахматы 2 на 2, командные шахматы, шахматы 2х2, багхаус, шведские шахматы, crazyhouse, шахматы на троих, шахматы на четверых, шахматы на 3 игрока, шахматы на 4 игрока, каисса';
 export const DEFAULT_KEYWORDS_EN =
-  'team chess, 2v2 chess, bughouse, duo chess, play chess in pairs, chess online, kaissa';
+  'team chess, 2v2 chess, bughouse, crazyhouse, 3 player chess, 4 player chess, hexagonal chess, duo chess, play chess in pairs, chess online, kaissa';
 
 function getCurrentLocale(): 'ru' | 'en' {
   if (typeof window !== 'undefined') {

@@ -202,6 +202,7 @@ export interface TranslationSchema {
     brandDesc: string;
     rulesDuo: string;
     rulesBughouse: string;
+    rulesMultiplayer: string;
     about: string;
     copyright: string;
     githubLink: string;

@@ -30,7 +30,7 @@ export const ru: TranslationSchema = {
   },
   home: {
     bannerTitle: 'Шахматы на двоих онлайн: 2 на 2 и Багхаус',
-    bannerSubtitle: 'Играйте 2×2, в багхаус или Crazyhouse 1×1 и 2×2. Выберите режим в лобби.',
+    bannerSubtitle: 'Играйте 2×2, в багхаус, Crazyhouse или в шахматы на 3 и 4 игроков. Выберите режим в лобби.',
     createTable: 'Создать стол',
     tableCodePlaceholder: 'КОД СТОЛА',
     joinTable: 'Войти',
@@ -199,9 +199,10 @@ export const ru: TranslationSchema = {
     deleteAccount: 'Удалить аккаунт',
   },
   footer: {
-    brandDesc: 'Командные шахматы 2×2, багхаус и Crazyhouse 1×1 и 2×2 онлайн.',
+    brandDesc: 'Командные шахматы 2×2, багхаус, Crazyhouse и шахматы на 3 и 4 игроков онлайн.',
     rulesDuo: 'Правила 2×2',
     rulesBughouse: 'Правила Багхауса',
+    rulesMultiplayer: 'Правила 3 и 4 игрока',
     about: 'О платформе',
     copyright: '«Каисса» — Командный шахматный клуб.',
     githubLink: 'Проект с открытым исходным кодом',

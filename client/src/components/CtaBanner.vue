@@ -9,7 +9,7 @@ const i18n = useI18n();
 const props = defineProps<{
   title?: string;
   subtitle?: string;
-  currentMode?: 'duo' | 'bughouse' | 'about';
+  currentMode?: 'duo' | 'bughouse' | 'four-player' | 'three-player' | 'about';
 }>();
 
 const router = useRouter();
@@ -29,7 +29,8 @@ const displaySubtitle = computed(() => {
 });
 
 function play2x2(): void {
-  router.push({ path: '/', query: { action: 'quick', mode: props.currentMode ?? 'team' } });
+  const mode = props.currentMode === 'duo' || props.currentMode === 'about' || !props.currentMode ? 'team' : props.currentMode;
+  router.push({ path: '/', query: { action: 'quick', mode } });
 }
 </script>
 
@@ -40,7 +41,7 @@ function play2x2(): void {
     <div class="cta-buttons">
       <button type="button" class="primary big" @click="play2x2">
         <AppIcon name="bolt" :size="16" />
-        {{ props.currentMode === 'bughouse' ? (i18n.locale === 'en' ? 'Play Bughouse' : 'Играть в багхаус') : (i18n.locale === 'en' ? 'Play 2v2 Match' : 'Сыграть партию 2×2') }}
+        {{ props.currentMode === 'bughouse' ? (i18n.locale === 'en' ? 'Play Bughouse' : 'Играть в багхаус') : props.currentMode === 'four-player' ? (i18n.locale === 'en' ? 'Play 4-Player Match' : 'Играть на 4 игроков') : props.currentMode === 'three-player' ? (i18n.locale === 'en' ? 'Play 3-Player Match' : 'Играть на 3 игроков') : (i18n.locale === 'en' ? 'Play 2v2 Match' : 'Сыграть партию 2×2') }}
       </button>
       <router-link to="/leaderboard" class="button ghost">
         <AppIcon name="crown" :size="14" />

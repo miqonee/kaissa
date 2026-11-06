@@ -30,7 +30,7 @@ export const en: TranslationSchema = {
   },
   home: {
     bannerTitle: 'Team Chess Online: 2v2 and Bughouse',
-    bannerSubtitle: 'Play team 2v2, Bughouse or Crazyhouse 1v1 and 2v2. Choose a mode in the lobby.',
+    bannerSubtitle: 'Play team 2v2, Bughouse, Crazyhouse or 3 & 4 player FFA chess. Choose a mode in the lobby.',
     createTable: 'Create Table',
     tableCodePlaceholder: 'ROOM CODE',
     joinTable: 'Join',
@@ -199,9 +199,10 @@ export const en: TranslationSchema = {
     deleteAccount: 'Delete Account',
   },
   footer: {
-    brandDesc: 'Play team 2v2, Bughouse and Crazyhouse 1v1 or 2v2 online.',
+    brandDesc: 'Play team 2v2, Bughouse, Crazyhouse and 3 & 4 player chess online.',
     rulesDuo: '2v2 Rules',
     rulesBughouse: 'Bughouse Rules',
+    rulesMultiplayer: '3 & 4 Player Rules',
     about: 'About',
     copyright: 'Kaissa — Team Chess Club.',
     githubLink: 'Open-source project',

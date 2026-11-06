@@ -75,6 +75,16 @@ export const router = createRouter({
     },
     { path: '/rules', redirect: '/rules/duo' },
     {
+      path: '/rules/multiplayer',
+      name: 'rules-multiplayer',
+      component: () => import('./pages/MultiplayerRulesPage.vue'),
+      meta: {
+        title: 'Шахматы на троих и четверых онлайн: правила 3 и 4 игрока | Каисса',
+        description:
+          'Правила шахмат на 3 и 4 игроков онлайн (Free-For-All): крестообразная доска 14×14 и шестиугольная доска из 96 клеток, начисление очков за фигуры и мат.',
+      },
+    },
+    {
       path: '/about',
       name: 'about',
       component: () => import('./pages/AboutPage.vue'),

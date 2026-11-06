@@ -390,7 +390,7 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
             <select id="lobby-mode" :value="lobby.mode" :disabled="!isHost || modeBusy" @change="changeMode(($event.target as HTMLSelectElement).value as GameMode)">
               <option v-for="mode in GAME_MODES" :key="mode" :value="mode">{{ modeLabel(mode) }}</option>
             </select>
-            <router-link :to="lobby.mode === 'bughouse' ? '/rules/bughouse' : lobby.mode === 'team' ? '/rules/duo' : '/rules/crazyhouse'" target="_blank">{{ i18n.locale === 'en' ? 'Rules' : 'Правила' }}</router-link>
+            <router-link :to="lobby.mode === 'bughouse' ? '/rules/bughouse' : lobby.mode === 'team' ? '/rules/duo' : isMultiplayer(lobby.mode) ? '/rules/multiplayer' : '/rules/crazyhouse'" target="_blank">{{ i18n.locale === 'en' ? 'Rules' : 'Правила' }}</router-link>
           </div>
 
           <!-- Контроль времени (для хоста обычных столов или игроков быстрого стола) -->

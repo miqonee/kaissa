@@ -45,6 +45,8 @@ const canonicalCases: [string | undefined, string][] = [
   ['https://duochess.ru/', 'https://duochess.ru/'],
   ['https://duochess.ru/rules/duo', 'https://duochess.ru/rules/duo'],
   ['https://duochess.ru/rules/bughouse/', 'https://duochess.ru/rules/bughouse'],
+  ['https://duochess.ru/rules/multiplayer', 'https://duochess.ru/rules/multiplayer'],
+  ['https://duochess.ru/rules/multiplayer/', 'https://duochess.ru/rules/multiplayer'],
   ['https://otherdomain.org/about', 'https://duochess.ru/about'],
   ['about', 'https://duochess.ru/about'],
 ];

@@ -50,6 +50,18 @@ function content(page, route, locale) {
 }
 function schemaFor(page, route, locale) {
   const url = canonical(route, locale);
+  const orgName = locale === "en" ? "Kaissa" : "Каисса";
+  const publisher = {
+    "@type": "Organization",
+    name: orgName,
+    url: `${domain}/`,
+    logo: {
+      "@type": "ImageObject",
+      url: `${domain}/favicon-512x512.png`,
+      width: 512,
+      height: 512,
+    },
+  };
   const result = [
     {
       "@context": "https://schema.org",
@@ -58,13 +70,15 @@ function schemaFor(page, route, locale) {
       description: page.description,
       url,
       inLanguage: locale,
+      image: `${domain}/favicon-512x512.png`,
+      publisher,
     },
   ];
   if (route === "/")
     result.push({
       "@context": "https://schema.org",
       "@type": "WebApplication",
-      name: locale === "en" ? "Kaissa" : "Каисса",
+      name: orgName,
       url,
       description: page.description,
       applicationCategory: "GameApplication",
@@ -73,6 +87,7 @@ function schemaFor(page, route, locale) {
       offers: { "@type": "Offer", price: "0", priceCurrency: "RUB" },
       inLanguage: locale,
       image: `${domain}/og-image.png`,
+      author: publisher,
     });
   else
     result.push({

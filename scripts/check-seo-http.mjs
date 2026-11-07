@@ -61,10 +61,18 @@ for (const route of [
   assert.equal(r.headers.get("x-robots-tag"), "noindex, follow", route);
   await r.arrayBuffer();
 }
-const missing = await fetch(base + "/not-a-real-page-for-seo-test");
-assert.equal(missing.status, 404);
-assert.equal(missing.headers.get("x-robots-tag"), "noindex, follow");
-await missing.arrayBuffer();
+for (const notFoundRoute of [
+  "/not-a-real-page-for-seo-test",
+  "/not-a-real-dir-for-seo-test/",
+  "/assets/",
+  "/pieces/",
+  "/board/",
+]) {
+  const missing = await fetch(base + notFoundRoute, { redirect: "manual" });
+  assert.equal(missing.status, 404, `${notFoundRoute} must return 404 directly without redirect`);
+  assert.equal(missing.headers.get("x-robots-tag"), "noindex, follow", `${notFoundRoute} x-robots-tag`);
+  await missing.arrayBuffer();
+}
 const redirect = await fetch(base + "/rules/duo/?lang=en", {
   redirect: "manual",
 });
@@ -77,13 +85,22 @@ const xml = await sitemap.text();
 assert(!xml.includes("/login</loc>"));
 assert(!xml.includes("/players/Guest_"));
 assert(xml.includes("/rules/crazyhouse</loc>"));
+assert(xml.includes("/rules/multiplayer</loc>"));
 const robots = await (await fetch(base + "/robots.txt")).text();
 assert(robots.includes("Disallow: /api/"));
+assert(robots.includes("Allow: /favicon.ico"));
 assert(!robots.includes("Disallow: /lobby/"));
-const og = await fetch(base + "/og-image.png");
-assert.equal(og.status, 200);
-assert(og.headers.get("content-type")?.includes("image/png"));
-await og.arrayBuffer();
+for (const [iconPath, mime] of [
+  ["/favicon.ico", "image/"],
+  ["/favicon.svg", "image/svg+xml"],
+  ["/favicon-120x120.png", "image/png"],
+  ["/og-image.png", "image/png"],
+]) {
+  const iconRes = await fetch(base + iconPath);
+  assert.equal(iconRes.status, 200, iconPath);
+  assert(iconRes.headers.get("content-type")?.includes(mime), `${iconPath} content-type`);
+  await iconRes.arrayBuffer();
+}
 console.log(
-  "OK: Nginx serves 16 localized public pages, correct canonical/robots headers, transient noindex routes, real 404, query-preserving redirect, sitemap, robots and OG image",
+  "OK: Nginx serves 16 localized public pages, correct canonical/robots headers, transient noindex routes, real 404 (including trailing slash and asset dirs), query-preserving redirect, sitemap, robots, favicons and OG image",
 );

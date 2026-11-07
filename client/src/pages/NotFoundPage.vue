@@ -8,7 +8,7 @@ const i18n = useI18n();
 usePageSeo({
   title: computed(() => (i18n.locale === 'en' ? `404 — Page Not Found | ${i18n.t.nav.brand}` : '404 — Страница не найдена | Каисса')),
   description: computed(() => (i18n.locale === 'en' ? 'The requested page does not exist or has been moved.' : 'Запрашиваемая страница не существует или была перемещена.')),
-  canonical: '/',
+  noindex: true,
 });
 </script>
 
@@ -29,6 +29,10 @@ usePageSeo({
         <router-link to="/rules/duo">{{ i18n.t.footer.rulesDuo }}</router-link>
         <span class="sep">•</span>
         <router-link to="/rules/bughouse">{{ i18n.t.footer.rulesBughouse }}</router-link>
+        <span class="sep">•</span>
+        <router-link to="/rules/crazyhouse">Crazyhouse</router-link>
+        <span class="sep">•</span>
+        <router-link to="/rules/multiplayer">{{ i18n.t.footer.rulesMultiplayer }}</router-link>
         <span class="sep">•</span>
         <router-link to="/leaderboard">{{ i18n.t.nav.leaderboard }}</router-link>
         <span class="sep">•</span>

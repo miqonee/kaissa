@@ -1,7 +1,7 @@
 {
   "name": "Каисса — шахматы на двоих онлайн",
   "short_name": "Каисса",
-  "description": "Командные шахматы 2х2 на одной доске и шведские шахматы (багхаус) онлайн.",
+  "description": "Командные шахматы 2х2 на одной доске, Багхаус, Crazyhouse и шахматы на 3 и 4 игроков онлайн.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1a1816",
@@ -15,6 +15,11 @@
     {
       "src": "/favicon-96x96.png",
       "sizes": "96x96",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-120x120.png",
+      "sizes": "120x120",
       "type": "image/png"
     },
     {

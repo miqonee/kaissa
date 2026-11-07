@@ -1,17 +1,48 @@
 import { readFile } from 'node:fs/promises';
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import { prisma } from '../prisma.js';
 import { asyncRoute } from '../http/asyncRoute.js';
 
 export const profilePages = Router();
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
+const NOT_FOUND_HTML = `<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, follow" />
+    <title>404 — Игрок не найден | Каисса</title>
+    <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="120x120" href="/favicon-120x120.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" />
+  </head>
+  <body>
+    <main>
+      <h1>404 — Игрок не найден</h1>
+      <p>Запрашиваемый профиль не существует или был удалён.</p>
+      <nav>
+        <a href="/">На главную</a> · <a href="/leaderboard">Рейтинг игроков</a>
+      </nav>
+    </main>
+  </body>
+</html>`;
+
+function sendProfileNotFound(res: Response): void {
+  res
+    .status(404)
+    .setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    .setHeader('X-Robots-Tag', 'noindex, follow')
+    .type('html')
+    .send(NOT_FOUND_HTML);
+}
+
 profilePages.get('/players/:username', asyncRoute(async (req, res) => {
   const user = await prisma.user.findUnique({ where: { username: String(req.params.username) } });
   res.setHeader('Cache-Control', 'no-cache');
   if (!user) {
-    res.status(404).setHeader('X-Robots-Tag', 'noindex, follow');
-    res.type('html').send('<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="robots" content="noindex, follow"><title>Игрок не найден | Каисса</title></head><body><h1>Игрок не найден</h1><a href="/leaderboard">Рейтинг игроков</a></body></html>');
+    sendProfileNotFound(res);
     return;
   }
   const en = req.query.lang === 'en';
@@ -42,3 +73,7 @@ profilePages.get('/players/:username', asyncRoute(async (req, res) => {
   res.setHeader('X-Robots-Tag', robots);
   res.type('html').send(html);
 }));
+
+profilePages.get(['/players', '/players/', '/players/*'], (_req, res) => {
+  sendProfileNotFound(res);
+});

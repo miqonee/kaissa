@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import express from 'express';
 import {
   generateSitemapXml,
   generateRobotsTxt,
@@ -12,9 +11,9 @@ import {
   formatUrlXml,
   escapeXml,
   formatW3CDate,
-  VALID_CHANGEFREQS,
 } from '../src/seo/sitemap.js';
 import { seoRouter } from '../src/seo/seoRouter.js';
+import { profilePages } from '../src/seo/profilePage.js';
 import { prisma } from '../src/prisma.js';
 import { generateStaticFiles } from '../src/seo/generateStatic.js';
 
@@ -82,6 +81,8 @@ describe('SEO & Sitemap Specification', () => {
       expect(xml).not.toContain('<loc>https://duochess.ru/login</loc>');
       expect(xml).toContain('<loc>https://duochess.ru/rules/crazyhouse</loc>');
       expect(xml).toContain('href="https://duochess.ru/rules/crazyhouse?lang=en"');
+      expect(xml).toContain('<loc>https://duochess.ru/rules/multiplayer</loc>');
+      expect(xml).toContain('href="https://duochess.ru/rules/multiplayer?lang=en"');
 
       // Check priorities
       expect(xml).toContain('<priority>1.0</priority>'); // Home
@@ -160,12 +161,16 @@ describe('SEO & Sitemap Specification', () => {
       );
     });
   });
+
   describe('generateRobotsTxt', () => {
     it('generates robots.txt with required Allow/Disallow, Host, and Sitemap directives', () => {
       const robots = generateRobotsTxt();
 
       expect(robots).toContain('User-agent: *');
       expect(robots).toContain('Allow: /');
+      expect(robots).toContain('Allow: /favicon.ico');
+      expect(robots).toContain('Allow: /favicon.svg');
+      expect(robots).toContain('Allow: /favicon-*.png');
       expect(robots).not.toContain('Disallow: /admin');
       expect(robots).not.toContain('Disallow: /lobby/*');
       expect(robots).toContain('Disallow: /api/');
@@ -314,7 +319,7 @@ describe('SEO & Sitemap Specification', () => {
     });
   });
 
-  describe('Express seoRouter endpoints', () => {
+  describe('Express seoRouter & profilePages endpoints', () => {
     it('serves sitemap.xml with application/xml and robots.txt with text/plain', async () => {
       vi.spyOn(prisma.user, 'findMany').mockResolvedValue([]);
       vi.spyOn(prisma.game, 'findFirst').mockResolvedValue(null as any);
@@ -324,8 +329,8 @@ describe('SEO & Sitemap Specification', () => {
       let sitemapHeaders: Record<string, string> = {};
       let sitemapBody = '';
       const sitemapRes: any = {
-        setHeader: (k: string, v: string) => { sitemapHeaders[k] = v; },
-        send: (b: string) => { sitemapBody = b; },
+        setHeader: (k: string, v: string) => { sitemapHeaders[k] = v; return sitemapRes; },
+        send: (b: string) => { sitemapBody = b; return sitemapRes; },
         status: () => sitemapRes,
       };
       const sitemapRoute = (seoRouter.stack.find((l) => l.route?.path?.includes('/sitemap.xml')) as any)?.route;
@@ -341,8 +346,8 @@ describe('SEO & Sitemap Specification', () => {
       let robotsHeaders: Record<string, string> = {};
       let robotsBody = '';
       const robotsRes: any = {
-        setHeader: (k: string, v: string) => { robotsHeaders[k] = v; },
-        send: (b: string) => { robotsBody = b; },
+        setHeader: (k: string, v: string) => { robotsHeaders[k] = v; return robotsRes; },
+        send: (b: string) => { robotsBody = b; return robotsRes; },
         status: () => robotsRes,
       };
       const robotsRoute = (seoRouter.stack.find((l) => l.route?.path?.includes('/robots.txt')) as any)?.route;
@@ -353,6 +358,29 @@ describe('SEO & Sitemap Specification', () => {
       expect(robotsBody).toContain('Host: duochess.ru');
       expect(robotsBody).not.toContain('Disallow: /lobby/*');
     });
-  });
 
+    it('returns HTTP 404 with noindex, follow and favicon links for missing or empty player profile URLs', async () => {
+      vi.spyOn(prisma.user, 'findUnique').mockResolvedValue(null as any);
+
+      let statusCode = 200;
+      const headers: Record<string, string> = {};
+      let body = '';
+      const res: any = {
+        status: (code: number) => { statusCode = code; return res; },
+        setHeader: (k: string, v: string) => { headers[k] = v; return res; },
+        type: () => res,
+        send: (b: string) => { body = b; return res; },
+      };
+
+      const usernameRoute = (profilePages.stack.find((l) => l.route?.path === '/players/:username') as any)?.route;
+      expect(usernameRoute).toBeDefined();
+      usernameRoute.stack[0].handle({ params: { username: 'unknown_user' }, path: '/players/unknown_user', query: {} }, res, () => {});
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(statusCode).toBe(404);
+      expect(headers['X-Robots-Tag']).toBe('noindex, follow');
+      expect(body).toContain('href="/favicon-120x120.png"');
+      expect(body).toContain('404');
+    });
+  });
 });

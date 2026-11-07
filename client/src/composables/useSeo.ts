@@ -210,9 +210,13 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
     return val ? toAbsoluteUrl(val) : resolvedOgImage.value;
   });
 
-  const resolvedRobots = computed(() => {
+  const isNoindex = computed(() => {
     const privatePath = /^\/(?:login|admin|lobby|game|replay|history)(?:\/|$)/.test(pagePath.value);
-    return toValue(options.noindex) || privatePath ? 'noindex, follow' : 'index, follow';
+    return Boolean(toValue(options.noindex) || privatePath);
+  });
+
+  const resolvedRobots = computed(() => {
+    return isNoindex.value ? 'noindex, follow' : 'index, follow';
   });
 
   function setMetaTag(attrName: 'name' | 'property', attrValue: string, content?: string | null) {
@@ -267,14 +271,14 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
       setMetaTag('name', 'description', resolvedDescription.value);
       setMetaTag('name', 'keywords', resolvedKeywords.value);
       const canonicalUrl = resolvedCanonical.value;
-      setCanonicalTag(canonicalUrl);
+      setCanonicalTag(isNoindex.value ? null : canonicalUrl);
 
       // Мультиязычные теги hreflang согласно стандарту Google & Yandex
       const ruHref = canonicalBase.value;
       const enHref = `${ruHref}?lang=en`;
-      setHreflangTag('ru', ruHref);
-      setHreflangTag('en', enHref);
-      setHreflangTag('x-default', ruHref);
+      setHreflangTag('ru', isNoindex.value ? null : ruHref);
+      setHreflangTag('en', isNoindex.value ? null : enHref);
+      setHreflangTag('x-default', isNoindex.value ? null : ruHref);
 
       const isEn = locale.value === 'en';
       document.documentElement.lang = locale.value;
@@ -293,10 +297,78 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
       setMetaTag('name', 'twitter:description', resolvedTwitterDescription.value);
       setMetaTag('name', 'twitter:image', resolvedTwitterImage.value);
       setMetaTag('name', 'robots', resolvedRobots.value);
+
       let schema = document.getElementById('kaissa-schema');
-      if (!schema) { schema = document.createElement('script'); schema.id = 'kaissa-schema'; schema.setAttribute('type','application/ld+json'); document.head.appendChild(schema); }
-      const structured: Record<string, unknown>[] = [{ '@context':'https://schema.org', '@type':pagePath.value === '/'?'WebSite':'WebPage', name:resolvedTitle.value, description:resolvedDescription.value, url:canonicalUrl, inLanguage:locale.value }];
-      if (pagePath.value === '/') structured.push({ '@context':'https://schema.org', '@type':'WebApplication', name:isEn?'Kaissa':'Каисса', url:canonicalUrl, description:resolvedDescription.value, applicationCategory:'GameApplication', operatingSystem:'Any', browserRequirements:'Requires JavaScript', offers:{ '@type':'Offer',price:'0',priceCurrency:'RUB' }, inLanguage:locale.value,image:resolvedOgImage.value });
+      if (isNoindex.value) {
+        if (schema) schema.remove();
+        return;
+      }
+      if (!schema) {
+        schema = document.createElement('script');
+        schema.id = 'kaissa-schema';
+        schema.setAttribute('type', 'application/ld+json');
+        document.head.appendChild(schema);
+      }
+      const orgName = isEn ? SITE_NAME_EN : SITE_NAME;
+      const publisher = {
+        '@type': 'Organization',
+        name: orgName,
+        url: `${BASE_CANONICAL_DOMAIN}/`,
+        logo: {
+          '@type': 'ImageObject',
+          url: `${BASE_CANONICAL_DOMAIN}/favicon-512x512.png`,
+          width: 512,
+          height: 512,
+        },
+      };
+      const structured: Record<string, unknown>[] = [
+        {
+          '@context': 'https://schema.org',
+          '@type': pagePath.value === '/' ? 'WebSite' : 'WebPage',
+          name: resolvedTitle.value,
+          description: resolvedDescription.value,
+          url: canonicalUrl,
+          inLanguage: locale.value,
+          image: `${BASE_CANONICAL_DOMAIN}/favicon-512x512.png`,
+          publisher,
+        },
+      ];
+      if (pagePath.value === '/') {
+        structured.push({
+          '@context': 'https://schema.org',
+          '@type': 'WebApplication',
+          name: orgName,
+          url: canonicalUrl,
+          description: resolvedDescription.value,
+          applicationCategory: 'GameApplication',
+          operatingSystem: 'Any',
+          browserRequirements: 'Requires JavaScript',
+          offers: { '@type': 'Offer', price: '0', priceCurrency: 'RUB' },
+          inLanguage: locale.value,
+          image: resolvedOgImage.value,
+          author: publisher,
+        });
+      } else {
+        const homeUrl = `${BASE_CANONICAL_DOMAIN}/${isEn ? '?lang=en' : ''}`;
+        structured.push({
+          '@context': 'https://schema.org',
+          '@type': 'BreadcrumbList',
+          itemListElement: [
+            {
+              '@type': 'ListItem',
+              position: 1,
+              name: isEn ? 'Home' : 'Главная',
+              item: homeUrl,
+            },
+            {
+              '@type': 'ListItem',
+              position: 2,
+              name: content.value?.heading ?? resolvedTitle.value,
+              item: canonicalUrl,
+            },
+          ],
+        });
+      }
       schema.textContent = JSON.stringify(structured).replace(/</g, '\\u003c');
     });
   }
@@ -318,4 +390,3 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
 }
 
 export { usePageSeo as useSeo };
-

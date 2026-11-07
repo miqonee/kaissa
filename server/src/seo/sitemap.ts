@@ -123,7 +123,7 @@ export async function getActivePlayers(options?: { activeOnly?: boolean; limit?:
 /**
  * Генерация sitemap.xml
  * Включает:
- * - Основные статические страницы: /, /leaderboard, /history и правила
+ * - Основные статические страницы: /, /leaderboard и правила (duo, bughouse, crazyhouse, multiplayer), /about
  * - Публичные профили активных игроков: /players/:username
  * - Корректные атрибуты lastmod, changefreq, priority для всех страниц
  */
@@ -171,7 +171,6 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
       priority: 0.8,
       alternates: makeAlternates(`${baseUrl}/leaderboard`),
     },
-    { loc: `${baseUrl}/rules/crazyhouse`, changefreq: 'weekly', priority: 0.9, alternates: makeAlternates(`${baseUrl}/rules/crazyhouse`) },
     // Правила и информация о платформе
     {
       loc: `${baseUrl}/rules/duo`,
@@ -184,6 +183,18 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
       changefreq: 'weekly',
       priority: 0.9,
       alternates: makeAlternates(`${baseUrl}/rules/bughouse`),
+    },
+    {
+      loc: `${baseUrl}/rules/crazyhouse`,
+      changefreq: 'weekly',
+      priority: 0.9,
+      alternates: makeAlternates(`${baseUrl}/rules/crazyhouse`),
+    },
+    {
+      loc: `${baseUrl}/rules/multiplayer`,
+      changefreq: 'weekly',
+      priority: 0.9,
+      alternates: makeAlternates(`${baseUrl}/rules/multiplayer`),
     },
     {
       loc: `${baseUrl}/about`,
@@ -216,8 +227,8 @@ ${urlsXml}
 
 /**
  * Генерация robots.txt согласно требованиям поисковых систем:
- * - Разрешить публичные маршруты
- * - Запретить приватные (/admin) и временные/игровые сессии (/lobby/*, /api/)
+ * - Разрешить публичные маршруты и фавиконки
+ * - Запретить API (/api/)
  * - Указать директивы Host и Sitemap
  */
 export function generateRobotsTxt(options: { baseUrl?: string; host?: string } = {}): string {
@@ -227,6 +238,10 @@ export function generateRobotsTxt(options: { baseUrl?: string; host?: string } =
   return [
     'User-agent: *',
     'Allow: /',
+    'Allow: /favicon.ico',
+    'Allow: /favicon.svg',
+    'Allow: /favicon-*.png',
+    'Allow: /apple-touch-icon.png',
     'Disallow: /api/',
     '',
     '# Clean-param for Yandex search engine',
@@ -405,4 +420,3 @@ export function validateSitemapXml(xml: string): ValidationResult {
     errors,
   };
 }
-

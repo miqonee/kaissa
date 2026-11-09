@@ -44,6 +44,11 @@ for (const route of [...Object.keys(pages), "/rules/crazyhouse"])
       pathname + " canonical",
     );
     assert.equal(
+      r.headers.get("strict-transport-security"),
+      "max-age=31536000",
+      pathname + " hsts",
+    );
+    assert.equal(
       r.headers.get("x-robots-tag"),
       ["/login", "/history"].includes(route) ? "noindex, follow" : "index, follow",
       pathname + " robots",
@@ -78,6 +83,7 @@ const redirect = await fetch(base + "/rules/duo/?lang=en", {
 });
 assert.equal(redirect.status, 301);
 assert(redirect.headers.get("location")?.endsWith("/rules/duo?lang=en"));
+assert.equal(redirect.headers.get("strict-transport-security"), "max-age=31536000", "redirect hsts");
 await redirect.arrayBuffer();
 const sitemap = await fetch(base + "/sitemap.xml");
 assert.equal(sitemap.status, 200);

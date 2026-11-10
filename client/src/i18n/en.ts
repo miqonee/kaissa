@@ -198,6 +198,16 @@ export const en: TranslationSchema = {
     resetRating: 'Reset Rating',
     deleteAccount: 'Delete Account',
   },
+  settings: {
+    sounds: 'Game sounds',
+    enableSound: 'Enable',
+    disableSound: 'Mute',
+    moveAnimation: 'Move animation',
+    animNormal: 'Normal',
+    animFast: '2x faster',
+    animOff: 'Disabled',
+    animAdaptive: 'Adaptive (≤2m fast, ≤1m off)',
+  },
   footer: {
     brandDesc: 'Play team 2v2, Bughouse, Crazyhouse and 3 & 4 player chess online.',
     rulesDuo: '2v2 Rules',

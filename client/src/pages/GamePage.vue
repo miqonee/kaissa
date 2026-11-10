@@ -332,6 +332,25 @@ function fmtClock(ms: number | null): string {
   return `${m}:${String(sec).padStart(2, '0')}`;
 }
 
+function effectiveClockMsForBoard(b: 0 | 1): number | null {
+  if (!state.value || state.value.timeControl.kind !== 'clock') return null;
+  if (isParticipant.value) {
+    if (state.value.mode === 'bughouse') {
+      const myBoardIdx = myBoard.value === 1 ? 1 : 0;
+      return clockMs(myBoardIdx, viewedColor(myBoardIdx));
+    }
+    if (teamModeSides.value) {
+      return clockMs(0, teamModeSides.value.bottom.color);
+    }
+  }
+  const w = clockMs(b, 'w');
+  const bl = clockMs(b, 'b');
+  if (w === null && bl === null) return null;
+  if (w === null) return bl;
+  if (bl === null) return w;
+  return Math.min(w, bl);
+}
+
 // ---------- Игроки для 2х2 (одна доска) и Багхауса ----------
 
 /** Для 2x2: возвращает обе команды по 2 игрока */
@@ -837,6 +856,7 @@ function resultHeadline(): string {
               :check-square="checkByBoard[0]"
               :last-move="lastMoveOf(0)"
               :coordinates="true"
+              :clock-remaining-ms="effectiveClockMsForBoard(0)"
               @move="onMove(0, $event)"
               @premove-set="playMoveSound"
             />
@@ -932,7 +952,9 @@ function resultHeadline(): string {
               :check-square="checkByBoard[bc.index]" :last-move="lastMoveOf(bc.index)"
               :drop-piece="myTurnOn(bc.index) ? selectedDrop : null"
               :drop-dests="myTurnOn(bc.index) && selectedDrop ? state.legalDrops?.[bc.index]?.[selectedDrop] ?? [] : []"
-              :coordinates="true" @move="onMove(bc.index, $event)" @drop="onDrop(bc.index, $event)"
+              :coordinates="true"
+              :clock-remaining-ms="effectiveClockMsForBoard(bc.index)"
+              @move="onMove(bc.index, $event)" @drop="onDrop(bc.index, $event)"
               @cancel-drop="selectedDrop = null" @premove-set="playMoveSound" />
           </div>
           <span class="pocket-label dim">{{ isParticipant ? (myBoard === bc.index ? i18n.t.bughouse.yourPocket : i18n.t.bughouse.partnerPocket) : i18n.t.bughouse.yourPocket }}</span>

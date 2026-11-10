@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Chessground } from '@lichess-org/chessground';
 import type { Api as CgApi, Color as CgColor, Key } from 'chessground-types';
 import { Chess } from 'chess.js';
 import type { PieceType, DropPieceType } from 'shared';
+import { useSettingsStore } from '../stores/settings';
 
 const props = withDefaults(
   defineProps<{
@@ -23,6 +24,8 @@ const props = withDefaults(
     /** выбранная в кармане фигура — клик по пустой клетке сделает дроп */
     dropPiece?: DropPieceType | null;
     dropDests?: string[];
+    /** Оставшееся время на часах для адаптивной анимации (в мс) */
+    clockRemainingMs?: number | null;
   }>(),
   {
     orientation: 'white',
@@ -35,6 +38,7 @@ const props = withDefaults(
     checkSquare: null,
     dropPiece: null,
     dropDests: () => [],
+    clockRemainingMs: null,
   },
 );
 
@@ -45,6 +49,12 @@ const emit = defineEmits<{
   (e: 'premoveUnset'): void;
   (e: 'cancelDrop'): void;
 }>();
+
+const settings = useSettingsStore();
+const animConfig = computed(() => {
+  if (props.mini) return { enabled: false, duration: 0 };
+  return settings.resolveAnimation(props.clockRemainingMs);
+});
 
 const el = ref<HTMLElement | null>(null);
 let cg: CgApi | null = null;
@@ -184,8 +194,8 @@ function config() {
         }
       },
     },
-    // Плавное скольжение фигур: 200 мс — чётко читается ход и не затягивается
-    animation: { enabled: !props.mini, duration: 200 },
+    // Плавное скольжение фигур согласно персональным настройкам
+    animation: animConfig.value,
     highlight: { lastMove: true, check: true },
     drawable: { enabled: false, visible: true },
   };
@@ -195,6 +205,15 @@ onMounted(() => {
   if (!el.value) return;
   cg = Chessground(el.value, config() as never);
 });
+
+watch(
+  animConfig,
+  (cfg) => {
+    if (!cg) return;
+    cg.set({ animation: cfg } as never);
+  },
+  { deep: true },
+);
 
 watch(
   () => props.fen,
@@ -218,6 +237,7 @@ watch(
       draggable: {
         enabled: interactive,
       },
+      animation: animConfig.value,
     } as never);
 
     if (props.movableColor && turnColor === props.movableColor) {

@@ -14,13 +14,21 @@ import { useAuthStore } from "../stores/auth";
 import { useI18n } from "../stores/i18n";
 import { usePageSeo } from "../composables/useSeo";
 import { isMuted, toggleSound } from "../audio/sounds";
+import { useSettingsStore, type AnimationMode } from "../stores/settings";
 import ModeTabs from "../components/ModeTabs.vue";
 import MatchCard from "../components/MatchCard.vue";
 import GameReplayModal from "../components/GameReplayModal.vue";
 const route = useRoute();
 const auth = useAuthStore();
+const settings = useSettingsStore();
 const i18n = useI18n();
 const en = computed(() => i18n.locale === "en");
+const animationOptions = computed<Array<{ value: AnimationMode; label: string }>>(() => [
+  { value: "normal", label: i18n.t.settings.animNormal },
+  { value: "fast", label: i18n.t.settings.animFast },
+  { value: "off", label: i18n.t.settings.animOff },
+  { value: "adaptive", label: i18n.t.settings.animAdaptive },
+]);
 const mode = ref<GameMode>(
   GAME_MODES.includes(route.query.mode as GameMode)
     ? (route.query.mode as GameMode)
@@ -162,12 +170,30 @@ const sparkPath = computed(() => {
     </section>
     <section
       v-if="auth.user?.id === profile?.user.id"
-      class="panel profile-head"
+      class="panel profile-settings"
     >
-      <span>{{ en ? "Game sounds" : "Звуки игры" }}</span
-      ><button @click="toggleSound">
-        {{ isMuted ? (en ? "Enable" : "Включить") : en ? "Mute" : "Выключить" }}
-      </button>
+      <div class="settings-row">
+        <span class="settings-label">{{ i18n.t.settings.sounds }}</span>
+        <button class="small ghost" @click="toggleSound">
+          {{ isMuted ? i18n.t.settings.enableSound : i18n.t.settings.disableSound }}
+        </button>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">{{ i18n.t.settings.moveAnimation }}</span>
+        <div class="anim-tabs" role="group" :aria-label="i18n.t.settings.moveAnimation">
+          <button
+            v-for="opt in animationOptions"
+            :key="opt.value"
+            type="button"
+            class="small"
+            :class="{ primary: settings.animationMode === opt.value, ghost: settings.animationMode !== opt.value }"
+            :aria-pressed="settings.animationMode === opt.value"
+            @click="settings.setAnimationMode(opt.value)"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+      </div>
     </section>
     <section v-if="profile && !loading && !error" class="panel">
       <div class="panel-head">
@@ -215,6 +241,33 @@ const sparkPath = computed(() => {
 }
 .profile-head h1 {
   overflow-wrap: anywhere;
+}
+.profile-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.settings-label {
+  font-weight: 500;
+  font-size: 14px;
+}
+.anim-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.anim-tabs button {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
 }
 .profile-stats {
   padding: 16px;

@@ -29,7 +29,7 @@ export const ru: TranslationSchema = {
     switchLang: 'Switch to English',
   },
   home: {
-    bannerTitle: 'Шахматы на двоих онлайн: 2 на 2 и Багхаус',
+    bannerTitle: 'Командные шахматы онлайн: 2 на 2 и Багхаус',
     bannerSubtitle: 'Играйте 2×2, в багхаус, Crazyhouse или в шахматы на 3 и 4 игроков. Выберите режим в лобби.',
     createTable: 'Создать стол',
     tableCodePlaceholder: 'КОД СТОЛА',
@@ -197,6 +197,16 @@ export const ru: TranslationSchema = {
     metricAvgDuration: 'Средняя длительность',
     resetRating: 'Сбросить рейтинг',
     deleteAccount: 'Удалить аккаунт',
+  },
+  settings: {
+    sounds: 'Звуки игры',
+    enableSound: 'Включить',
+    disableSound: 'Выключить',
+    moveAnimation: 'Анимация ходов',
+    animNormal: 'Обычная',
+    animFast: 'В 2 раза быстрее',
+    animOff: 'Отключить',
+    animAdaptive: 'Адаптивно (≤2 мин — 2×, ≤1 мин — выкл)',
   },
   footer: {
     brandDesc: 'Командные шахматы 2×2, багхаус, Crazyhouse и шахматы на 3 и 4 игроков онлайн.',

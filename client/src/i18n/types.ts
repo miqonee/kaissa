@@ -198,6 +198,16 @@ export interface TranslationSchema {
     resetRating: string;
     deleteAccount: string;
   };
+  settings: {
+    sounds: string;
+    enableSound: string;
+    disableSound: string;
+    moveAnimation: string;
+    animNormal: string;
+    animFast: string;
+    animOff: string;
+    animAdaptive: string;
+  };
   footer: {
     brandDesc: string;
     rulesDuo: string;

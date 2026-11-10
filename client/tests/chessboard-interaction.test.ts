@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp, h, nextTick, reactive, type App } from "vue";
 import { Chess } from "chess.js";
+import { createPinia } from "pinia";
 import ChessBoard from "../src/components/ChessBoard.vue";
 const captured = vi.hoisted(() => ({ api: null as any }));
 vi.mock("@lichess-org/chessground", async (importOriginal) => {
@@ -51,6 +52,7 @@ async function mount(premove = false) {
   });
   const move = vi.fn();
   app = createApp({ render: () => h(ChessBoard, { ...props, onMove: move }) });
+  app.use(createPinia());
   app.mount(root);
   await nextTick();
   await new Promise((r) => requestAnimationFrame(r));

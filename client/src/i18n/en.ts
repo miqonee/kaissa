@@ -199,6 +199,8 @@ export const en: TranslationSchema = {
     deleteAccount: 'Delete Account',
   },
   settings: {
+    haptics: 'Vibration after your move',
+    hapticsOn: 'Enabled', hapticsOff: 'Disabled',
     sounds: 'Game sounds',
     enableSound: 'Enable',
     disableSound: 'Mute',
@@ -208,6 +210,11 @@ export const en: TranslationSchema = {
     animOff: 'Disabled',
     animAdaptive: 'Adaptive (≤2m fast, ≤1m off)',
   },
+  material: {
+    white: 'White material', black: 'Black material', equal: 'No extra pieces',
+    description: 'Piece difference after exchanges. Includes reserves; not a position evaluation.',
+  },
+  matchChat: { title: 'Match chat', empty: 'No messages yet. Say hello!', placeholder: 'Message everyone…', send: 'Send', close: 'Close chat' },
   footer: {
     brandDesc: 'Play team 2v2, Bughouse, Crazyhouse and 3 & 4 player chess online.',
     rulesDuo: '2v2 Rules',

@@ -199,6 +199,8 @@ export const ru: TranslationSchema = {
     deleteAccount: 'Удалить аккаунт',
   },
   settings: {
+    haptics: 'Виброотклик на свой ход',
+    hapticsOn: 'Включён', hapticsOff: 'Выключен',
     sounds: 'Звуки игры',
     enableSound: 'Включить',
     disableSound: 'Выключить',
@@ -208,6 +210,11 @@ export const ru: TranslationSchema = {
     animOff: 'Отключить',
     animAdaptive: 'Адаптивно (≤2 мин — 2×, ≤1 мин — выкл)',
   },
+  material: {
+    white: 'Материал белых', black: 'Материал чёрных', equal: 'Нет лишних фигур',
+    description: 'Разница фигур после разменов. Резерв учитывается; это не оценка позиции.',
+  },
+  matchChat: { title: 'Чат матча', empty: 'Пока сообщений нет. Напишите первое!', placeholder: 'Сообщение всем…', send: 'Отправить', close: 'Свернуть чат' },
   footer: {
     brandDesc: 'Командные шахматы 2×2, багхаус, Crazyhouse и шахматы на 3 и 4 игроков онлайн.',
     rulesDuo: 'Правила 2×2',

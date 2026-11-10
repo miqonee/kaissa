@@ -76,118 +76,17 @@ watch(() => props.gameId, load);
 </template>
 
 <style scoped>
-.replay-backdrop {
-  padding: var(--gap-s);
-  z-index: 1100;
-  align-items: center;
-  justify-content: center;
-  overflow-y: auto;
-}
-
-/* Для одной доски модалка компактная (860px) — без лишней пустоты по горизонтали */
-.replay-modal {
-  width: 100%;
-  max-width: min(860px, 96vw);
-  max-height: calc(100vh - 24px);
-  margin: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Для двух досок (багхаус) модалка шире */
-.replay-modal.two-boards {
-  max-width: min(1140px, 96vw);
-}
-
-.replay-modal .modal-body {
-  padding: 14px 20px 18px;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-}
-
-/* Компактный плеер в модалке: крупная доска по высоте экрана + всегда видимый снизу транспорт */
-.replay-modal :deep(.replayer.compact) {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.replay-modal :deep(.replayer.compact .replayer-head) {
-  flex-shrink: 0;
-  gap: var(--gap-xs);
-}
-
-.replay-modal :deep(.replayer.compact .replayer-body) {
-  grid-template-columns: minmax(0, 1fr) 240px;
-  gap: 16px;
-  align-items: start;
-}
-
-/* Ограничиваем высоту доски так, чтобы транспортные кнопки под ней всегда оставались в окне */
-.replay-modal :deep(.replayer.compact .rp-boards:not(.two)) {
-  max-width: min(100%, calc(84vh - 160px));
-}
-
-/* Багхаус: две доски комфортного крупного размера */
-.replay-modal :deep(.replayer.compact .rp-boards.two) {
-  max-width: min(100%, calc((84vh - 170px) * 1.55));
-}
-
-.replay-modal :deep(.replayer.compact .rp-moves) {
-  max-height: calc(84vh - 200px);
-  min-height: 180px;
-}
-
-.replay-modal :deep(.replayer.compact .rp-pocket) {
-  max-width: 100%;
-}
-
-.replay-modal :deep(.replayer.compact .rp-transport) {
-  flex-shrink: 0;
-  margin-top: 4px;
-}
-
-.rh-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-xs);
-}
-
-/* Мобильный полноэкранный просмотр архива */
+.replay-backdrop { padding: 12px; z-index: 1100; overflow: hidden; }
+.replay-modal { width: min(960px, 100%); max-width: 960px; height: min(860px, calc(100dvh - 24px)); max-height: calc(100dvh - 24px); margin: auto; display: flex; flex-direction: column; overflow: hidden; }
+.replay-modal.two-boards { width: min(1200px, 100%); max-width: 1200px; }
+.replay-modal .modal-head { flex: none; }
+.replay-modal .modal-body { flex: 1; min-height: 0; padding: 12px 16px; overflow: hidden; display: flex; flex-direction: column; }
+.replay-modal :deep(.replayer) { flex: 1; min-height: 0; }
+.rh-actions { display: flex; align-items: center; gap: var(--gap-xs); }
 @media (max-width: 720px) {
-  .replay-backdrop {
-    padding: 0;
-  }
-  .replay-modal {
-    max-width: 100vw;
-    width: 100vw;
-    height: 100vh;
-    max-height: 100vh;
-    border-radius: 0;
-    border: none;
-  }
-  .replay-modal .modal-body {
-    padding: 8px 10px 14px;
-  }
-  .replay-modal :deep(.replayer.compact .replayer-body) {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-  .replay-modal :deep(.replayer.compact .rp-boards:not(.two)) {
-    max-width: 100%;
-  }
-  .replay-modal :deep(.replayer.compact .rp-boards.two) {
-    max-width: 100%;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-  .replay-modal :deep(.replayer.compact .rp-moves) {
-    max-height: 180px;
-    min-height: 120px;
-  }
-  .replay-modal :deep(.replayer.compact .rp-transport) {
-    padding: 6px 10px;
-  }
+  .replay-backdrop { padding: 0; }
+  .replay-modal, .replay-modal.two-boards { width: 100%; max-width: 100%; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  .replay-modal .modal-head { padding: 10px 12px; }
+  .replay-modal .modal-body { padding: 6px 8px 8px; }
 }
 </style>

@@ -30,17 +30,26 @@ import BotHoverCard from '../components/BotHoverCard.vue';
 import { usePageSeo } from '../composables/useSeo';
 import { useI18n } from '../stores/i18n';
 import { trackGoal } from '../utils/analytics';
+import MaterialBalance from '../components/MaterialBalance.vue';
+import MatchChat from '../components/MatchChat.vue';
+import ChatWidget from '../components/ChatWidget.vue';
+import { useSettingsStore } from '../stores/settings';
+import { vibrateMove } from '../utils/haptics';
+import { useGameLayout } from '../composables/useGameLayout';
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const i18n = useI18n();
+const settings = useSettingsStore();
+const { gameRoot, boardsRoot, compactLayout } = useGameLayout();
 const socket = getSocket();
 const canViewArchive = computed(() => !!auth.user && !auth.user.isGuest);
 const archiveLogin = computed(() => ({ path: '/login', query: { redirect: '/history', ...(auth.user?.isGuest ? { claim: '1' } : {}) } }));
 const gameId = Number(route.params.id);
 
 const state = ref<GameState | null>(null);
+const drawerChat = computed(() => compactLayout.value || state.value?.mode === 'bughouse');
 
 const pageTitle = computed(() => {
   const id = route.params.id;
@@ -88,7 +97,7 @@ usePageSeo({
 const error = ref('');
 const chat = ref<ChatMessage[]>([]);
 const chatText = ref('');
-const chatBox = ref<HTMLElement | null>(null);
+const chatPanel = ref<InstanceType<typeof MatchChat> | null>(null);
 
 const movesSanHistory = ref<string[]>([]);
 const isChatOpen = ref(false);
@@ -131,6 +140,11 @@ const isViewing = computed(() => !isPlaying.value);
 const board0Fen = computed(() => fenOf(0));
 const recognizedOpening = computed(() => detectOpening(movesSanHistory.value));
 const currentAnalysis = computed(() => analyzePosition(board0Fen.value));
+const hasGameNotes = computed(() => state.value?.status === 'active' && (
+  firstMoveSec.value !== null || !!state.value.botPacing ||
+  (isParticipant.value && state.value.mode === 'bughouse' && (!introSeen.value || pocketTip.value)) ||
+  (isParticipant.value && isCrazyhouse(state.value.mode) && !crazyHintSeen.value)
+));
 
 const selectedDrop = ref<DropPieceType | null>(null);
 const partnerExpanded = ref(false);
@@ -452,6 +466,7 @@ function sendMove(b: 0 | 1, from: string, to: string, promotion?: PieceType, dro
   if (!socket.connected) { error.value = i18n.locale === 'en' ? 'Connection lost. Wait for reconnection.' : 'Связь потеряна. Дождитесь подключения.'; boardRefs[b]?.resetView(); return; }
   socket.timeout(8000).emit('game:move', { gameId, boardIndex: b, from, to, promotion, dropPiece }, (timeout, ack) => {
     if (timeout || !ack) { error.value = i18n.locale === 'en' ? 'Move confirmation missing. Synchronizing…' : 'Нет подтверждения хода. Восстанавливаем позицию…'; boardRefs[b]?.resetView(); socket.emit('game:watch', gameId); return; }
+    if (ack.ok) vibrateMove(settings.hapticsEnabled);
     if (!ack.ok) {
       error.value = ack.error ?? '';
       setTimeout(() => (error.value = ''), 2500);
@@ -480,18 +495,16 @@ function resign(): void {
 }
 onBeforeUnmount(() => clearTimeout(resignTimer));
 
+function sendChatMessage(text: string): void {
+  const message = text.trim();
+  if (message) socket.emit('game:chat', gameId, message);
+}
 function sendChat(): void {
-  const t = chatText.value.trim();
-  if (!t) return;
-  socket.emit('game:chat', gameId, t);
+  sendChatMessage(chatText.value);
   chatText.value = '';
 }
 
-function scrollChat(): void {
-  setTimeout(() => {
-    if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
-  }, 30);
-}
+function scrollChat(): void { void chatPanel.value?.scrollToEnd(); }
 
 // ---------- Lifecycle ----------
 
@@ -591,7 +604,7 @@ onMounted(() => {
   socket.on('game:chat', (msg) => {
     if (msg.gameId !== gameId) return;
     chat.value.push(msg);
-    if (isViewing.value && !isChatOpen.value && msg.userId !== myId.value) {
+    if ((drawerChat.value || isViewing.value) && !isChatOpen.value && msg.userId !== myId.value) {
       unreadChatCount.value++;
     }
     scrollChat();
@@ -733,7 +746,11 @@ function resultHeadline(): string {
 </script>
 
 <template>
-  <div v-if="state" class="game-page" :class="state.mode">
+  <div v-if="state" ref="gameRoot" class="game-page" :class="state.mode">
+    <div v-if="error || disconnected.length" class="panel game-notice" role="alert">
+      <p v-if="error">{{ error }}</p>
+      <p v-if="disconnected.length">{{ i18n.locale === 'en' ? 'Disconnected:' : 'Отключились:' }} {{ disconnected.map(player => player.username).join(', ') }}</p>
+    </div>
     <aside v-if="rematchInvite" class="panel rematch-invite" role="status">
       <span>{{ i18n.locale === 'en' ? 'Your opponents are inviting you to a rematch.' : 'Участники приглашают вас на реванш.' }}</span>
       <router-link class="button primary small" :to="`/lobby/${rematchInvite}`">{{ i18n.locale === 'en' ? 'Join' : 'Присоединиться' }}</router-link>
@@ -741,36 +758,45 @@ function resultHeadline(): string {
     </aside>
 
 
-    <div v-if="state.status === 'active' && firstMoveSec !== null" class="first-move-banner panel">
-      <AppIcon name="clock" :size="16" />
-      <span>
-        {{ i18n.locale === 'en'
-          ? `30 seconds for the first move: ${firstMoveSec}s left before the game is cancelled.`
-          : `На первый ход даётся 30 секунд: осталось ${firstMoveSec} с до отмены партии без изменения рейтинга.` }}
-      </span>
-    </div>
+    <component v-if="state.mode === 'bughouse' || hasGameNotes" :is="state.mode === 'bughouse' ? ChatWidget : 'div'"
+      class="game-tools" v-bind="state.mode === 'bughouse' ? { messages: chat, myUserId: myId, showMoves: false } : {}"
+      @send="sendChatMessage">
+    <details v-if="hasGameNotes" class="game-notes">
+      <summary>{{ i18n.locale === 'en' ? 'Match information & tips' : 'Информация и подсказки' }}</summary>
+      <div class="game-notes-content">
+      <div v-if="state.status === 'active' && firstMoveSec !== null" class="first-move-banner panel">
+        <AppIcon name="clock" :size="16" />
+        <span>
+          {{ i18n.locale === 'en'
+            ? `30 seconds for the first move: ${firstMoveSec}s left before the game is cancelled.`
+            : `На первый ход даётся 30 секунд: осталось ${firstMoveSec} с до отмены партии без изменения рейтинга.` }}
+        </span>
+      </div>
 
-    <aside v-if="state.mode === 'bughouse' && isParticipant && state.status === 'active' && (!introSeen || pocketTip)" class="panel bughouse-help" aria-live="polite">
-      <div><strong>{{ pocketTip && introSeen ? i18n.t.bughouse.yourPocket : i18n.t.bughouse.helpTitle }}</strong>
-        <p>{{ pocketTip && introSeen ? i18n.t.bughouse.firstPocket : i18n.t.bughouse.helpBody }}</p></div>
-      <router-link to="/rules/bughouse" target="_blank">{{ i18n.t.bughouse.rules }}</router-link>
-      <button class="small" @click="dismissHint(pocketTip && introSeen ? 'pocket' : 'intro')">{{ i18n.t.bughouse.dismiss }}</button>
-    </aside>
-    <p v-if="state.botPacing && state.status === 'active'" class="pacing-explanation" role="status">
-      {{ state.botPacing.paused
-        ? (i18n.locale === 'en' ? 'Both boards are paused. Press Resume when ready.' : 'Обе доски на паузе. Нажмите «Продолжить», когда будете готовы.')
-        : (i18n.locale === 'en' ? 'The bots on the other board move in step with your board. Take your time.' : 'Боты на соседней доске ходят вслед за вашей доской. Можно спокойно подумать.') }}
-    </p>
-    <aside v-if="isCrazyhouse(state.mode) && isParticipant && state.status === 'active' && !crazyHintSeen" class="panel bughouse-help">
-      <p>{{ i18n.locale === 'en' ? 'Captured pieces become your colour and enter the reserve. On your turn select a reserve piece, then a highlighted square. In 2×2 partners share the reserve and alternate moves.' : 'Взятые фигуры меняют цвет и попадают в резерв. В свой ход выберите фигуру резерва и подсвеченную клетку. В 2×2 резерв общий, партнёры ходят по очереди.' }}</p>
-      <button class="small" @click="dismissCrazyHint">{{ i18n.t.bughouse.dismiss }}</button>
-    </aside>
+      <aside v-if="state.mode === 'bughouse' && isParticipant && state.status === 'active' && (!introSeen || pocketTip)" class="panel bughouse-help" aria-live="polite">
+        <div><strong>{{ pocketTip && introSeen ? i18n.t.bughouse.yourPocket : i18n.t.bughouse.helpTitle }}</strong>
+          <p>{{ pocketTip && introSeen ? i18n.t.bughouse.firstPocket : i18n.t.bughouse.helpBody }}</p></div>
+        <router-link to="/rules/bughouse" target="_blank">{{ i18n.t.bughouse.rules }}</router-link>
+        <button class="small" @click="dismissHint(pocketTip && introSeen ? 'pocket' : 'intro')">{{ i18n.t.bughouse.dismiss }}</button>
+      </aside>
+      <p v-if="state.botPacing && state.status === 'active'" class="pacing-explanation" role="status">
+        {{ state.botPacing.paused
+          ? (i18n.locale === 'en' ? 'Both boards are paused. Press Resume when ready.' : 'Обе доски на паузе. Нажмите «Продолжить», когда будете готовы.')
+          : (i18n.locale === 'en' ? 'The bots on the other board move in step with your board. Take your time.' : 'Боты на соседней доске ходят вслед за вашей доской. Можно спокойно подумать.') }}
+      </p>
+      <aside v-if="isCrazyhouse(state.mode) && isParticipant && state.status === 'active' && !crazyHintSeen" class="panel bughouse-help">
+        <p>{{ i18n.locale === 'en' ? 'Captured pieces become your colour and enter the reserve. On your turn select a reserve piece, then a highlighted square. In 2×2 partners share the reserve and alternate moves.' : 'Взятые фигуры меняют цвет и попадают в резерв. В свой ход выберите фигуру резерва и подсвеченную клетку. В 2×2 резерв общий, партнёры ходят по очереди.' }}</p>
+        <button class="small" @click="dismissCrazyHint">{{ i18n.t.bughouse.dismiss }}</button>
+      </aside>
+      </div>
+    </details>
+    </component>
     <!-- Основная сетка игры -->
     <div class="game-layout">
       <!-- Игровая зона (1 или 2 доски) -->
-      <section class="boards-container" aria-label="Шахматные доски" :class="{ 'two-boards': state.mode === 'bughouse' }">
+      <section ref="boardsRoot" class="boards-container" aria-label="Шахматные доски" :class="{ 'two-boards': state.mode === 'bughouse' }">
         <!-- ================= РЕЖИМ 2х2 (ОДНА ДОСКА) ================= -->
-        <div v-if="state.mode !== 'bughouse' && teamModeSides" class="team-board-wrapper" :class="{ 'with-reserve': isCrazyhouse(state.mode) }">
+        <div v-if="state.mode !== 'bughouse' && teamModeSides" data-board-column class="team-board-wrapper" :class="{ 'with-reserve': isCrazyhouse(state.mode) }">
           <!-- Верхняя команда (соперники) -->
           <div class="team-players-bar top">
             <!-- Слева: Игрок 1 (слот 1, начинает) -->
@@ -781,7 +807,7 @@ function resultHeadline(): string {
                 :class="[roleOf(teamModeSides.top.players[0]), { 'active-turn': isPlayerTurn(teamModeSides.top.players[0].userId) }]"
               >
                 <span v-if="state.mode !== 'crazyhouse' && !teamModeSides.top.players[0].isBot" class="slot-num mono">1</span>
-                <span v-if="!teamModeSides.top.players[0].isBot" class="member-name">{{ teamModeSides.top.players[0].username }}</span>
+                <span v-if="!teamModeSides.top.players[0].isBot" class="member-name" :title="teamModeSides.top.players[0].username">{{ teamModeSides.top.players[0].username }}</span>
                 <BotHoverCard
                   v-if="teamModeSides.top.players[0].isBot"
                   :username="teamModeSides.top.players[0].username"
@@ -801,8 +827,11 @@ function resultHeadline(): string {
             </div>
 
             <!-- По центру: Таймер стороны -->
-            <div v-if="state.timeControl.kind === 'clock'" class="clock-display mono center" :class="{ running: state.clocksActive[0] === teamModeSides.top.color }">
-              {{ fmtClock(clockMs(0, teamModeSides.top.color)) }}
+            <div class="side-clock-group">
+              <MaterialBalance :fen="fenOf(0)" :color="teamModeSides.top.color" :pockets="[pocketOfBoard(0, 'w'), pocketOfBoard(0, 'b')]" />
+              <div v-if="state.timeControl.kind === 'clock'" class="clock-display mono center" :class="{ running: state.clocksActive[0] === teamModeSides.top.color }">
+                {{ fmtClock(clockMs(0, teamModeSides.top.color)) }}
+              </div>
             </div>
 
             <!-- Справа: Игрок 2 (слот 2, ходит вторым) -->
@@ -813,7 +842,7 @@ function resultHeadline(): string {
                 :class="[roleOf(teamModeSides.top.players[1]), { 'active-turn': isPlayerTurn(teamModeSides.top.players[1].userId) }]"
               >
                 <span v-if="!teamModeSides.top.players[1].isBot" class="slot-num mono">2</span>
-                <span v-if="!teamModeSides.top.players[1].isBot" class="member-name">{{ teamModeSides.top.players[1].username }}</span>
+                <span v-if="!teamModeSides.top.players[1].isBot" class="member-name" :title="teamModeSides.top.players[1].username">{{ teamModeSides.top.players[1].username }}</span>
                 <BotHoverCard
                   v-if="teamModeSides.top.players[1].isBot"
                   :username="teamModeSides.top.players[1].username"
@@ -839,6 +868,7 @@ function resultHeadline(): string {
           </div>
           <div class="board-top-info" v-if="isCrazyhouse(state.mode)">
             <strong class="board-status" role="status">{{ boardStatus(0) }}</strong>
+            <button v-if="selectedDrop" class="small ghost" :title="i18n.t.bughouse.dropHint" @click="selectedDrop = null">{{ i18n.t.bughouse.cancel }}</button>
             <router-link to="/rules/crazyhouse" target="_blank">{{ i18n.locale === 'en' ? 'Rules' : 'Правила' }}</router-link>
           </div>
           <!-- Сама доска -->
@@ -865,7 +895,6 @@ function resultHeadline(): string {
           <div v-if="isCrazyhouse(state.mode)" class="single-pocket">
             <span class="pocket-label dim">{{ state.mode === 'crazyhouse-team' ? (i18n.locale === 'en' ? 'Shared team reserve' : 'Общий резерв команды') : i18n.t.bughouse.yourPocket }}</span>
             <PocketBar :pocket="pocketOfBoard(0, teamModeSides.bottom.color)!" :color="teamModeSides.bottom.color" :interactive="myTurnOn(0)" :selected="selectedDrop" :label="i18n.t.bughouse.yourPocket" @select="selectedDrop = $event" @drag="dragPocket(0, $event)" />
-            <p v-if="selectedDrop" class="drop-hint" role="status">{{ i18n.t.bughouse.dropHint }} <button class="small ghost" @click="selectedDrop = null">{{ i18n.t.bughouse.cancel }}</button></p>
           </div>
           <!-- Нижняя команда (моя сторона) -->
           <div class="team-players-bar bottom">
@@ -877,7 +906,7 @@ function resultHeadline(): string {
                 :class="[roleOf(teamModeSides.bottom.players[0]), { 'active-turn': isPlayerTurn(teamModeSides.bottom.players[0].userId) }]"
               >
                 <span v-if="state.mode !== 'crazyhouse' && !teamModeSides.bottom.players[0].isBot" class="slot-num mono">1</span>
-                <span v-if="!teamModeSides.bottom.players[0].isBot" class="member-name">{{ teamModeSides.bottom.players[0].username }}</span>
+                <span v-if="!teamModeSides.bottom.players[0].isBot" class="member-name" :title="teamModeSides.bottom.players[0].username">{{ teamModeSides.bottom.players[0].username }}</span>
                 <BotHoverCard
                   v-if="teamModeSides.bottom.players[0].isBot"
                   :username="teamModeSides.bottom.players[0].username"
@@ -897,8 +926,11 @@ function resultHeadline(): string {
             </div>
 
             <!-- По центру: Таймер стороны -->
-            <div v-if="state.timeControl.kind === 'clock'" class="clock-display mono center" :class="{ running: state.clocksActive[0] === teamModeSides.bottom.color }">
-              {{ fmtClock(clockMs(0, teamModeSides.bottom.color)) }}
+            <div class="side-clock-group">
+              <MaterialBalance :fen="fenOf(0)" :color="teamModeSides.bottom.color" :pockets="[pocketOfBoard(0, 'w'), pocketOfBoard(0, 'b')]" />
+              <div v-if="state.timeControl.kind === 'clock'" class="clock-display mono center" :class="{ running: state.clocksActive[0] === teamModeSides.bottom.color }">
+                {{ fmtClock(clockMs(0, teamModeSides.bottom.color)) }}
+              </div>
             </div>
 
             <!-- Справа: Игрок 2 (слот 2, ходит вторым) -->
@@ -909,7 +941,7 @@ function resultHeadline(): string {
                 :class="[roleOf(teamModeSides.bottom.players[1]), { 'active-turn': isPlayerTurn(teamModeSides.bottom.players[1].userId) }]"
               >
                 <span v-if="!teamModeSides.bottom.players[1].isBot" class="slot-num mono">2</span>
-                <span v-if="!teamModeSides.bottom.players[1].isBot" class="member-name">{{ teamModeSides.bottom.players[1].username }}</span>
+                <span v-if="!teamModeSides.bottom.players[1].isBot" class="member-name" :title="teamModeSides.bottom.players[1].username">{{ teamModeSides.bottom.players[1].username }}</span>
                 <BotHoverCard
                   v-if="teamModeSides.bottom.players[1].isBot"
                   :username="teamModeSides.bottom.players[1].username"
@@ -931,17 +963,21 @@ function resultHeadline(): string {
         </div>
 
         <!-- Bughouse: own board first; partner sees their own colour below. -->
-        <div v-else v-for="bc in boardsConfig" :key="bc.index" class="bughouse-board-col"
+        <div v-else v-for="bc in boardsConfig" :key="bc.index" data-board-column class="bughouse-board-col"
           :class="{ 'my-board': isParticipant && myBoard === bc.index, 'partner-board': isParticipant && myBoard !== bc.index, 'partner-collapsed': !partnerExpanded }">
           <div class="board-top-info">
             <strong>{{ isParticipant ? (myBoard === bc.index ? i18n.t.bughouse.yourBoard : i18n.t.bughouse.partnerBoard) : `${i18n.t.bughouse.board} ${bc.index + 1}` }}</strong>
             <span v-if="state.status === 'active'" class="badge board-status" :class="{ on: myTurnOn(bc.index) }" role="status">{{ boardStatus(bc.index) }}</span>
+            <button v-if="myBoard === bc.index && selectedDrop" class="small ghost" :title="i18n.t.bughouse.dropHint" @click="selectedDrop = null">{{ i18n.t.bughouse.cancel }}</button>
             <button v-if="myBoard === bc.index && state.status === 'active' && state.botPacing?.pauseAllowed" class="small" :disabled="pauseBusy" @click="toggleGamePause">{{ state.botPacing.paused ? (i18n.locale === 'en' ? 'Resume' : 'Продолжить') : (i18n.locale === 'en' ? 'Pause' : 'Пауза') }}</button>
             <button v-if="isParticipant && myBoard !== bc.index" class="small ghost partner-toggle" :aria-expanded="partnerExpanded" @click="partnerExpanded = !partnerExpanded">{{ partnerExpanded ? i18n.t.bughouse.collapse : i18n.t.bughouse.expand }}</button>
           </div>
           <div class="bughouse-seat" :class="{ 'seat-active': state.status === 'active' && !state.botPacing?.paused && state.turns[bc.index] === otherColor(viewedColor(bc.index)) }">
-            <span>{{ boardPlayerName(bc.index, otherColor(viewedColor(bc.index))) }}</span>
-            <strong v-if="state.timeControl.kind === 'clock'" class="mono">{{ fmtClock(clockMs(bc.index, otherColor(viewedColor(bc.index)) )) }}</strong>
+            <span :title="boardPlayerName(bc.index, otherColor(viewedColor(bc.index)))">{{ boardPlayerName(bc.index, otherColor(viewedColor(bc.index))) }}</span>
+            <div class="side-clock-group">
+              <MaterialBalance :fen="fenOf(bc.index)" :color="otherColor(viewedColor(bc.index))" :pockets="[pocketOfBoard(bc.index, 'w'), pocketOfBoard(bc.index, 'b')]" />
+              <strong v-if="state.timeControl.kind === 'clock'" class="mono">{{ fmtClock(clockMs(bc.index, otherColor(viewedColor(bc.index)) )) }}</strong>
+            </div>
           </div>
           <span class="pocket-label dim">{{ i18n.t.bughouse.opponentPocket }}</span>
           <PocketBar v-if="pocketOfBoard(bc.index, otherColor(viewedColor(bc.index)))"
@@ -962,12 +998,12 @@ function resultHeadline(): string {
             :pocket="pocketOfBoard(bc.index, viewedColor(bc.index))!" :color="viewedColor(bc.index)"
             :interactive="myTurnOn(bc.index)" :selected="myBoard === bc.index ? selectedDrop : null" :label="myBoard === bc.index ? i18n.t.bughouse.yourPocket : i18n.t.bughouse.partnerPocket"
             @select="selectedDrop = $event" @drag="dragPocket(bc.index, $event)" />
-          <div v-if="myBoard === bc.index && selectedDrop" class="drop-hint" role="status">
-            <span>{{ i18n.t.bughouse.dropHint }}</span><button class="small ghost" @click="selectedDrop = null">{{ i18n.t.bughouse.cancel }}</button>
-          </div>
           <div class="bughouse-seat" :class="{ 'seat-active': state.status === 'active' && !state.botPacing?.paused && state.turns[bc.index] === viewedColor(bc.index) }">
-            <span>{{ boardPlayerName(bc.index, viewedColor(bc.index)) }}</span>
-            <strong v-if="state.timeControl.kind === 'clock'" class="mono">{{ fmtClock(clockMs(bc.index, viewedColor(bc.index))) }}</strong>
+            <span :title="boardPlayerName(bc.index, viewedColor(bc.index))">{{ boardPlayerName(bc.index, viewedColor(bc.index)) }}</span>
+            <div class="side-clock-group">
+              <MaterialBalance :fen="fenOf(bc.index)" :color="viewedColor(bc.index)" :pockets="[pocketOfBoard(bc.index, 'w'), pocketOfBoard(bc.index, 'b')]" />
+              <strong v-if="state.timeControl.kind === 'clock'" class="mono">{{ fmtClock(clockMs(bc.index, viewedColor(bc.index))) }}</strong>
+            </div>
           </div>
         </div>
       </section>
@@ -1045,48 +1081,14 @@ function resultHeadline(): string {
               </p>
             </div>
 
-            <p v-if="disconnected.length" class="warn-text">
-              Отключились: {{ disconnected.map((d) => d.username).join(', ') }}
-            </p>
-            <p v-if="error" class="error-text">{{ error }}</p>
           </div>
         </div>
 
-        <!-- Вариант А: Игрок играет активный матч -> открытый чат на всю высоту (без статистики) -->
-        <div v-if="isPlaying" class="panel chat-panel">
-          <div class="panel-head">
-            <div class="chat-head-title">
-              <AppIcon name="message-square" :size="15" />
-              <h3>Чат матча</h3>
-            </div>
-            <span class="hint">{{ chat.length }}</span>
-          </div>
-          <div class="panel-body chat-body">
-            <div ref="chatBox" class="chat-log">
-              <div v-for="m in chat" :key="m.id" class="chat-msg" :class="{ system: m.system }">
-                <template v-if="m.system">
-                  <span class="dim system-msg">{{ m.text }}</span>
-                </template>
-                <template v-else>
-                  <span class="chat-user">{{ m.username }}:</span>
-                  <span class="chat-text">{{ m.text }}</span>
-                </template>
-              </div>
-              <div v-if="!chat.length" class="empty-chat dim">
-                Пока сообщений нет. Напишите первое!
-              </div>
-            </div>
-            <form class="chat-input-row" @submit.prevent="sendChat">
-              <input v-model="chatText" placeholder="Сообщение всем…" maxlength="300" />
-              <button type="submit" class="primary icon-only" aria-label="Отправить">
-                <AppIcon name="arrow-right" :size="15" />
-              </button>
-            </form>
-          </div>
-        </div>
+        <MatchChat v-if="state.mode !== 'bughouse'" ref="chatPanel" v-model="chatText" :messages="chat" :drawer="drawerChat || !isPlaying"
+          :open="isChatOpen" :unread="unreadChatCount" @toggle="toggleChat" @close="isChatOpen = false" @send="sendChat" />
 
-        <!-- Вариант Б: Просмотр матча (зритель или оконченная игра) -> Дебют и анализ + шторка чата -->
-        <template v-else>
+        <!-- Просмотр матча: анализ и тот же адаптивный чат. -->
+        <template v-if="!isPlaying">
           <div class="panel opening-panel">
             <div class="panel-head">
               <div class="opening-head-title">
@@ -1131,13 +1133,7 @@ function resultHeadline(): string {
                   </div>
                   <div class="eval-meta-row">
                     <span class="eval-verdict-text dim">{{ currentAnalysis.verdictRu }}</span>
-                    <span
-                      v-if="currentAnalysis.materialDiff !== 0"
-                      class="material-badge mono"
-                      :class="{ 'mat-w': currentAnalysis.materialDiff > 0, 'mat-b': currentAnalysis.materialDiff < 0 }"
-                    >
-                      {{ currentAnalysis.materialDiff > 0 ? (i18n.locale === 'en' ? `White +${currentAnalysis.materialDiff}` : `Белые +${currentAnalysis.materialDiff}`) : (i18n.locale === 'en' ? `Black +${Math.abs(currentAnalysis.materialDiff)}` : `Чёрные +${Math.abs(currentAnalysis.materialDiff)}`) }}
-                    </span>
+
                   </div>
                 </div>
 
@@ -1228,52 +1224,6 @@ function resultHeadline(): string {
             </div>
           </div>
 
-          <!-- Выдвижная шторка чата для режима просмотра -->
-          <div class="chat-drawer-wrapper">
-            <div class="chat-drawer-container" :class="{ 'is-expanded': isChatOpen }">
-              <div
-                class="chat-bar-toggle"
-                :class="{ 'has-unread': unreadChatCount > 0 && !isChatOpen }"
-                @click="toggleChat"
-                title="Открыть / свернуть чат"
-              >
-                <div class="chat-toggle-left">
-                  <AppIcon name="message-square" :size="15" />
-                  <span class="chat-toggle-label">Чат матча</span>
-                  <span v-if="unreadChatCount > 0 && !isChatOpen" class="unread-pill">
-                    +{{ unreadChatCount }}
-                  </span>
-                </div>
-                <div class="chat-toggle-right">
-                  <span class="chat-msg-count dim mono">{{ chat.length }}</span>
-                  <AppIcon :name="isChatOpen ? 'chevron-down' : 'chevron-up'" :size="15" />
-                </div>
-              </div>
-
-              <div v-show="isChatOpen" class="chat-expanded-content">
-                <div ref="chatBox" class="chat-log">
-                  <div v-for="m in chat" :key="m.id" class="chat-msg" :class="{ system: m.system }">
-                    <template v-if="m.system">
-                      <span class="dim system-msg">{{ m.text }}</span>
-                    </template>
-                    <template v-else>
-                      <span class="chat-user">{{ m.username }}:</span>
-                      <span class="chat-text">{{ m.text }}</span>
-                    </template>
-                  </div>
-                  <div v-if="!chat.length" class="empty-chat dim">
-                    Пока сообщений нет. Напишите первое!
-                  </div>
-                </div>
-                <form class="chat-input-row" @submit.prevent="sendChat">
-                  <input v-model="chatText" placeholder="Сообщение всем…" maxlength="300" />
-                  <button type="submit" class="primary icon-only" aria-label="Отправить">
-                    <AppIcon name="arrow-right" :size="15" />
-                  </button>
-                </form>
-              </div>
-            </div>
-          </div>
         </template>
       </aside>
     </div>
@@ -1368,7 +1318,7 @@ function resultHeadline(): string {
     <GameReplayModal
       v-if="showReplay"
       :game-id="gameId"
-      :title="`Партия #${gameId}`"
+      :title="i18n.locale === 'en' ? `Match #${gameId}` : `Партия #${gameId}`"
       @close="showReplay = false"
     />
   </div>
@@ -1476,6 +1426,7 @@ function resultHeadline(): string {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+  container-type: inline-size;
   min-height: 38px;
   width: 100%;
   box-sizing: border-box;
@@ -1934,74 +1885,6 @@ function resultHeadline(): string {
   letter-spacing: 0.05em;
 }
 
-/* ================= ЧАТ ================= */
-.chat-panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 240px;
-}
-
-.chat-panel > .panel-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.chat-head-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.chat-body {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding: 10px 12px;
-}
-
-.chat-log {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-height: 140px;
-  max-height: calc(100dvh - 380px);
-}
-
-.chat-msg {
-  font-size: 12.5px;
-  line-height: 1.35;
-  word-break: break-word;
-}
-
-.chat-user {
-  font-weight: 600;
-  color: var(--accent-2);
-  margin-right: 6px;
-}
-
-.system-msg {
-  font-style: italic;
-  font-size: 11.5px;
-}
-
-.empty-chat {
-  font-size: 12px;
-  text-align: center;
-  margin: auto 0;
-  padding: 16px 8px;
-}
-
-.chat-input-row {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
 /* ================= ПАНЕЛЬ ДЕБЮТА (В РЕЖИМЕ ПРОСМОТРА) ================= */
 .opening-panel {
   flex: 1;
@@ -2319,131 +2202,7 @@ function resultHeadline(): string {
   color: var(--ink-2);
 }
 
-/* ================= ВЫДВИЖНОЙ ЧАТ ДЛЯ РЕЖИМА ПРОСМОТРА ================= */
-.chat-drawer-wrapper {
-  height: 40px;
-  min-height: 40px;
-  flex: none;
-  position: relative;
-  box-sizing: border-box;
-}
-
-.chat-drawer-container {
-  width: 100%;
-  height: 40px;
-  box-sizing: border-box;
-}
-
-.chat-bar-toggle {
-  height: 40px;
-  min-height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 12px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-m);
-  cursor: pointer;
-  user-select: none;
-  box-sizing: border-box;
-  transition: all 0.15s ease;
-}
-
-.chat-bar-toggle:hover {
-  border-color: var(--accent);
-  background: var(--surface-2);
-}
-
-.chat-bar-toggle.has-unread {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 15%, var(--surface));
-}
-
-.chat-toggle-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.chat-toggle-label {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.unread-pill {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 10px;
-  background: var(--accent);
-  color: #000;
-}
-
-.chat-toggle-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ink-2);
-}
-
-.chat-msg-count {
-  font-size: 11px;
-}
-
-.chat-drawer-container.is-expanded {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 360px;
-  max-height: calc(100vh - 260px);
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-m);
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
-  animation: slide-up-chat 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes slide-up-chat {
-  from {
-    transform: translateY(20px);
-    opacity: 0.7;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.chat-drawer-container.is-expanded .chat-bar-toggle {
-  border: none;
-  border-bottom: 1px solid var(--line);
-  border-radius: var(--r-m) var(--r-m) 0 0;
-  background: var(--surface-2);
-}
-
-.chat-expanded-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: 10px 12px;
-  gap: 8px;
-  overflow: hidden;
-}
-
-/* Модалки */
-.promo-modal {
-  max-width: 320px;
-  padding: 20px;
-  text-align: center;
-}
-
+.promo-modal { max-width: 320px; padding: 20px; text-align: center; }
 .promo-pieces-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -2587,11 +2346,197 @@ function resultHeadline(): string {
     padding: 4px 8px;
     font-size: 12.5px;
   }
-  .chat-panel {
-    min-height: 200px;
+}
+/* The board column owns the grid height. Sidebar content must not stretch it. */
+.game-layout { align-items: stretch; }
+.boards-container { min-width: 0; }
+.game-sidebar { height: auto; min-height: 0; contain: size; overflow: clip; }
+.game-sidebar > .game-topbar, .game-sidebar > .queue-panel { flex: none; }
+.game-sidebar > .queue-panel { max-height: 145px; overflow-y: auto; }
+.game-sidebar > .opening-panel { flex: 1; min-height: 0; overflow-y: auto; }
+.game-page .team-board-wrapper { width: min(100%, var(--board-size, 600px)); max-width: none; margin-inline: auto; container-type: inline-size; }
+.game-page.crazyhouse { max-width: none; }
+.game-page.crazyhouse .game-layout { grid-template-columns: minmax(0, 1fr) 280px; }
+.side-clock-group { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; white-space: nowrap; }
+.team-players-bar > .side-clock-group { grid-column: 2; grid-row: 1; }
+.game-page.crazyhouse .team-players-bar { grid-template-columns: minmax(0, 1fr) auto; }
+.side-clock-group .clock-display { font-variant-numeric: tabular-nums; flex: none; }
+.bughouse-seat > .side-clock-group { flex: none; }
+.bughouse-seat > span { flex: 1; }
+.bughouse-seat { height: 36px; min-height: 36px; box-sizing: border-box; padding-block: 3px; }
+.bughouse-board-col.my-board { padding: 0; }
+.bughouse-board-col > .board-frame { width: min(100%, var(--board-size, 500px)); max-width: none; }
+.bughouse-board-col > .bughouse-seat, .bughouse-board-col > .pocket, .bughouse-board-col > .pocket-label,
+.bughouse-board-col > .board-top-info, .bughouse-board-col > .drop-hint { width: min(100%, var(--board-size, 500px)); margin-inline: auto; box-sizing: border-box; }
+.game-notes { margin-bottom: 8px; font-size: 12px; color: var(--ink-3); }
+.game-notice { padding: 6px 10px; color: var(--warn); font-size: 12px; }
+.game-notice p { margin: 0; }
+.game-notes > summary { cursor: pointer; width: fit-content; padding: 3px 0; }
+.game-notes .bughouse-help { margin: 6px 0; }
+@media (max-width: 1024px) {
+  .game-page.crazyhouse .game-layout { grid-template-columns: minmax(0, 1fr); }
+  .game-sidebar { contain: none; overflow: visible; }
+  .game-layout > .boards-container { grid-row: 2; }
+  .game-sidebar > .queue-panel { display: none; }
+  .game-sidebar > .match-chat { grid-row: 3; }
+  .game-sidebar > .opening-panel { grid-row: 4; max-height: 320px; }
+  .game-topbar { padding: 4px 8px; }
+  .game-title-group { gap: 5px; }
+  .game-title-group .badge { font-size: 10px; }
+  .boards-container.two-boards { grid-template-columns: 1fr; }
+  .boards-container.two-boards { display: contents; }
+  .boards-container.two-boards > .bughouse-board-col:first-child { grid-row: 2; }
+  .boards-container.two-boards > .bughouse-board-col:last-child { grid-row: 4; }
+  .game-layout:has(.two-boards) .game-sidebar > .opening-panel { grid-row: 5; }
+  .partner-board.partner-collapsed > .pocket, .partner-board.partner-collapsed > .pocket-label,
+  .partner-board.partner-collapsed > .bughouse-seat, .partner-board.partner-collapsed > .drop-hint { display: none; }
+  .partner-toggle { display: inline-flex; }
+  .team-board-wrapper { container-type: inline-size; }
+  .game-page .team-board-wrapper { width: min(100%, max(320px, var(--board-size, 320px))); }
+  .team-board-wrapper > .board-frame { width: min(100%, var(--board-size, 320px)); margin-inline: auto; }
+  .bughouse-board-col > .bughouse-seat, .bughouse-board-col > .pocket, .bughouse-board-col > .board-top-info {
+    width: min(100%, max(320px, var(--board-size, 320px)));
   }
-  .chat-log {
-    max-height: 220px;
+  .game-notes { margin-bottom: 2px; }
+}
+@container (max-width: 520px) {
+  .member-rating, .slot-num, .turn-chip, .member-role, .member-pill .badge { display: none; }
+}
+@media (max-width: 640px) {
+  .team-players-bar { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); height: 34px; min-height: 34px; gap: 3px; }
+  .member-pill.compact { padding-inline: 0; border: 0; background: transparent; }
+  .clock-display.center { min-width: 48px; padding-inline: 3px; }
+  .side-clock-group { gap: 2px; }
+  .member-role, .slot-num, .turn-chip, .member-rating, .member-pill .badge { display: none; }
+  .game-topbar-actions { gap: 4px; }
+  .game-topbar-actions button { min-height: 26px; }
+  .game-notes { font-size: 11px; }
+  :global(.app-shell:has(.game-page) .topbar-inner > nav) { display: none; }
+  :global(.app-shell:has(.game-page) .topbar-inner) { flex-wrap: nowrap; }
+  .game-topbar { flex-wrap: nowrap; }
+  .game-title-group { flex: 1; flex-wrap: nowrap; min-width: 0; overflow: hidden; }
+  .game-title-group h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+  .game-title-group .badge:not(:first-of-type) { display: none; }
+  .game-topbar-actions { flex: none; }
+  .game-topbar-actions button { font-size: 11px; padding: 3px 6px; }
+  .game-page { padding-bottom: env(safe-area-inset-bottom); }
+}
+@media (max-width: 640px), (max-height: 500px) and (orientation: landscape) {
+  .pocket-label, .single-pocket > .pocket-label { display: none; }
+  .bughouse-board-col > .pocket :deep(.slot), .single-pocket :deep(.pocket .slot) { height: 32px; }
+  .bughouse-board-col > .pocket :deep(.slot img), .single-pocket :deep(.slot img) { max-width: 28px; max-height: 28px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  :global(.app-shell:has(.game-page) .topbar) { display: none; }
+  :global(main.page:has(.game-page)) { padding-top: 2px; }
+  .game-topbar { min-height: 28px; }
+  .game-sidebar > .queue-panel { display: none; }
+  .game-page .team-board-wrapper, .bughouse-board-col {
+    --board-side-space: 156px;
+    display: grid;
+    grid-template-columns: 72px var(--board-size, 180px) 72px;
+    grid-template-rows: 34px auto 34px;
+    gap: 4px 6px;
+    width: min(100%, calc(var(--board-size, 180px) + 156px));
+    justify-self: center;
+    margin-inline: auto;
   }
+  .team-players-bar.top { grid-column: 1 / -1; grid-row: 1; }
+  .team-players-bar.bottom { grid-column: 1 / -1; grid-row: 3; }
+  .team-players-bar { height: 34px; min-height: 34px; }
+  .team-board-wrapper > .board-frame { grid-column: 2; grid-row: 2; }
+  .team-board-wrapper > .single-pocket:first-of-type { grid-column: 1; grid-row: 2; }
+  .team-board-wrapper > .single-pocket { grid-column: 1; grid-row: 2; align-self: center; }
+  .team-board-wrapper > .board-frame ~ .single-pocket { grid-column: 3; }
+  .team-board-wrapper > .board-top-info { display: none; }
+  .single-pocket :deep(.pocket), .bughouse-board-col > .pocket {
+    display: grid; grid-template-columns: 1fr; gap: 2px; padding: 3px;
+  }
+  .single-pocket :deep(.pocket .slot), .bughouse-board-col > .pocket :deep(.slot) { height: 22px; }
+  .single-pocket :deep(.slot img), .bughouse-board-col > .pocket :deep(.slot img) { width: 22px; height: 22px; }
+  .single-pocket .drop-hint { position: absolute; }
+  .bughouse-board-col { grid-template-rows: 24px 36px auto 36px; }
+  .bughouse-board-col > .board-top-info { grid-column: 1 / -1; grid-row: 1; width: 100%; }
+  .bughouse-board-col > .bughouse-seat { grid-column: 1 / -1; grid-row: 2; width: 100%; }
+  .bughouse-board-col > .bughouse-seat:last-child { grid-row: 4; }
+  .bughouse-board-col > .board-frame { grid-column: 2; grid-row: 3; }
+  .bughouse-board-col > .pocket { grid-column: 1; grid-row: 3; align-self: center; width: 100%; }
+  .bughouse-board-col > .board-frame ~ .pocket { grid-column: 3; }
+}
+/* Two boards form one compact arena; chat opens over it, like in FFA. */
+.game-page.bughouse .game-layout {
+  width: min(100%, var(--boards-width, 100%));
+  margin-inline: auto;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+.game-page.bughouse > .game-notice {
+  width: min(100%, var(--boards-width, 100%)); margin-inline: auto;
+}
+.game-page.bughouse .game-sidebar { display: contents !important; contain: none; overflow: visible; }
+.game-page.bughouse .game-topbar { grid-row: 1; flex-direction: row; flex-wrap: nowrap; align-items: center; padding: 4px 8px; min-height: 34px; }
+.game-page.bughouse .game-title-group { flex: 1; min-width: 0; flex-wrap: nowrap; gap: 6px; overflow: hidden; }
+.game-page.bughouse .game-title-group h1 { white-space: nowrap; }
+.game-page.bughouse .game-title-group .badge { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.game-page.bughouse .game-topbar-actions { flex-direction: row; align-items: center; }
+.game-page.bughouse .game-topbar-actions button { width: auto; }
+.game-page.bughouse .game-sidebar > .queue-panel { display: none; }
+.game-page.bughouse .game-sidebar > .opening-panel { grid-row: 3; max-height: 320px; }
+.game-page.bughouse .bughouse-board-col { gap: 4px; }
+.game-page.bughouse .pocket-label { display: none; }
+.game-page.bughouse .board-top-info { min-height: 24px; height: 24px; padding-block: 0; }
+.game-page.bughouse .board-top-info .board-status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; }
+@media (min-width: 760px) {
+  .game-page.bughouse .boards-container.two-boards { display: grid; grid-row: 2; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .game-page.bughouse .boards-container.two-boards > .bughouse-board-col { grid-row: auto; width: 100%; }
+  .game-page.bughouse .bughouse-board-col > .bughouse-seat,
+  .game-page.bughouse .bughouse-board-col > .pocket,
+  .game-page.bughouse .bughouse-board-col > .board-top-info { width: 100%; }
+  .game-page.bughouse .partner-board.partner-collapsed > .pocket { display: grid; }
+  .game-page.bughouse .partner-board.partner-collapsed > .bughouse-seat { display: flex; }
+  .game-page.bughouse .partner-board.partner-collapsed { opacity: 1; }
+  .game-page.bughouse .partner-board.partner-collapsed .board-frame { max-width: none; }
+  .game-page.bughouse .partner-toggle { display: none; }
+  .game-page.bughouse .bughouse-board-col > .pocket { padding: 3px; gap: 3px; }
+  .game-page.bughouse .bughouse-board-col > .pocket :deep(.slot) { height: 30px; }
+  .game-page.bughouse .bughouse-board-col > .pocket :deep(.slot img) { max-width: 28px; max-height: 28px; }
+}
+@media (max-width: 759px) {
+  .game-page.bughouse .partner-board.partner-collapsed { display: flex; }
+  .game-page.bughouse .boards-container.two-boards { display: contents; }
+  .game-page.bughouse .boards-container.two-boards > .bughouse-board-col:first-child { grid-row: 2; }
+  .game-page.bughouse .boards-container.two-boards > .bughouse-board-col:last-child { grid-row: 3; }
+  .game-page.bughouse .game-sidebar > .opening-panel { grid-row: 4; }
+}
+@container (max-width: 640px) {
+  .game-page.bughouse .game-title-group .badge:not(:first-of-type) { display: none; }
+}
+@media (max-width: 1024px) {
+  :global(.app-shell:has(.game-page.bughouse) .topbar-inner > nav) { display: none; }
+  :global(.app-shell:has(.game-page.bughouse) .topbar-inner) { flex-wrap: nowrap; }
+}
+@media (min-width: 760px) and (max-height: 500px) and (orientation: landscape) {
+  .game-page.bughouse .boards-container.two-boards > .bughouse-board-col { display: grid; }
+  .game-page.bughouse .bughouse-board-col > .pocket { gap: 2px; }
+  .game-page.bughouse .bughouse-board-col > .pocket :deep(.slot) { height: 22px; }
+  .game-page.bughouse .bughouse-board-col > .pocket :deep(.slot img) { width: 22px; height: 22px; }
+}
+/* Match tools stay outside the arena and never reserve a board-sized row. */
+.game-page.bughouse .game-tools .game-notes { position: relative; width: max-content; max-width: calc(100vw - 28px); margin: 0; }
+.game-page.bughouse .game-tools .game-notes > summary { padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface); color: var(--ink-2); font-size: 11px; }
+.game-page.bughouse .game-notes-content { position: absolute; right: 0; bottom: calc(100% + 6px); width: min(300px, calc(100vw - 28px)); max-height: min(320px, 60dvh); overflow-y: auto; padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-s); box-shadow: var(--shadow-l); }
+.game-page.bughouse .game-notes-content .bughouse-help { padding: 0; margin: 0; flex-wrap: wrap; gap: 6px; border: 0; background: transparent; }
+.game-page.bughouse .game-notes-content .bughouse-help > div { flex-basis: 100%; }
+.game-page.bughouse .game-notes-content p { font-size: 12px; margin: 3px 0; }
+.game-page.bughouse .game-notes-content .first-move-banner { padding: 6px; margin-bottom: 6px; }
+:global(.app-shell:has(.game-page.bughouse) main.page) { flex: 0; padding-bottom: 6px; }
+:global(.app-shell:has(.game-page.bughouse) .app-footer) { margin-top: 0; }
+:global(.app-shell:has(.game-page.bughouse) .footer-bottom) { padding-block: 6px; }
+@media (max-width: 1024px) {
+  .game-page.bughouse .game-tools .game-notes > summary { width: 32px; height: 32px; padding: 0; font-size: 0; display: grid; place-items: center; }
+  .game-page.bughouse .game-tools .game-notes > summary::after { content: '?'; font-size: 15px; font-weight: 700; }
+}
+@media (max-width: 759px) and (max-height: 650px) {
+  .game-page.bughouse .game-tools { flex-direction: row; align-items: center; }
 }
 </style>

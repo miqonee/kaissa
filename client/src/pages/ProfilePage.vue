@@ -179,6 +179,12 @@ const sparkPath = computed(() => {
         </button>
       </div>
       <div class="settings-row">
+        <span class="settings-label">{{ i18n.t.settings.haptics }}</span>
+        <button class="small ghost" :aria-pressed="settings.hapticsEnabled" @click="settings.setHapticsEnabled(!settings.hapticsEnabled)">
+          {{ settings.hapticsEnabled ? i18n.t.settings.hapticsOn : i18n.t.settings.hapticsOff }}
+        </button>
+      </div>
+      <div class="settings-row">
         <span class="settings-label">{{ i18n.t.settings.moveAnimation }}</span>
         <div class="anim-tabs" role="group" :aria-label="i18n.t.settings.moveAnimation">
           <button

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import { ANIMATION_STORAGE_KEY, useSettingsStore } from '../src/stores/settings.js';
+import { ANIMATION_STORAGE_KEY, HAPTICS_STORAGE_KEY, useSettingsStore } from '../src/stores/settings.js';
 
 describe('Settings store - Move animation', () => {
   const storeData: Record<string, string> = {};
@@ -25,20 +25,20 @@ describe('Settings store - Move animation', () => {
     (globalThis as unknown as { localStorage: typeof mockStorage }).localStorage = mockStorage;
   });
 
-  it('defaults to normal mode (200ms duration, enabled)', () => {
+  it('defaults to normal mode (170ms duration, enabled)', () => {
     const settings = useSettingsStore();
     expect(settings.animationMode).toBe('normal');
-    expect(settings.resolveAnimation(null)).toEqual({ enabled: true, duration: 200 });
-    expect(settings.resolveAnimation(30_000)).toEqual({ enabled: true, duration: 200 });
+    expect(settings.resolveAnimation(null)).toEqual({ enabled: true, duration: 170 });
+    expect(settings.resolveAnimation(30_000)).toEqual({ enabled: true, duration: 170 });
   });
 
-  it('switches to fast mode (100ms duration, enabled)', () => {
+  it('switches to fast mode (90ms duration, enabled)', () => {
     const settings = useSettingsStore();
     settings.setAnimationMode('fast');
     expect(settings.animationMode).toBe('fast');
     expect(storeData[ANIMATION_STORAGE_KEY]).toBe('fast');
-    expect(settings.resolveAnimation(null)).toEqual({ enabled: true, duration: 100 });
-    expect(settings.resolveAnimation(30_000)).toEqual({ enabled: true, duration: 100 });
+    expect(settings.resolveAnimation(null)).toEqual({ enabled: true, duration: 90 });
+    expect(settings.resolveAnimation(30_000)).toEqual({ enabled: true, duration: 90 });
   });
 
   it('switches to off mode (disabled)', () => {
@@ -57,17 +57,17 @@ describe('Settings store - Move animation', () => {
     expect(storeData[ANIMATION_STORAGE_KEY]).toBe('adaptive');
 
     // Без часов или время неизвестно -> нормальная скорость
-    expect(settings.resolveAnimation(null)).toEqual({ enabled: true, duration: 200 });
-    expect(settings.resolveAnimation(undefined)).toEqual({ enabled: true, duration: 200 });
+    expect(settings.resolveAnimation(null)).toEqual({ enabled: true, duration: 170 });
+    expect(settings.resolveAnimation(undefined)).toEqual({ enabled: true, duration: 170 });
 
-    // Больше 2 минут (> 120 000 мс) -> нормальная скорость 200 мс
-    expect(settings.resolveAnimation(180_000)).toEqual({ enabled: true, duration: 200 });
-    expect(settings.resolveAnimation(120_001)).toEqual({ enabled: true, duration: 200 });
+    // Больше 2 минут (> 120 000 мс) -> нормальная скорость 170 мс
+    expect(settings.resolveAnimation(180_000)).toEqual({ enabled: true, duration: 170 });
+    expect(settings.resolveAnimation(120_001)).toEqual({ enabled: true, duration: 170 });
 
-    // От 2 минут до 1 минуты (<= 120 000 мс и > 60 000 мс) -> ускорение в 2 раза (100 мс)
-    expect(settings.resolveAnimation(120_000)).toEqual({ enabled: true, duration: 100 });
-    expect(settings.resolveAnimation(90_000)).toEqual({ enabled: true, duration: 100 });
-    expect(settings.resolveAnimation(60_001)).toEqual({ enabled: true, duration: 100 });
+    // От 2 минут до 1 минуты (<= 120 000 мс и > 60 000 мс) -> ускорение в 2 раза (90 мс)
+    expect(settings.resolveAnimation(120_000)).toEqual({ enabled: true, duration: 90 });
+    expect(settings.resolveAnimation(90_000)).toEqual({ enabled: true, duration: 90 });
+    expect(settings.resolveAnimation(60_001)).toEqual({ enabled: true, duration: 90 });
 
     // 1 минута и меньше (<= 60 000 мс) -> полное отключение анимации
     expect(settings.resolveAnimation(60_000)).toEqual({ enabled: false, duration: 0 });
@@ -79,5 +79,20 @@ describe('Settings store - Move animation', () => {
     storeData[ANIMATION_STORAGE_KEY] = 'adaptive';
     const settings = useSettingsStore();
     expect(settings.animationMode).toBe('adaptive');
+  });
+
+  it('enables haptics by default and restores an explicit opt-out', () => {
+    expect(useSettingsStore().hapticsEnabled).toBe(true);
+    useSettingsStore().setHapticsEnabled(false);
+    expect(storeData[HAPTICS_STORAGE_KEY]).toBe('off');
+    setActivePinia(createPinia());
+    expect(useSettingsStore().hapticsEnabled).toBe(false);
+  });
+
+  it('uses normal animation for invalid adaptive clock values', () => {
+    const settings = useSettingsStore();
+    settings.setAnimationMode('adaptive');
+    expect(settings.resolveAnimation(NaN)).toEqual({ enabled: true, duration: 170 });
+    expect(settings.resolveAnimation(Infinity)).toEqual({ enabled: true, duration: 170 });
   });
 });

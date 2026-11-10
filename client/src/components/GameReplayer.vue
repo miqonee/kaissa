@@ -8,6 +8,8 @@ import ChessBoard from './ChessBoard.vue';
 import MultiBoard from './MultiBoard.vue';
 import PocketBar from './PocketBar.vue';
 import AppIcon from './AppIcon.vue';
+import MaterialBalance from './MaterialBalance.vue';
+import { useReplayLayout } from '../composables/useReplayLayout';
 import { buildMoveRows, buildReplay, type ReplayMoveView } from '../game/replay';
 import { matchOutcome, endReason } from '../utils/match';
 import { analyzePosition } from '../utils/analysis';
@@ -20,6 +22,7 @@ import {
 } from '../audio/sounds';
 
 const i18n = useI18n();
+const { replayRoot } = useReplayLayout();
 
 const props = withDefaults(
   defineProps<{
@@ -260,7 +263,7 @@ function pieceLabel(t: PieceType): string {
 </script>
 
 <template>
-  <div class="replayer" :class="{ compact }">
+  <div ref="replayRoot" class="replayer" :class="{ compact }">
     <!-- Шапка: кто играл и чем кончилось -->
     <header class="replayer-head">
       <div class="rh-teams">
@@ -284,12 +287,17 @@ function pieceLabel(t: PieceType): string {
           <div class="rp-board-head">
             <span class="rp-board-num mono">{{ i18n.locale === 'en' ? 'Board' : 'Доска' }} {{ b }}</span>
             <span
-              v-if="checkOf(b - 1)"
+              v-show="checkOf(b - 1)"
               class="badge bad rp-check-badge"
               :aria-hidden="!checkOf(b - 1)"
               :class="{ visible: Boolean(checkOf(b - 1)) }"
-              aria-label="Шах"
+              :aria-label="i18n.locale === 'en' ? 'Check' : 'Шах'"
             >{{ i18n.locale === 'en' ? 'Check' : 'Шах' }}</span>
+          </div>
+
+          <div v-if="!isMultiplayer(game.mode)" class="rp-seat">
+            <span>{{ bottomColorOf(b - 1) === 'w' ? i18n.t.material.black : i18n.t.material.white }}</span>
+            <MaterialBalance :fen="fenOf(b - 1)" :color="bottomColorOf(b - 1) === 'w' ? 'b' : 'w'" :pockets="[pocketOf(b - 1, 'w'), pocketOf(b - 1, 'b')]" />
           </div>
 
           <PocketBar
@@ -302,21 +310,24 @@ function pieceLabel(t: PieceType): string {
             :selected="null"
           />
 
-          <MultiBoard
-            v-if="isMultiplayer(game.mode)"
-            :mode="game.mode as MultiMode"
-            :fen="fenOf(b - 1)"
-            :last-move="lastMoveOf(b - 1)"
-          />
-          <ChessBoard
-            v-else
-            :fen="fenOf(b - 1)"
-            :orientation="orientationOf(b - 1)"
-            :movable-color="null"
-            :last-move="lastMoveOf(b - 1)"
-            :check-square="checkOf(b - 1)"
-            :coordinates="true"
-          />
+          <div class="rp-board-stage">
+            <MultiBoard
+              v-if="isMultiplayer(game.mode)"
+              :mode="game.mode as MultiMode"
+              :fen="fenOf(b - 1)"
+              :last-move="lastMoveOf(b - 1)"
+            />
+            <ChessBoard
+              v-else
+              :fen="fenOf(b - 1)"
+              :orientation="orientationOf(b - 1)"
+              :movable-color="null"
+              :last-move="lastMoveOf(b - 1)"
+              :check-square="checkOf(b - 1)"
+              :coordinates="true"
+            />
+
+          </div>
 
           <PocketBar
             v-if="pocketOf(b - 1, bottomColorOf(b - 1))"
@@ -327,6 +338,10 @@ function pieceLabel(t: PieceType): string {
             :interactive="false"
             :selected="null"
           />
+          <div v-if="!isMultiplayer(game.mode)" class="rp-seat">
+            <span>{{ bottomColorOf(b - 1) === 'w' ? i18n.t.material.white : i18n.t.material.black }}</span>
+            <MaterialBalance :fen="fenOf(b - 1)" :color="bottomColorOf(b - 1)" :pockets="[pocketOf(b - 1, 'w'), pocketOf(b - 1, 'b')]" />
+          </div>
         </div>
       </section>
 
@@ -334,7 +349,7 @@ function pieceLabel(t: PieceType): string {
       <aside class="rp-side">
         <div class="rp-moves-head">
           <span class="hint mono">{{ cursor }}/{{ total }}</span>
-          <span v-if="activeMover" class="hint">{{ i18n.locale === 'en' ? 'Move by:' : 'Ход:' }} {{ activeMover }}</span>
+          <span class="hint rp-mover" :title="activeMover ?? undefined">{{ i18n.locale === 'en' ? 'Move by:' : 'Ход:' }} {{ activeMover }}</span>
         </div>
 
         <div class="rp-moves" :class="{ two: boardsCount === 2 }">
@@ -399,13 +414,7 @@ function pieceLabel(t: PieceType): string {
 
           <div class="rp-an-sub">
             <span class="dim tiny">{{ currentAnalysis.verdictRu }}</span>
-            <span
-              v-if="currentAnalysis.materialDiff !== 0"
-              class="rp-mat-pill mono tiny"
-              :class="{ 'mat-w': currentAnalysis.materialDiff > 0, 'mat-b': currentAnalysis.materialDiff < 0 }"
-            >
-              {{ currentAnalysis.materialDiff > 0 ? `Белые +${currentAnalysis.materialDiff}` : `Чёрные +${Math.abs(currentAnalysis.materialDiff)}` }}
-            </span>
+
           </div>
 
           <p v-if="recognizedOpening.variationRu" class="rp-an-var dim tiny truncate" :title="recognizedOpening.variationRu">
@@ -437,20 +446,20 @@ function pieceLabel(t: PieceType): string {
     <!-- Транспорт -->
     <div class="rp-transport">
       <div class="rp-buttons">
-        <button class="small ghost icon-only" :disabled="!canPrev" :title="i18n.locale === 'en' ? 'First (Home)' : 'В начало (Home)'" @click="first">
+        <button class="small ghost icon-only" :disabled="!canPrev" :title="i18n.locale === 'en' ? 'First (Home)' : 'В начало (Home)'" :aria-label="i18n.locale === 'en' ? 'First (Home)' : 'В начало (Home)'" @click="first">
           <AppIcon name="skip-back" :size="14" />
         </button>
-        <button class="small icon-only" :disabled="!canPrev" :title="i18n.locale === 'en' ? 'Previous (←)' : 'Назад (←)'" @click="prev">
+        <button class="small icon-only" :disabled="!canPrev" :title="i18n.locale === 'en' ? 'Previous (←)' : 'Назад (←)'" :aria-label="i18n.locale === 'en' ? 'Previous (←)' : 'Назад (←)'" @click="prev">
           <AppIcon name="chevron-left" :size="16" />
         </button>
         <button class="brass rp-play" :disabled="!total" @click="togglePlay">
           <AppIcon :name="playing ? 'pause' : 'play'" :size="15" />
           {{ playing ? (i18n.locale === 'en' ? 'Pause' : 'Пауза') : (i18n.locale === 'en' ? 'Play' : 'Смотреть') }}
         </button>
-        <button class="small icon-only" :disabled="!canNext" :title="i18n.locale === 'en' ? 'Next (→)' : 'Вперёд (→)'" @click="next">
+        <button class="small icon-only" :disabled="!canNext" :title="i18n.locale === 'en' ? 'Next (→)' : 'Вперёд (→)'" :aria-label="i18n.locale === 'en' ? 'Next (→)' : 'Вперёд (→)'" @click="next">
           <AppIcon name="chevron-right" :size="16" />
         </button>
-        <button class="small ghost icon-only" :disabled="!canNext" :title="i18n.locale === 'en' ? 'Last (End)' : 'В конец (End)'" @click="last">
+        <button class="small ghost icon-only" :disabled="!canNext" :title="i18n.locale === 'en' ? 'Last (End)' : 'В конец (End)'" :aria-label="i18n.locale === 'en' ? 'Last (End)' : 'В конец (End)'" @click="last">
           <AppIcon name="skip-forward" :size="14" />
         </button>
       </div>
@@ -463,7 +472,7 @@ function pieceLabel(t: PieceType): string {
         step="1"
         :value="cursor"
         :disabled="!total"
-        aria-label="Позиция в партии"
+        :aria-label="i18n.locale === 'en' ? 'Game position' : 'Позиция в партии'"
         @input="goTo(Number(($event.target as HTMLInputElement).value))"
       />
 
@@ -472,7 +481,7 @@ function pieceLabel(t: PieceType): string {
           v-for="s in SPEEDS"
           :key="s.value"
           class="rp-speed"
-          :class="{ active: speed === s.value }"
+          :class="{ active: speed === s.value }" :aria-pressed="speed === s.value"
           @click="speed = s.value"
         >
           {{ s.label }}
@@ -481,7 +490,7 @@ function pieceLabel(t: PieceType): string {
     </div>
 
     <p class="rp-hint dim tiny">
-      Стрелки ←/→ — ход назад/вперёд, пробел — пуск/пауза, Home/End — начало/конец.
+      {{ i18n.locale === 'en' ? '←/→: previous/next · Space: play/pause · Home/End: first/last' : '←/→: назад/вперёд · Пробел: пуск/пауза · Home/End: начало/конец' }}
     </p>
   </div>
 </template>
@@ -977,4 +986,40 @@ function pieceLabel(t: PieceType): string {
   color: var(--accent);
   font-weight: 600;
 }
+/* A bounded viewport keeps cursor-dependent analysis out of layout sizing. */
+.replayer { height: min(820px, calc(100dvh - 100px)); min-height: 0; gap: 10px; }
+.replayer-head { flex: none; min-height: 50px; max-height: 72px; overflow: hidden; gap: 4px 12px; align-content: center; }
+.rh-teams { flex-wrap: nowrap; width: 100%; }
+.rh-teams strong { min-width: 0; max-width: 220px; }
+.rh-meta { flex-wrap: nowrap; min-width: 0; max-width: 100%; overflow: hidden; }
+.rh-meta .badge:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.replayer-body { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) 250px; overflow: hidden; align-items: stretch; }
+.rp-boards { min-height: 0; align-content: start; overflow: auto; scrollbar-gutter: stable; }
+.rp-board-col { align-items: center; gap: 4px; }
+.rp-board-col > * { flex-shrink: 0; }
+.rp-board-head, .rp-seat, .rp-pocket { width: min(100%, var(--replay-board-size, 500px)); max-width: none; }
+.rp-seat { height: 30px; display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--ink-3); }
+.rp-board-stage { width: min(100%, var(--replay-board-size, 500px)); aspect-ratio: 1; }
+.rp-side { min-height: 0; overflow: auto; scrollbar-gutter: stable; }
+.rp-moves-head { flex: none; height: 24px; min-height: 24px; overflow: hidden; }
+.rp-mover { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-moves, .compact .rp-moves { flex: 1 0 120px; min-height: 120px; max-height: none; overflow-y: auto; scrollbar-gutter: stable; }
+.rp-analysis-card { flex: none; }
+.rp-transport, .compact .rp-transport { flex: none; grid-template-columns: auto minmax(80px, 1fr) auto; gap: 8px; padding: 7px 10px; }
+.rp-play, .compact .rp-play { width: 100px; min-width: 100px; }
+.rp-range { min-width: 0; }
+@media (max-width: 720px) {
+  .replayer-body { grid-template-columns: minmax(0, 1fr); overflow-y: auto; align-content: start; gap: 10px; }
+  .rp-boards { overflow: visible; scrollbar-gutter: auto; }
+  .rp-boards.two { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .rp-side { overflow: visible; min-height: 220px; }
+  .rp-moves, .compact .rp-moves { height: 180px; max-height: 180px; flex: none; }
+  .rp-transport, .compact .rp-transport { grid-template-columns: minmax(0, 1fr); gap: 5px; padding: 6px; }
+  .rp-buttons, .rp-speeds { justify-content: center; }
+  .rp-buttons button { min-height: 32px; }
+  .rp-range { max-width: 100%; }
+  .rh-teams { font-size: 12px; }
+  .rh-meta .badge { font-size: 10px; }
+}
+@media (max-width: 640px) { .rp-seat { height: 26px; } }
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { ChatMessage } from 'shared';
 import AppIcon from './AppIcon.vue';
 import { useI18n } from '../stores/i18n';
@@ -9,10 +9,12 @@ const props = withDefaults(
     messages: ChatMessage[];
     moves?: string[];
     myUserId?: number;
+    showMoves?: boolean;
   }>(),
   {
     moves: () => [],
     myUserId: 0,
+    showMoves: true,
   },
 );
 
@@ -26,6 +28,18 @@ const activeTab = ref<'chat' | 'moves'>('chat');
 const unreadCount = ref(0);
 const draft = ref('');
 const logRef = ref<HTMLElement | null>(null);
+const widgetRoot = ref<HTMLElement | null>(null);
+const viewportHeight = ref(0);
+const keyboardOffset = ref(0);
+const viewportStyle = computed(() => ({
+  '--chat-keyboard-offset': `${keyboardOffset.value}px`,
+  '--chat-viewport-height': `${viewportHeight.value}px`,
+}));
+function measureViewport(): void {
+  const viewport = window.visualViewport;
+  viewportHeight.value = viewport?.height ?? window.innerHeight;
+  keyboardOffset.value = Math.max(0, window.innerHeight - viewportHeight.value - (viewport?.offsetTop ?? 0));
+}
 
 function scrollBottom(): void {
   nextTick(() => {
@@ -38,6 +52,7 @@ function scrollBottom(): void {
 function toggleOpen(): void {
   isOpen.value = !isOpen.value;
   if (isOpen.value) {
+    widgetRoot.value?.querySelectorAll<HTMLDetailsElement>('details[open]').forEach(details => { details.open = false; });
     unreadCount.value = 0;
     scrollBottom();
   }
@@ -45,6 +60,9 @@ function toggleOpen(): void {
 
 function closeDrawer(): void {
   isOpen.value = false;
+}
+function onToolsToggle(event: Event): void {
+  if ((event.target as HTMLDetailsElement).open) isOpen.value = false;
 }
 
 function onKeydown(e: KeyboardEvent): void {
@@ -85,23 +103,31 @@ function submitChat(): void {
 }
 
 onMounted(() => {
+  measureViewport();
   window.addEventListener('keydown', onKeydown);
+  window.addEventListener('resize', measureViewport);
+  window.visualViewport?.addEventListener('resize', measureViewport);
+  window.visualViewport?.addEventListener('scroll', measureViewport);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
+  window.removeEventListener('resize', measureViewport);
+  window.visualViewport?.removeEventListener('resize', measureViewport);
+  window.visualViewport?.removeEventListener('scroll', measureViewport);
 });
 </script>
 
 <template>
-  <div class="chat-widget-root">
+  <div ref="widgetRoot" class="chat-widget-root" :style="viewportStyle">
+    <div v-if="$slots.default" class="chat-tools" @toggle.capture="onToolsToggle"><slot /></div>
     <!-- Floating Trigger Button on Right Edge -->
     <button
       type="button"
       class="chat-fab"
       :class="{ active: isOpen, 'has-unread': unreadCount > 0 && !isOpen }"
       :aria-expanded="isOpen"
-      :aria-label="i18n.locale === 'en' ? 'Toggle chat and move log' : 'Открыть чат и журнал ходов'"
+      :aria-label="showMoves ? (i18n.locale === 'en' ? 'Toggle chat and move log' : 'Открыть чат и журнал ходов') : (i18n.locale === 'en' ? 'Open match chat' : 'Открыть чат матча')"
       @click="toggleOpen"
     >
       <AppIcon name="message-square" :size="18" />
@@ -111,7 +137,7 @@ onBeforeUnmount(() => {
 
     <!-- Slide-over Drawer -->
     <transition name="chat-drawer">
-      <aside v-if="isOpen" class="chat-drawer panel" aria-label="Чат и ходы матча">
+      <aside v-if="isOpen" class="chat-drawer panel" :aria-label="i18n.locale === 'en' ? 'Match chat' : 'Чат матча'">
         <header class="drawer-header">
           <div class="drawer-tabs" role="tablist">
             <button
@@ -119,6 +145,7 @@ onBeforeUnmount(() => {
               role="tab"
               class="drawer-tab"
               :class="{ active: activeTab === 'chat' }"
+              :aria-selected="activeTab === 'chat'"
               @click="activeTab = 'chat'; unreadCount = 0; scrollBottom()"
             >
               <AppIcon name="message-square" :size="14" />
@@ -126,10 +153,12 @@ onBeforeUnmount(() => {
               <span class="tab-count mono">{{ messages.length }}</span>
             </button>
             <button
+              v-if="showMoves"
               type="button"
               role="tab"
               class="drawer-tab"
               :class="{ active: activeTab === 'moves' }"
+              :aria-selected="activeTab === 'moves'"
               @click="activeTab = 'moves'; scrollBottom()"
             >
               <AppIcon name="book-open" :size="14" />
@@ -148,7 +177,7 @@ onBeforeUnmount(() => {
         </header>
 
         <!-- Chat Tab -->
-        <div v-if="activeTab === 'chat'" class="drawer-body">
+        <div v-if="activeTab === 'chat' || !showMoves" class="drawer-body">
           <div ref="logRef" class="drawer-log">
             <div v-for="m in messages" :key="m.id" class="chat-msg" :class="{ system: m.system }">
               <template v-if="m.system">
@@ -167,6 +196,7 @@ onBeforeUnmount(() => {
             <input
               v-model="draft"
               :placeholder="i18n.locale === 'en' ? 'Message everyone…' : 'Сообщение всем…'"
+              :aria-label="i18n.locale === 'en' ? 'Message everyone…' : 'Сообщение всем…'"
               maxlength="300"
             />
             <button type="submit" class="primary icon-only" :aria-label="i18n.locale === 'en' ? 'Send' : 'Отправить'">
@@ -195,10 +225,16 @@ onBeforeUnmount(() => {
 <style scoped>
 .chat-widget-root {
   position: fixed;
-  right: 14px;
-  bottom: 18px;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: calc(18px + env(safe-area-inset-bottom) + var(--chat-keyboard-offset, 0px));
   z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: calc(100vw - 28px);
 }
+.chat-tools:empty { display: none; }
 
 .chat-fab {
   display: inline-flex;
@@ -206,9 +242,9 @@ onBeforeUnmount(() => {
   gap: 8px;
   padding: 10px 14px;
   border-radius: 999px;
-  background: var(--bg-elevated, #1c2128);
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.14));
-  color: var(--text, #f0f4f8);
+  background: var(--surface, #1c2128);
+  border: 1px solid var(--line-2, rgba(255, 255, 255, 0.14));
+  color: var(--ink, #f0f4f8);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
   font-weight: 600;
   cursor: pointer;
@@ -235,9 +271,9 @@ onBeforeUnmount(() => {
   width: min(340px, calc(100vw - 24px));
   display: flex;
   flex-direction: column;
-  background: rgba(20, 24, 31, 0.96);
+  background: var(--surface, rgba(20, 24, 31, 0.96));
   backdrop-filter: blur(12px);
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+  border: 1px solid var(--line-2, rgba(255, 255, 255, 0.15));
   border-radius: 12px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
   overflow: hidden;
@@ -249,7 +285,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.1));
 }
 
 .drawer-tabs {
@@ -265,15 +301,15 @@ onBeforeUnmount(() => {
   border-radius: 6px;
   background: transparent;
   border: 1px solid transparent;
-  color: var(--text-dim, #9ca3af);
+  color: var(--ink-3, #9ca3af);
   font-size: 13px;
   cursor: pointer;
 }
 
 .drawer-tab.active {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.14);
-  color: var(--text, #fff);
+  background: var(--accent-soft, rgba(255, 255, 255, 0.08));
+  border-color: var(--line-2, rgba(255, 255, 255, 0.14));
+  color: var(--ink, #fff);
 }
 
 .tab-count {
@@ -312,12 +348,13 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 6px;
   padding: 8px 10px;
-  border-top: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-top: 1px solid var(--line, rgba(255, 255, 255, 0.1));
 }
 
 .drawer-input-row input {
   flex: 1;
   min-width: 0;
+  font-size: 16px;
 }
 
 .moves-log {
@@ -349,9 +386,10 @@ onBeforeUnmount(() => {
     top: auto;
     left: 8px;
     right: 8px;
-    bottom: 64px;
+    bottom: calc(64px + env(safe-area-inset-bottom) + var(--chat-keyboard-offset, 0px));
     width: auto;
-    height: 55dvh;
+    height: calc(var(--chat-viewport-height, 100dvh) * .55);
+    max-height: calc(var(--chat-viewport-height, 100dvh) - 92px);
   }
 }
 </style>

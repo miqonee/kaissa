@@ -199,6 +199,9 @@ export interface TranslationSchema {
     deleteAccount: string;
   };
   settings: {
+    haptics: string;
+    hapticsOn: string;
+    hapticsOff: string;
     sounds: string;
     enableSound: string;
     disableSound: string;
@@ -207,6 +210,19 @@ export interface TranslationSchema {
     animFast: string;
     animOff: string;
     animAdaptive: string;
+  };
+  material: {
+    white: string;
+    black: string;
+    equal: string;
+    description: string;
+  };
+  matchChat: {
+    title: string;
+    empty: string;
+    placeholder: string;
+    send: string;
+    close: string;
   };
   footer: {
     brandDesc: string;

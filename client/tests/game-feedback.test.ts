@@ -76,6 +76,41 @@ describe('confirmed move feedback', () => {
     expect(root.querySelector('.chat-widget-root')).not.toBeNull();
     expect(root.querySelector('.game-notes')?.closest('.chat-widget-root')).not.toBeNull();
   });
+  it('renders turn queue without expanding chips and switches spectator chat to floating widget', async () => {
+    const teamState: GameState = {
+      ...state(),
+      participants: [
+        { userId: 1, username: 'Me', team: 1, color: 'w', boardIndex: 0, moveSlot: 0, ratingBefore: 1500, ratingAfter: null },
+        { userId: 2, username: 'Opponent1', team: 2, color: 'b', boardIndex: 0, moveSlot: 0, ratingBefore: 1500, ratingAfter: null },
+        { userId: 3, username: 'Partner', team: 1, color: 'w', boardIndex: 0, moveSlot: 1, ratingBefore: 1500, ratingAfter: null },
+        { userId: 4, username: 'Opponent2', team: 2, color: 'b', boardIndex: 0, moveSlot: 1, ratingBefore: 1500, ratingAfter: null },
+      ],
+      turnUserIds: [3],
+    };
+    wire.handlers.get('game:state')!(teamState);
+    await nextTick();
+
+    const queueItems = root.querySelectorAll('.queue-item');
+    expect(queueItems).toHaveLength(4);
+    const partnerItem = root.querySelector('.queue-item.partner');
+    expect(partnerItem).not.toBeNull();
+    expect(partnerItem?.classList.contains('current')).toBe(true);
+    expect(root.querySelector('.turn-now-chip')).toBeNull();
+    expect(root.querySelector('.queue-color-tag.w')).not.toBeNull();
+
+    // Spectator / viewing mode: match chat removed from sidebar column, replaced by floating widget
+    const finishedState: GameState = {
+      ...teamState,
+      status: 'mate',
+      result: '1-0',
+    };
+    wire.handlers.get('game:state')!(finishedState);
+    await nextTick();
+
+    expect(root.querySelector('.match-chat')).toBeNull();
+    expect(root.querySelector('.chat-widget-root')).not.toBeNull();
+  });
+
   it.each(['move', 'drop', 'premove'])('vibrates once after the %s ack, never on a replayed socket update', async (kind) => {
     root.querySelector<HTMLButtonElement>(`.test-${kind}`)!.click();
     expect(vibrateMove).not.toHaveBeenCalled();

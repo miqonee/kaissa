@@ -136,6 +136,7 @@ function boardStatus(board: 0 | 1): string {
   return player?.isBot ? (en ? 'Bot is thinking' : 'Бот думает') : (en ? 'Player to move' : 'Ход игрока');
 }
 const isViewing = computed(() => !isPlaying.value);
+const showFloatingChat = computed(() => isViewing.value || drawerChat.value || state.value?.mode === 'bughouse');
 
 const board0Fen = computed(() => fenOf(0));
 const recognizedOpening = computed(() => detectOpening(movesSanHistory.value));
@@ -758,9 +759,13 @@ function resultHeadline(): string {
     </aside>
 
 
-    <component v-if="state.mode === 'bughouse' || hasGameNotes" :is="state.mode === 'bughouse' ? ChatWidget : 'div'"
-      class="game-tools" v-bind="state.mode === 'bughouse' ? { messages: chat, myUserId: myId, showMoves: false } : {}"
-      @send="sendChatMessage">
+    <component
+      v-if="showFloatingChat || hasGameNotes"
+      :is="showFloatingChat ? ChatWidget : 'div'"
+      class="game-tools"
+      v-bind="showFloatingChat ? { messages: chat, myUserId: myId, showMoves: false } : {}"
+      @send="sendChatMessage"
+    >
     <details v-if="hasGameNotes" class="game-notes">
       <summary>{{ i18n.locale === 'en' ? 'Match information & tips' : 'Информация и подсказки' }}</summary>
       <div class="game-notes-content">
@@ -1044,12 +1049,12 @@ function resultHeadline(): string {
       </div>
     </header>
         <!-- Панель статуса / очереди -->
-        <div class="panel queue-panel">
-          <div class="panel-head">
-            <h3>Очередь ходов</h3>
+        <div v-if="state.mode !== 'bughouse' && state.status === 'active'" class="panel queue-panel">
+          <div class="panel-head queue-head">
+            <h3>{{ i18n.locale === 'en' ? 'Turn order' : 'Очередь ходов' }}</h3>
           </div>
           <div class="panel-body queue-body">
-            <div v-if="state.mode !== 'bughouse'" class="queue-explain">
+            <div class="queue-explain">
               <div class="queue-list">
                 <div
                   v-for="(p, idx) in orderedTurnParticipants"
@@ -1059,33 +1064,36 @@ function resultHeadline(): string {
                 >
                   <span class="queue-dot" :class="{ on: isPlayerTurn(p.userId) }"></span>
                   <span class="queue-order mono dim">{{ idx + 1 }}</span>
-                  <span class="color-tag" :class="p.color">
-                    {{ p.color === 'w' ? (i18n.locale === 'en' ? 'White' : 'Белые') : (i18n.locale === 'en' ? 'Black' : 'Черные') }}
+                  <span
+                    class="queue-color-tag"
+                    :class="p.color"
+                    :title="p.color === 'w' ? (i18n.locale === 'en' ? 'White' : 'Белые') : (i18n.locale === 'en' ? 'Black' : 'Чёрные')"
+                  >
+                    <span class="color-disc" :class="p.color"></span>
+                    <span class="color-name">{{ p.color === 'w' ? (i18n.locale === 'en' ? 'Wh' : 'Бел') : (i18n.locale === 'en' ? 'Bl' : 'Чер') }}</span>
                   </span>
                   <BotHoverCard v-if="p.isBot" :username="p.username" :rating="p.ratingBefore">
                     <span class="queue-name">{{ displayName(p) }}</span>
                   </BotHoverCard>
                   <span v-else class="queue-name">{{ displayName(p) }}</span>
-                  <span v-if="roleOf(p) === 'me'" class="member-role me">{{ i18n.locale === 'en' ? 'You' : 'Вы' }}</span>
-                  <span v-else-if="roleOf(p) === 'partner'" class="member-role partner">{{ i18n.locale === 'en' ? 'Partner' : 'Напарник' }}</span>
-                  <span v-if="isPlayerTurn(p.userId)" class="turn-now-chip">{{ i18n.locale === 'en' ? 'TURN' : 'ХОД' }}</span>
+                  <span v-if="roleOf(p) === 'me'" class="queue-role me">{{ i18n.locale === 'en' ? 'You' : 'Вы' }}</span>
+                  <span v-else-if="roleOf(p) === 'partner'" class="queue-role partner">{{ i18n.locale === 'en' ? 'Partner' : 'Напарник' }}</span>
                 </div>
               </div>
             </div>
-
-            <div v-else class="queue-bughouse-hint">
-              <p class="small-hint dim">
-                {{ state.botPacing
-                  ? (i18n.locale === 'en' ? 'The other board follows your moves. Select a pocket piece, then a highlighted square.' : 'Соседняя доска следует за вашими ходами. Выберите фигуру в кармане, затем подсвеченное поле.')
-                  : (i18n.locale === 'en' ? 'Both boards play simultaneously. Select a pocket piece, then a highlighted square.' : 'Обе доски играют одновременно. Выберите фигуру в кармане, затем подсвеченное поле.') }}
-              </p>
-            </div>
-
           </div>
         </div>
 
-        <MatchChat v-if="state.mode !== 'bughouse'" ref="chatPanel" v-model="chatText" :messages="chat" :drawer="drawerChat || !isPlaying"
-          :open="isChatOpen" :unread="unreadChatCount" @toggle="toggleChat" @close="isChatOpen = false" @send="sendChat" />
+        <MatchChat
+          v-if="isPlaying && !drawerChat && state.mode !== 'bughouse'"
+          ref="chatPanel"
+          v-model="chatText"
+          :messages="chat"
+          :drawer="false"
+          :open="true"
+          :unread="0"
+          @send="sendChat"
+        />
 
         <!-- Просмотр матча: анализ и тот же адаптивный чат. -->
         <template v-if="!isPlaying">
@@ -1812,43 +1820,147 @@ function resultHeadline(): string {
 
 .queue-panel {
   flex: none;
+  margin: 0;
+}
+
+.queue-head {
+  padding: 5px 10px;
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+}
+
+.queue-head h3 {
+  font-size: 11.5px;
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-2);
 }
 
 .queue-body {
+  padding: 5px 8px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
 .queue-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 3px;
+  margin: 0;
 }
 
 .queue-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  flex-wrap: nowrap;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  padding: 0 8px;
+  gap: 6px;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
   background: var(--surface-inset);
   border: 1px solid var(--line);
   border-radius: var(--r-s);
-  font-size: 12.5px;
+  font-size: 12px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .queue-order {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
-  width: 12px;
+  width: 10px;
   text-align: center;
+  flex-shrink: 0;
   opacity: 0.7;
+}
+
+.queue-color-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3.5px;
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+
+.queue-color-tag .color-disc {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.queue-color-tag.w {
+  background: #fdfaf3;
+  color: #1d1b16;
+  border: 1px solid #c9c0a6;
+}
+.queue-color-tag.w .color-disc {
+  background: #ffffff;
+  border: 1px solid #999;
+}
+
+.queue-color-tag.b {
+  background: #22201c;
+  color: #f3efe6;
+  border: 1px solid #14120f;
+}
+.queue-color-tag.b .color-disc {
+  background: #111111;
+  border: 1px solid #555;
+}
+
+.queue-item .bot-hover-trigger {
+  display: inline-flex;
+  min-width: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+}
+
+.queue-name {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.queue-role {
+  flex-shrink: 0;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 4px;
+  border-radius: var(--r-xs);
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.queue-role.me {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.queue-role.partner {
+  color: var(--felt-ink);
+  background: var(--felt-2);
 }
 
 .queue-item.me {
   border-color: var(--accent-2);
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-inset));
 }
 
 .queue-item.partner {
@@ -1858,31 +1970,26 @@ function resultHeadline(): string {
 
 .queue-item.current {
   border-color: var(--accent);
-  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, var(--surface-inset));
+  box-shadow: 0 0 0 1px var(--accent-2);
+}
+
+.queue-item.current .queue-name {
   font-weight: 600;
-  box-shadow: 0 0 0 1.5px var(--accent-2);
+  color: var(--ink);
 }
 
 .queue-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--ink-3);
+  background: var(--ink-4, #555);
+  flex-shrink: 0;
 }
 .queue-dot.on {
-  background: var(--ok);
-  box-shadow: 0 0 6px var(--ok);
-}
-
-.slot-note {
-  margin-left: auto;
-}
-
-.turn-now-chip {
-  font-size: 10px;
-  color: var(--accent);
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  background: var(--ok, #22c55e);
+  box-shadow: 0 0 6px var(--ok, #22c55e);
 }
 
 /* ================= ПАНЕЛЬ ДЕБЮТА (В РЕЖИМЕ ПРОСМОТРА) ================= */
@@ -2352,7 +2459,6 @@ function resultHeadline(): string {
 .boards-container { min-width: 0; }
 .game-sidebar { height: auto; min-height: 0; contain: size; overflow: clip; }
 .game-sidebar > .game-topbar, .game-sidebar > .queue-panel { flex: none; }
-.game-sidebar > .queue-panel { max-height: 145px; overflow-y: auto; }
 .game-sidebar > .opening-panel { flex: 1; min-height: 0; overflow-y: auto; }
 .game-page .team-board-wrapper { width: min(100%, var(--board-size, 600px)); max-width: none; margin-inline: auto; container-type: inline-size; }
 .game-page.crazyhouse { max-width: none; }

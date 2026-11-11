@@ -117,15 +117,15 @@ defineExpose({ scrollToEnd });
 <style scoped>
 .match-chat { flex: 1; display: flex; min-height: 0; min-width: 0; }
 .match-chat-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; overflow: hidden; margin: 0; }
-.match-chat-panel .panel-head { flex: none; gap: 6px; }
-.match-chat-panel h3 { font-size: 13px; margin: 0; }
+.match-chat-panel .panel-head { flex: none; gap: 6px; padding: 6px 10px; min-height: 28px; }
+.match-chat-panel h3 { font-size: 12px; margin: 0; }
 .message-count { margin-left: auto; color: var(--ink-3); font-size: 11px; }
-.match-chat-log { flex: 1; min-height: 0; overflow-y: auto; overflow-anchor: none; overscroll-behavior: contain; padding: 10px 12px; scrollbar-gutter: stable; }
-.chat-message { font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; margin-bottom: 6px; }
+.match-chat-log { flex: 1; min-height: 0; overflow-y: auto; overflow-anchor: none; overscroll-behavior: contain; padding: 8px 10px; scrollbar-gutter: stable; }
+.chat-message { font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; margin-bottom: 4px; }
 .chat-author { font-weight: 600; color: var(--accent-2); }
-.system, .chat-empty { font-size: 12px; color: var(--ink-3); }
-.match-chat-input { display: flex; flex: none; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line); }
-.match-chat-input input { flex: 1; width: 0; min-width: 0; font-size: 16px; }
+.system, .chat-empty { font-size: 11.5px; color: var(--ink-3); }
+.match-chat-input { display: flex; flex: none; gap: 6px; padding: 6px 8px; border-top: 1px solid var(--line); }
+.match-chat-input input { flex: 1; width: 0; min-width: 0; font-size: 14px; height: 32px; }
 .drawer { flex: none; height: 38px; }
 .chat-toggle { width: 100%; height: 38px; justify-content: flex-start; padding: 0 10px; }
 .unread { background: var(--accent); color: var(--accent-ink); font-size: 11px; padding: 1px 6px; border-radius: 12px; }

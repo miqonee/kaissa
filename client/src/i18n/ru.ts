@@ -209,6 +209,10 @@ export const ru: TranslationSchema = {
     animFast: 'В 2 раза быстрее',
     animOff: 'Отключить',
     animAdaptive: 'Адаптивно (≤2 мин — 2×, ≤1 мин — выкл)',
+    autoQueen: 'Превращение в ферзя',
+    autoQueenPremove: 'При премуве',
+    autoQueenAlways: 'Всегда',
+    autoQueenNever: 'Спрашивать',
   },
   material: {
     white: 'Материал белых', black: 'Материал чёрных', equal: 'Нет лишних фигур',

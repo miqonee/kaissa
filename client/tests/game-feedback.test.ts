@@ -31,6 +31,7 @@ vi.mock('../src/components/ChessBoard.vue', async () => {
       h('button', { class: 'test-move', onClick: () => emit('move', { from: 'e2', to: 'e4' }) }, 'move'),
       h('button', { class: 'test-drop', onClick: () => emit('drop', { piece: 'p', to: 'e4' }) }, 'drop'),
       h('button', { class: 'test-premove', onClick: () => emit('move', { from: 'e2', to: 'e4', premove: true }) }, 'premove'),
+      h('button', { class: 'test-promo', onClick: () => emit('move', { from: 'e7', to: 'e8' }) }, 'promo'),
     ]);
   } } };
 });
@@ -129,5 +130,35 @@ describe('confirmed move feedback', () => {
     root.querySelector<HTMLButtonElement>('.test-move')!.click();
     wire.ack!(new Error('timeout'));
     expect(vibrateMove).not.toHaveBeenCalled();
+  });
+
+  it('sends premove flag in socket payload to ensure 0s deduction', () => {
+    root.querySelector<HTMLButtonElement>('.test-premove')!.click();
+    expect(wire.payload?.premove).toBe(true);
+
+    root.querySelector<HTMLButtonElement>('.test-move')!.click();
+    expect(wire.payload?.premove).toBe(false);
+  });
+
+  it('displays on-board promotion overlay on the board frame and cancels on backdrop click', async () => {
+    const promoFen = '4k3/4P3/8/8/8/8/8/4K3 w - - 0 1';
+    wire.handlers.get('game:state')!({ ...state(), fens: [promoFen] });
+    await nextTick();
+
+    root.querySelector<HTMLButtonElement>('.test-promo')!.click();
+    await nextTick();
+
+    const overlay = root.querySelector('.promotion-backdrop');
+    expect(overlay).not.toBeNull();
+    const column = root.querySelector('.promotion-column');
+    expect(column).not.toBeNull();
+    const buttons = root.querySelectorAll('.promo-square-btn');
+    expect(buttons).toHaveLength(4);
+
+    // Clicking Queen promotes to 'q'
+    (buttons[0] as HTMLButtonElement).click();
+    await nextTick();
+    expect(wire.payload?.promotion).toBe('q');
+    expect(root.querySelector('.promotion-backdrop')).toBeNull();
   });
 });

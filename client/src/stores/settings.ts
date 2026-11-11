@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 
 export type AnimationMode = 'normal' | 'fast' | 'off' | 'adaptive';
+export type AutoQueenMode = 'premove' | 'always' | 'never';
 
 export interface ResolvedAnimation {
   enabled: boolean;
@@ -10,6 +11,7 @@ export interface ResolvedAnimation {
 
 export const ANIMATION_STORAGE_KEY = 'kaissa_move_animation';
 export const HAPTICS_STORAGE_KEY = 'kaissa_move_haptics';
+export const AUTO_QUEEN_STORAGE_KEY = 'kaissa_auto_queen';
 
 function savedSetting(key: string): string | null {
   try { return typeof localStorage === 'undefined' ? null : localStorage.getItem(key); } catch { return null; }
@@ -28,7 +30,16 @@ export const useSettingsStore = defineStore('settings', () => {
     return 'normal';
   })();
 
+  const initialAutoQueen: AutoQueenMode = (() => {
+    const saved = savedSetting(AUTO_QUEEN_STORAGE_KEY);
+    if (saved === 'always' || saved === 'premove' || saved === 'never') {
+      return saved;
+    }
+    return 'premove';
+  })();
+
   const animationMode = ref<AnimationMode>(initialMode);
+  const autoQueen = ref<AutoQueenMode>(initialAutoQueen);
   const hapticsEnabled = ref(savedSetting(HAPTICS_STORAGE_KEY) !== 'off');
 
   function setHapticsEnabled(enabled: boolean): void {
@@ -39,6 +50,11 @@ export const useSettingsStore = defineStore('settings', () => {
   function setAnimationMode(mode: AnimationMode): void {
     animationMode.value = mode;
     saveSetting(ANIMATION_STORAGE_KEY, mode);
+  }
+
+  function setAutoQueen(mode: AutoQueenMode): void {
+    autoQueen.value = mode;
+    saveSetting(AUTO_QUEEN_STORAGE_KEY, mode);
   }
 
   /**
@@ -74,6 +90,8 @@ export const useSettingsStore = defineStore('settings', () => {
     animationMode,
     setAnimationMode,
     resolveAnimation,
+    autoQueen,
+    setAutoQueen,
     hapticsEnabled,
     setHapticsEnabled,
   };

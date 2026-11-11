@@ -232,6 +232,7 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
         to: String(data.to),
         promotion: data.promotion,
         dropPiece: data.dropPiece,
+        premove: Boolean(data.premove),
       });
       if (!r.ok) {
         cb?.({ ok: false, error: r.error });

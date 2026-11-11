@@ -14,7 +14,7 @@ import { useAuthStore } from "../stores/auth";
 import { useI18n } from "../stores/i18n";
 import { usePageSeo } from "../composables/useSeo";
 import { isMuted, toggleSound } from "../audio/sounds";
-import { useSettingsStore, type AnimationMode } from "../stores/settings";
+import { useSettingsStore, type AnimationMode, type AutoQueenMode } from "../stores/settings";
 import ModeTabs from "../components/ModeTabs.vue";
 import MatchCard from "../components/MatchCard.vue";
 import GameReplayModal from "../components/GameReplayModal.vue";
@@ -28,6 +28,11 @@ const animationOptions = computed<Array<{ value: AnimationMode; label: string }>
   { value: "fast", label: i18n.t.settings.animFast },
   { value: "off", label: i18n.t.settings.animOff },
   { value: "adaptive", label: i18n.t.settings.animAdaptive },
+]);
+const autoQueenOptions = computed<Array<{ value: AutoQueenMode; label: string }>>(() => [
+  { value: "premove", label: i18n.t.settings.autoQueenPremove },
+  { value: "always", label: i18n.t.settings.autoQueenAlways },
+  { value: "never", label: i18n.t.settings.autoQueenNever },
 ]);
 const mode = ref<GameMode>(
   GAME_MODES.includes(route.query.mode as GameMode)
@@ -195,6 +200,22 @@ const sparkPath = computed(() => {
             :class="{ primary: settings.animationMode === opt.value, ghost: settings.animationMode !== opt.value }"
             :aria-pressed="settings.animationMode === opt.value"
             @click="settings.setAnimationMode(opt.value)"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">{{ i18n.t.settings.autoQueen }}</span>
+        <div class="anim-tabs" role="group" :aria-label="i18n.t.settings.autoQueen">
+          <button
+            v-for="opt in autoQueenOptions"
+            :key="opt.value"
+            type="button"
+            class="small"
+            :class="{ primary: settings.autoQueen === opt.value, ghost: settings.autoQueen !== opt.value }"
+            :aria-pressed="settings.autoQueen === opt.value"
+            @click="settings.setAutoQueen(opt.value)"
           >
             {{ opt.label }}
           </button>

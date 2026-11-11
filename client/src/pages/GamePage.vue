@@ -170,7 +170,12 @@ function dismissHint(kind: 'intro' | 'pocket'): void {
   else { pocketSeen.value = true; pocketTip.value = false; }
   try { localStorage.setItem(`kaissa.bughouse.${kind}.v1`, '1'); } catch {}
 }
-function cancelDrop(event: KeyboardEvent): void { if (event.key === 'Escape') selectedDrop.value = null; }
+function cancelDrop(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    selectedDrop.value = null;
+    if (promoDialog.value) cancelPromotion(promoDialog.value.board);
+  }
+}
 watch(() => state.value, (st) => {
   if (selectedDrop.value && (!st || !myTurnOn(myBoard.value ?? 0) || !pocketOfBoard(myBoard.value ?? 0, myParticipant.value?.color ?? 'w')?.[selectedDrop.value])) selectedDrop.value = null;
   const pocket = st && hasPockets(st.mode) && myParticipant.value ? pocketOfBoard(myParticipant.value.boardIndex, myParticipant.value.color) : null;
@@ -436,23 +441,62 @@ function onMove(b: 0 | 1, payload: { from: string; to: string; premove?: boolean
   const movingColor = c.turn();
   const lastRank = movingColor === 'w' ? '8' : '1';
   if (piece && piece.type === 'p' && payload.to[1] === lastRank) {
-    if (payload.premove) {
-      sendMove(b, payload.from, payload.to, 'q');
+    if (payload.premove || settings.autoQueen === 'always') {
+      sendMove(b, payload.from, payload.to, 'q', undefined, payload.premove);
       return;
     }
     promoDialog.value = { board: b, from: payload.from, to: payload.to };
     return;
   }
-  sendMove(b, payload.from, payload.to);
+  sendMove(b, payload.from, payload.to, undefined, undefined, payload.premove);
+}
+
+function cancelPromotion(b: 0 | 1): void {
+  promoDialog.value = null;
+  boardRefs[b]?.resetView();
+}
+
+function promoColor(b: 0 | 1): 'w' | 'b' {
+  if (promoDialog.value && promoDialog.value.board === b) {
+    return promoDialog.value.to[1] === '8' ? 'w' : 'b';
+  }
+  return myParticipant.value?.color ?? 'w';
+}
+
+function promotionColumnStyle(boardIdx: 0 | 1): Record<string, string> {
+  if (!promoDialog.value || promoDialog.value.board !== boardIdx) return {};
+  const { to } = promoDialog.value;
+  const file = to[0];
+  const rank = parseInt(to[1], 10);
+  const orientation = boardIdx === 0
+    ? (teamModeSides.value ? (teamModeSides.value.bottom.color === 'w' ? 'white' : 'black') : 'white')
+    : orientationOf(boardIdx);
+
+  const fileIdx = file.charCodeAt(0) - 97;
+  const col = orientation === 'white' ? fileIdx : 7 - fileIdx;
+  const left = `${col * 12.5}%`;
+
+  const isTop = (orientation === 'white' && rank === 8) || (orientation === 'black' && rank === 1);
+
+  return {
+    position: 'absolute',
+    left,
+    width: '12.5%',
+    height: '50%',
+    top: isTop ? '0%' : '50%',
+    display: 'flex',
+    flexDirection: isTop ? 'column' : 'column-reverse',
+    zIndex: '40',
+  };
 }
 
 function promoPieceName(t: string): string {
   switch (t) {
-    case 'q': return 'Ферзь';
-    case 'r': return 'Ладья';
-    case 'b': return 'Слон';
-    case 'n': return 'Конь';
-    default: return 'Фигура';
+    case 'q': return i18n.locale === 'en' ? 'Queen' : 'Ферзь';
+    case 'r': return i18n.locale === 'en' ? 'Rook' : 'Ладья';
+    case 'b': return i18n.locale === 'en' ? 'Bishop' : 'Слон';
+    case 'n': return i18n.locale === 'en' ? 'Knight' : 'Конь';
+    default: return i18n.locale === 'en' ? 'Piece' : 'Фигура';
   }
 }
 
@@ -463,9 +507,9 @@ function choosePromotion(t: PieceType): void {
   sendMove(board, from, to, t);
 }
 
-function sendMove(b: 0 | 1, from: string, to: string, promotion?: PieceType, dropPiece?: DropPieceType): void {
+function sendMove(b: 0 | 1, from: string, to: string, promotion?: PieceType, dropPiece?: DropPieceType, premove?: boolean): void {
   if (!socket.connected) { error.value = i18n.locale === 'en' ? 'Connection lost. Wait for reconnection.' : 'Связь потеряна. Дождитесь подключения.'; boardRefs[b]?.resetView(); return; }
-  socket.timeout(8000).emit('game:move', { gameId, boardIndex: b, from, to, promotion, dropPiece }, (timeout, ack) => {
+  socket.timeout(8000).emit('game:move', { gameId, boardIndex: b, from, to, promotion, dropPiece, premove: !!premove }, (timeout, ack) => {
     if (timeout || !ack) { error.value = i18n.locale === 'en' ? 'Move confirmation missing. Synchronizing…' : 'Нет подтверждения хода. Восстанавливаем позицию…'; boardRefs[b]?.resetView(); socket.emit('game:watch', gameId); return; }
     if (ack.ok) vibrateMove(settings.hapticsEnabled);
     if (!ack.ok) {
@@ -895,6 +939,33 @@ function resultHeadline(): string {
               @move="onMove(0, $event)"
               @premove-set="playMoveSound"
             />
+            <!-- Набортный выбор превращения (стандарт Lichess) -->
+            <div
+              v-if="promoDialog && promoDialog.board === 0"
+              class="promotion-backdrop"
+              @click="cancelPromotion(0)"
+            >
+              <div
+                class="promotion-column"
+                :style="promotionColumnStyle(0)"
+                @click.stop
+              >
+                <button
+                  v-for="t in ['q', 'n', 'r', 'b']"
+                  :key="t"
+                  type="button"
+                  class="promo-square-btn"
+                  :title="promoPieceName(t)"
+                  :aria-label="`Превратить в: ${promoPieceName(t)}`"
+                  @click="choosePromotion(t as PieceType)"
+                >
+                  <img
+                    :src="`/pieces/cburnett/${promoColor(0)}${t.toUpperCase()}.svg`"
+                    :alt="promoPieceName(t)"
+                  />
+                </button>
+              </div>
+            </div>
           </div>
 
           <div v-if="isCrazyhouse(state.mode)" class="single-pocket">
@@ -997,6 +1068,33 @@ function resultHeadline(): string {
               :clock-remaining-ms="effectiveClockMsForBoard(bc.index)"
               @move="onMove(bc.index, $event)" @drop="onDrop(bc.index, $event)"
               @cancel-drop="selectedDrop = null" @premove-set="playMoveSound" />
+            <!-- Набортный выбор превращения (стандарт Lichess) -->
+            <div
+              v-if="promoDialog && promoDialog.board === bc.index"
+              class="promotion-backdrop"
+              @click="cancelPromotion(bc.index)"
+            >
+              <div
+                class="promotion-column"
+                :style="promotionColumnStyle(bc.index)"
+                @click.stop
+              >
+                <button
+                  v-for="t in ['q', 'n', 'r', 'b']"
+                  :key="t"
+                  type="button"
+                  class="promo-square-btn"
+                  :title="promoPieceName(t)"
+                  :aria-label="`Превратить в: ${promoPieceName(t)}`"
+                  @click="choosePromotion(t as PieceType)"
+                >
+                  <img
+                    :src="`/pieces/cburnett/${promoColor(bc.index)}${t.toUpperCase()}.svg`"
+                    :alt="promoPieceName(t)"
+                  />
+                </button>
+              </div>
+            </div>
           </div>
           <span class="pocket-label dim">{{ isParticipant ? (myBoard === bc.index ? i18n.t.bughouse.yourPocket : i18n.t.bughouse.partnerPocket) : i18n.t.bughouse.yourPocket }}</span>
           <PocketBar v-if="pocketOfBoard(bc.index, viewedColor(bc.index))"
@@ -1234,30 +1332,6 @@ function resultHeadline(): string {
 
         </template>
       </aside>
-    </div>
-
-    <!-- Диалог промоушена пешки -->
-    <div v-if="promoDialog" class="modal-backdrop" @click.self="promoDialog = null">
-      <div class="modal promo-modal">
-        <h3>Превращение пешки</h3>
-        <p class="dim">Выберите фигуру:</p>
-        <div class="promo-pieces-grid">
-          <button
-            v-for="t in ['q', 'r', 'b', 'n']"
-            :key="t"
-            class="promo-piece-btn"
-            :aria-label="`Превратить в: ${promoPieceName(t)}`"
-            @click="choosePromotion(t as PieceType)"
-          >
-            <img
-              :src="`/pieces/cburnett/${myParticipant?.color ?? 'w'}${t.toUpperCase()}.svg`"
-              :alt="promoPieceName(t)"
-              width="48"
-              height="48"
-            />
-          </button>
-        </div>
-      </div>
     </div>
 
     <!-- Модальное окно завершения партии -->
@@ -2309,21 +2383,50 @@ function resultHeadline(): string {
   color: var(--ink-2);
 }
 
-.promo-modal { max-width: 320px; padding: 20px; text-align: center; }
-.promo-pieces-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin-top: 14px;
+.promotion-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: var(--r-s);
+  backdrop-filter: blur(2px);
+  cursor: pointer;
 }
 
-.promo-piece-btn {
-  aspect-ratio: 1;
-  padding: 6px;
+.promotion-column {
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
 }
-.promo-piece-btn img {
-  width: 100%;
-  height: 100%;
+
+.promo-square-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.12s ease, transform 0.1s ease;
+  border-radius: 0;
+}
+
+.promo-square-btn:hover,
+.promo-square-btn:focus-visible {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  outline: none;
+}
+
+.promo-square-btn img {
+  width: 86%;
+  height: 86%;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
 }
 
 .result-modal {

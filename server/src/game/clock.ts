@@ -17,6 +17,7 @@ export interface ClockState {
 }
 
 export const PREMOVE_LAG_COMPENSATION_MS = 100;
+export const MAX_PREMOVE_WINDOW_MS = 2500;
 
 export function initClock(baseMs: number, incMs: number): ClockState {
   return { whiteMs: baseMs, blackMs: baseMs, active: null, sinceMs: 0, incMs };
@@ -33,6 +34,7 @@ export function clockOnMove(
   c: ClockState,
   moverColor: 'w' | 'b',
   atMs: number,
+  isPremove?: boolean,
 ): { clock: ClockState; flagged: 'w' | 'b' | null } {
   if (!c) return { clock: c, flagged: null };
   if (c.active === null) {
@@ -41,7 +43,11 @@ export function clockOnMove(
   }
   if (c.active !== moverColor) return { clock: c, flagged: null };
   const elapsed = atMs - c.sinceMs;
-  const effectiveElapsed = elapsed <= PREMOVE_LAG_COMPENSATION_MS ? 0 : elapsed;
+  // Премув: если игрок запланировал ход заранее и он пришёл в пределах сетевого окна (до 2.5 с),
+  // списывается ровно 0 мс (стандарт Lichess — премув не стоит времени).
+  // Для обычных ходов сохраняется компенсация сетевой задержки PREMOVE_LAG_COMPENSATION_MS (100 мс).
+  const isPremoveEligible = isPremove && elapsed <= MAX_PREMOVE_WINDOW_MS;
+  const effectiveElapsed = isPremoveEligible || elapsed <= PREMOVE_LAG_COMPENSATION_MS ? 0 : elapsed;
   const remaining = Math.max(0, (moverColor === 'w' ? c.whiteMs : c.blackMs) - effectiveElapsed);
   let flagged: 'w' | 'b' | null = null;
   if (remaining <= 0) flagged = moverColor;

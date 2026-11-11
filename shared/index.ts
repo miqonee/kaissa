@@ -223,7 +223,7 @@ export type ClientToServerEvents = {
   'lobby:add-bot': (cb: (res: Ack<null>) => void) => void;
 
   // Игра
-  'game:move': (data: { gameId: number; boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType }, cb: (res: Ack<null>) => void) => void;
+  'game:move': (data: { gameId: number; boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType; premove?: boolean }, cb: (res: Ack<null>) => void) => void;
   'game:multi-move': (data: { gameId: number; from: string; to: string }, cb: (res: Ack<null>) => void) => void;
   'game:resign': (gameId: number) => void;
   'game:chat': (gameId: number, text: string) => void;

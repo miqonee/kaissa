@@ -210,6 +210,10 @@ export interface TranslationSchema {
     animFast: string;
     animOff: string;
     animAdaptive: string;
+    autoQueen: string;
+    autoQueenPremove: string;
+    autoQueenAlways: string;
+    autoQueenNever: string;
   };
   material: {
     white: string;

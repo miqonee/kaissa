@@ -113,6 +113,16 @@ describe('Clock', () => {
     expect(r.flagged).toBeNull();
   });
 
+  it('премув Lichess-стандарта (isPremove=true): списывает 0 мс даже при сетевой задержке свыше 100 мс', () => {
+    let c = initClock(3000, 0); // 3 секунды без инкремента (цейтнот 3+0)
+    c = clockOnMove(c, 'w', 0).clock; // активен b, t=0
+    // Ход b пришёл через 350 мс из-за пинга, но был помечен как премув
+    const r = clockOnMove(c, 'b', 350, true);
+    // Списано ровно 0 мс!
+    expect(r.clock.blackMs).toBe(3000);
+    expect(r.flagged).toBeNull();
+  });
+
   it('snapshot корректно показывает списание', () => {
     let c = initClock(60_000, 0);
     c = clockOnMove(c, 'w', 0).clock; // активен b

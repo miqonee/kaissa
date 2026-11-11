@@ -209,6 +209,10 @@ export const en: TranslationSchema = {
     animFast: '2x faster',
     animOff: 'Disabled',
     animAdaptive: 'Adaptive (≤2m fast, ≤1m off)',
+    autoQueen: 'Promote to Queen',
+    autoQueenPremove: 'On premove',
+    autoQueenAlways: 'Always',
+    autoQueenNever: 'Always ask',
   },
   material: {
     white: 'White material', black: 'Black material', equal: 'No extra pieces',

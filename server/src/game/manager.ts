@@ -577,7 +577,7 @@ export class GamesManager {
 
   applyMove(
     gameId: number, uid: number,
-    data: { boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType },
+    data: { boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType; premove?: boolean },
     expectedPosition?: string,
   ): Promise<{ ok: true } | { ok: false; error: string }> {
     return this.serialize(gameId, () => this.applyMoveNow(gameId, uid, data, expectedPosition));
@@ -585,7 +585,7 @@ export class GamesManager {
 
   private async applyMoveNow(
     gameId: number, uid: number,
-    data: { boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType },
+    data: { boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType; premove?: boolean },
     expectedPosition?: string,
   ): Promise<{ ok: true } | { ok: false; error: string }> {
     const g = this.games.get(gameId);
@@ -648,7 +648,7 @@ export class GamesManager {
     let clocksAfter: [number, number] | null = null;
     if (g.timeControl.kind === 'clock') {
       const moverColor = g.mode === 'bughouse' ? TEAM_COLORS_BUGHOUSE[p.team as 1 | 2][data.boardIndex as Board] : p.color;
-      const r = clockOnMove(g.clocks[data.boardIndex], moverColor, now);
+      const r = clockOnMove(g.clocks[data.boardIndex], moverColor, now, Boolean(data.premove));
       g.clocks[data.boardIndex] = r.clock;
       if (r.flagged) {
         // флаг уже упал — завершаем (ход при этом засчитан)

@@ -3,11 +3,12 @@ import { trackGoal } from '../utils/analytics';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { ChatMessage, LobbySummary, TimeControl } from 'shared';
-import { GAME_MODES, isMultiplayer, lobbyCapacity, hasPockets, modeLabel as sharedModeLabel, type GameMode, eloToLevel, getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
+import { GAME_MODES, isFreeForAll, modeRulesPath, modeGuide, lobbyCapacity, hasPockets, modeLabel as sharedModeLabel, type GameMode, eloToLevel, getBotPersonality, getBotTooltip, timeControlLabel } from 'shared';
 import { getSocket, onSocketResync } from '../api/socket';
 import { useAuthStore } from '../stores/auth';
 import { useI18n } from '../stores/i18n';
 import AppIcon from '../components/AppIcon.vue';
+import ModeBoardPreview from '../components/ModeBoardPreview.vue';
 import BotHoverCard from '../components/BotHoverCard.vue';
 import { usePageSeo } from '../composables/useSeo';
 import { playMoveSound } from '../audio/sounds';
@@ -355,7 +356,7 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
           </div>
 
           <!-- Режим команд (для хоста обычных столов) -->
-          <div v-else-if="isHost && !isMultiplayer(lobby.mode)" class="team-mode-selector">
+          <div v-else-if="isHost && !isFreeForAll(lobby.mode)" class="team-mode-selector">
             <span class="dim tiny">{{ i18n.locale === 'en' ? 'Team mode:' : 'Режим команд:' }}</span>
             <div class="team-mode-pills">
               <button
@@ -390,9 +391,13 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
             <select id="lobby-mode" :value="lobby.mode" :disabled="!isHost || modeBusy" @change="changeMode(($event.target as HTMLSelectElement).value as GameMode)">
               <option v-for="mode in GAME_MODES" :key="mode" :value="mode">{{ modeLabel(mode) }}</option>
             </select>
-            <router-link :to="lobby.mode === 'bughouse' ? '/rules/bughouse' : lobby.mode === 'team' ? '/rules/duo' : isMultiplayer(lobby.mode) ? '/rules/multiplayer' : '/rules/crazyhouse'" target="_blank">{{ i18n.locale === 'en' ? 'Rules' : 'Правила' }}</router-link>
+            <router-link :to="modeRulesPath(lobby.mode)" target="_blank">{{ i18n.locale === 'en' ? 'Rules' : 'Правила' }}</router-link>
           </div>
 
+          <section class="lobby-mode-preview">
+            <ModeBoardPreview :mode="lobby.mode" />
+            <div><strong>{{ modeGuide(lobby.mode, i18n.locale).players }}</strong><p>{{ modeGuide(lobby.mode, i18n.locale).summary }}</p><p>{{ modeGuide(lobby.mode, i18n.locale).goal }}</p></div>
+          </section>
           <!-- Контроль времени (для хоста обычных столов или игроков быстрого стола) -->
           <div v-if="isHost || (quick && me)" class="tc-selector">
             <span class="dim tiny">{{ i18n.locale === 'en' ? 'Time control:' : 'Контроль времени:' }}</span>
@@ -428,7 +433,7 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
                     <AppIcon name="crown" :size="12" /> {{ i18n.locale === 'en' ? 'Host' : 'Хост' }}
                   </span>
                 </div>
-                <div v-if="lobby.teamMode === 'manual' && !isMultiplayer(lobby.mode)" class="team-picker">
+                <div v-if="lobby.teamMode === 'manual' && !isFreeForAll(lobby.mode)" class="team-picker">
                   <button
                     type="button"
                     class="tiny pill"
@@ -1062,4 +1067,12 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
   z-index: 2000;
   font-size: 14px;
 }
+</style>
+
+<style scoped>
+.lobby-mode-preview { display: grid; grid-template-columns: minmax(100px, 200px) minmax(0, 1fr); gap: 20px; align-items: center; padding: 16px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 12px 0; }
+.lobby-mode-preview strong { font-size: 12px; }
+.lobby-mode-preview p { font-size: 12px; color: var(--ink-2); margin: 8px 0 0; }
+.lobby-mode-preview :deep(.standard-boards svg), .lobby-mode-preview :deep(.multi-board-wrap:not(.double)) { max-width: 120px; }
+@media (max-width: 480px) { .lobby-mode-preview { grid-template-columns: 110px minmax(0, 1fr); gap: 12px; } }
 </style>

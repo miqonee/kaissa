@@ -9,10 +9,10 @@ for (const locale of ['ru', 'en']) {
   assert(html.includes(`<link rel="canonical" href="https://duochess.ru/rules/crazyhouse${locale === 'en' ? '?lang=en' : ''}"`));
   assert(html.includes('hreflang="ru" href="https://duochess.ru/rules/crazyhouse"'));
   assert(html.includes('hreflang="en" href="https://duochess.ru/rules/crazyhouse?lang=en"'));
-  const noscript = [...html.matchAll(/<noscript>([\s\S]*?)<\/noscript>/g)].map(m => m[1]).find(text => text.includes('<h1>')); assert(noscript);
-  assert.equal((noscript.match(/<h1>/g) ?? []).length, 1);
-  for (const field of ['heading', 'intro', 'team', 'end', 'start']) assert(noscript.includes(escape(content[locale][field])), field);
-  for (const example of content[locale].examples) assert(noscript.includes(escape(example.caption)));
+  const app = html.match(/<div id="app">([\s\S]*?)<\/div>/)?.[1]; assert(app);
+  assert.equal((app.match(/<h1>/g) ?? []).length, 1);
+  for (const field of ['heading', 'intro', 'team', 'end', 'start']) assert(app.includes(escape(content[locale][field])), field);
+  for (const example of content[locale].examples) assert(app.includes(escape(example.caption)));
   const schema = JSON.parse(html.match(/<script[^>]*type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
   assert.equal(schema[0].inLanguage, locale);
 }

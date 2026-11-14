@@ -6,18 +6,20 @@ import type { MultiSnapshot, SeatStatus } from './multi/engine.js';
 
 export type Team = 1 | 2 | 3 | 4;
 
-export const GAME_MODES = ['team', 'bughouse', 'crazyhouse', 'crazyhouse-team', 'four-player', 'three-player'] as const;
+export const GAME_MODES = ['team', 'bughouse', 'crazyhouse', 'crazyhouse-team', 'four-player', 'three-player', 'double'] as const;
 export type GameMode = typeof GAME_MODES[number];
-export type MultiMode = 'four-player' | 'three-player';
+export type MultiMode = 'four-player' | 'three-player' | 'double';
 export type MultiColor = 'red' | 'blue' | 'yellow' | 'green';
 
 export const SEAT_COLORS: Record<MultiMode, readonly MultiColor[]> = {
   'four-player': ['red', 'blue', 'yellow', 'green'],
   'three-player': ['red', 'blue', 'yellow'],
+  double: ['yellow', 'green', 'red', 'blue'],
 };
 
 export const isCrazyhouse = (mode: GameMode): boolean => mode === 'crazyhouse' || mode === 'crazyhouse-team';
-export const isMultiplayer = (mode: GameMode): mode is MultiMode => mode === 'four-player' || mode === 'three-player';
+export const isMultiplayer = (mode: GameMode): mode is MultiMode => mode === 'four-player' || mode === 'three-player' || mode === 'double';
+export const isFreeForAll = (mode: GameMode): boolean => mode === 'four-player' || mode === 'three-player';
 export const hasPockets = (mode: GameMode): boolean => mode === 'bughouse' || isCrazyhouse(mode);
 export const lobbyCapacity = (mode: GameMode): number =>
   mode === 'crazyhouse' ? 2 : mode === 'three-player' ? 3 : 4;
@@ -30,14 +32,13 @@ export function modeLabel(mode: GameMode, locale = 'ru'): string {
     'crazyhouse-team': 'Crazyhouse 2×2',
     'four-player': en ? '4 Players FFA' : '4 игрока (FFA)',
     'three-player': en ? '3 Players FFA' : '3 игрока (FFA)',
+    double: en ? 'Double Chess' : 'Двойные шахматы',
   })[mode];
 }
 export const defaultTimeControl = (mode: GameMode): TimeControl =>
-  false && isMultiplayer(mode)
-    ? { kind: 'clock', baseMin: 5, incSec: 3 }
-    : mode === 'team'
-      ? { kind: 'clock', baseMin: 3, incSec: 0 }
-      : { kind: 'none', baseMin: 0, incSec: 0 };
+  mode === 'team'
+    ? { kind: 'clock', baseMin: 3, incSec: 0 }
+    : { kind: 'none', baseMin: 0, incSec: 0 };
 
 // Контроль времени: без часов либо base+increment (минуты/секунды)
 export interface TimeControl {
@@ -224,7 +225,7 @@ export type ClientToServerEvents = {
 
   // Игра
   'game:move': (data: { gameId: number; boardIndex: 0 | 1; from: string; to: string; promotion?: PieceType; dropPiece?: DropPieceType; premove?: boolean }, cb: (res: Ack<null>) => void) => void;
-  'game:multi-move': (data: { gameId: number; from: string; to: string }, cb: (res: Ack<null>) => void) => void;
+  'game:multi-move': (data: { gameId: number; from: string; to: string; promotion?: PieceType }, cb: (res: Ack<null>) => void) => void;
   'game:resign': (gameId: number) => void;
   'game:chat': (gameId: number, text: string) => void;
 
@@ -478,6 +479,29 @@ export interface ModeInfo {
 }
 
 export const MODE_INFO: ModeInfo[] = [
+  {
+    mode: 'double', title: 'Двойные шахматы',
+    short: 'Общая длинная доска 16×8. У каждого свои фигуры, у команды общая победа.',
+    shortEn: 'One shared 16×8 board. Four armies, two teams, one shared victory.',
+    rules: [
+      'Жёлтые и красные против зелёных и синих. Порядок ходов: жёлтые, зелёные, красные, синие.',
+      'Каждый управляет своим цветом. Фигуры свободно пересекают середину доски; союзников брать нельзя.',
+      'Мат проверяется только в начале хода игрока под шахом. До этого союзник может помочь или поставить решающий мат сопернику раньше.',
+      'Если в начале хода можно легально взять короля соперника, команда сразу побеждает.',
+      'Рокировка — в пределах исходной половины. Пешка превращается на дальнем краю; доступны ферзь, ладья, слон и конь.',
+      'Взятие на проходе — только следующим ходом после двойного хода вражеской пешки.',
+      'Мат, сдача или флаг проигрывают матч всей команде. Пат, троекратное повторение и 50 кругов без взятий и ходов пешками дают ничью.',
+    ],
+    rulesEn: [
+      'Yellow and Red play against Green and Blue. Turn order: Yellow, Green, Red, Blue.',
+      'Each player controls one colour. Pieces may cross the central seam; allies cannot capture each other.',
+      'Mate is checked only when the checked player is to move. An ally may rescue them or create an earlier decisive mate.',
+      'If a player can legally capture an enemy king at the start of their turn, their team wins immediately.',
+      'Castling stays within the starting half. Pawns promote at the far edge to a queen, rook, bishop or knight.',
+      'En passant is available only on the immediately following turn after an enemy pawn’s double step.',
+      'Checkmate, resignation or timeout loses for the whole team. Stalemate, threefold repetition and 50 quiet rounds are draws.',
+    ],
+  },
   {
     mode: 'crazyhouse', title: 'Crazyhouse 1×1',
     shortEn: 'One board, two players. Captured pieces become your reserve.',
@@ -917,3 +941,34 @@ export interface PlatformMetrics {
 export * from './openings.js';
 
 
+
+export function modeRulesPath(mode: GameMode): string {
+  return mode === 'double' ? '/rules/double' : mode === 'team' ? '/rules/duo' :
+    mode === 'bughouse' ? '/rules/bughouse' : isFreeForAll(mode) ? '/rules/multiplayer' : '/rules/crazyhouse';
+}
+
+export const MODE_GROUPS: { id: string; ru: string; en: string; modes: GameMode[] }[] = [
+  { id: 'team', ru: 'Командные', en: 'Team play', modes: ['team', 'double', 'bughouse'] },
+  { id: 'reserve', ru: 'С резервом', en: 'With reserves', modes: ['crazyhouse', 'crazyhouse-team'] },
+  { id: 'ffa', ru: 'Каждый за себя', en: 'Free for all', modes: ['three-player', 'four-player'] },
+];
+
+export function modeGuide(mode: GameMode, locale = 'ru') {
+  const en = locale === 'en';
+  const info = MODE_INFO.find(i => i.mode === mode)!;
+  const details = {
+    team: en ? ['8×8 · one board', '4 players · two teams', 'Checkmate the opposing team'] : ['8×8 · одна доска', '4 игрока · две команды', 'Поставить мат команде соперника'],
+    double: en ? ['16×8 · shared long board', '4 colours · two teams', 'The first confirmed mate wins for the team'] : ['16×8 · общая длинная доска', '4 цвета · две команды', 'Первый подтверждённый мат — победа команды'],
+    bughouse: en ? ['Two 8×8 boards', '4 players · two teams', 'Checkmate on either board wins the match'] : ['Две доски 8×8', '4 игрока · две команды', 'Мат на любой доске завершает матч'],
+    crazyhouse: en ? ['8×8 · your own reserve', '2 players · one against one', 'Use captured pieces to checkmate'] : ['8×8 · личный резерв', '2 игрока · один на один', 'Поставить мат, используя взятые фигуры'],
+    'crazyhouse-team': en ? ['8×8 · shared team reserve', '4 players · two teams', 'Partners alternate moves and share a reserve'] : ['8×8 · резерв команды', '4 игрока · две команды', 'Напарники чередуют ходы и делят резерв'],
+    'three-player': en ? ['96 cells · hexagonal board', '3 colours · free for all', 'Score the most points from captures and mates'] : ['96 клеток · шестиугольная доска', '3 цвета · каждый за себя', 'Набрать больше очков за взятия и маты'],
+    'four-player': en ? ['14×14 · cross board', '4 colours · free for all', 'Score the most points from captures and mates'] : ['14×14 · доска-крест', '4 цвета · каждый за себя', 'Набрать больше очков за взятия и маты'],
+  }[mode];
+  const fallback: Record<string, string> = {
+    team: 'Partners share one colour and alternate moves.',
+    bughouse: 'Captures on one board become your partner’s reserve on the other.',
+  };
+  return { name: modeLabel(mode, locale), summary: en ? info.shortEn ?? fallback[mode] ?? info.short : info.short,
+    board: details[0], players: details[1], goal: details[2], rules: en ? info.rulesEn ?? [] : info.rules, path: modeRulesPath(mode) };
+}

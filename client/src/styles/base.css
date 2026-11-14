@@ -335,3 +335,7 @@ main.page {
   color: var(--ink-3);
   font-size: 13.5px;
 }
+
+/* Wider browsing and setup screens; game layout keeps its existing dimensions. */
+main.page:has(.home), main.page:has(.lobby-page) { max-width: 1480px; }
+main.page:has(.multi-game-page.double-game) { max-width: 1680px; }

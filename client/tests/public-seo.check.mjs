@@ -60,6 +60,8 @@ for (const [route, variants] of Object.entries(content))
       html.includes(`<h1>${escape(variants[locale].heading)}</h1>`),
       `${file}: readable HTML`,
     );
+    const appContent = html.match(/<div id="app">([\s\S]*?)<\/div>/)?.[1] ?? '';
+    assert(appContent.includes(`<h1>${escape(variants[locale].heading)}</h1>`), `${file}: primary content is in app HTML`);
     // Favicons must be present and located before any <script> in <head>
     const faviconIcoIdx = html.indexOf('href="/favicon.ico"');
     const faviconSvgIdx = html.indexOf('href="/favicon.svg"');

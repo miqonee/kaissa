@@ -73,6 +73,7 @@ export const router = createRouter({
           'Официальные правила командных шахмат 2 на 2 на одной доске. Поочерёдные ходы напарников, командные часы, тактика игры в паре на платформе Каисса.',
       },
     },
+    { path: '/rules/double', name: 'rules-double', component: () => import('./pages/DoubleRulesPage.vue'), meta: { title: 'Двойные шахматы — правила 16×8 | Каисса' } },
     { path: '/rules', redirect: '/rules/duo' },
     {
       path: '/rules/multiplayer',

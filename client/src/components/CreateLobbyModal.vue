@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { MODE_INFO, isMultiplayer, modeLabel, type GameMode, type TeamMode, type TimeControl } from 'shared';
+import { isFreeForAll, modeLabel, type GameMode, type TeamMode, type TimeControl } from 'shared';
 import { useI18n } from '../stores/i18n';
 import { useDialog } from '../composables/useDialog';
 import AppIcon from './AppIcon.vue';
+import ModePicker from './ModePicker.vue';
 
 const i18n = useI18n();
 
@@ -13,6 +14,7 @@ const emit = defineEmits<{
 }>();
 
 const props = defineProps<{
+  initialMode?: GameMode;
   busy?: boolean;
   error?: string;
 }>();
@@ -20,23 +22,10 @@ const props = defineProps<{
 const dialog = ref<HTMLElement | null>(null);
 useDialog(dialog, () => { if (!props.busy) emit('close'); });
 
-const selectedMode = ref<GameMode>('bughouse');
+const selectedMode = ref<GameMode>(props.initialMode ?? 'bughouse');
 const lobbyName = ref('');
 const isPrivate = ref(false);
 const selectedTeamMode = ref<TeamMode>('auto');
-const expandedRules = ref<Record<GameMode, boolean>>({
-  bughouse: false,
-  team: false,
-  crazyhouse: false,
-  'crazyhouse-team': false,
-  'four-player': false,
-  'three-player': false,
-});
-
-function toggleRules(mode: GameMode) {
-  expandedRules.value[mode] = !expandedRules.value[mode];
-}
-
 const tcPresets = computed<{ label: string; tc: TimeControl }[]>(() => [
   { label: '3+0', tc: { kind: 'clock', baseMin: 3, incSec: 0 } },
   { label: i18n.t.createModal.tc3plus2, tc: { kind: 'clock', baseMin: 3, incSec: 2 } },
@@ -45,7 +34,7 @@ const tcPresets = computed<{ label: string; tc: TimeControl }[]>(() => [
   { label: i18n.t.createModal.tc10plus5, tc: { kind: 'clock', baseMin: 10, incSec: 5 } },
   { label: i18n.t.createModal.tcNoClock, tc: { kind: 'none', baseMin: 0, incSec: 0 } },
 ]);
-const modeTc = ref<Record<GameMode, number>>({ team: 0, bughouse: 5, crazyhouse: 5, 'crazyhouse-team': 5, 'four-player': 5, 'three-player': 5 });
+const modeTc = ref<Record<GameMode, number>>({ team: 0, bughouse: 5, crazyhouse: 5, 'crazyhouse-team': 5, 'four-player': 5, 'three-player': 5, double: 5 });
 const availableTcPresets = computed(() =>
   tcPresets.value,
   // All time controls allowed in all modes
@@ -101,36 +90,7 @@ function submit() {
         <!-- Выбор режима с подробными правилами -->
         <div class="form-row">
           <label class="field-label">{{ i18n.t.createModal.modeLabel }}</label>
-          <div class="mode-cards">
-            <div
-              v-for="info in MODE_INFO"
-              :key="info.mode"
-              class="mode-card"
-              :class="{ active: selectedMode === info.mode }"
-              @click="selectedMode = info.mode"
-            >
-              <label class="mode-card-head">
-                <input v-model="selectedMode" type="radio" name="game-mode" :value="info.mode" :aria-label="modeLabel(info.mode, i18n.locale)" />
-                <span class="mode-title">{{ modeLabel(info.mode, i18n.locale) }}</span>
-                <span v-if="selectedMode === info.mode" class="mode-check">
-                  <AppIcon name="check" :size="13" :stroke-width="2.6" />
-                </span>
-              </label>
-              <p class="mode-short">{{ i18n.locale === 'en' ? info.shortEn ?? info.short : info.short }}</p>
-              <button
-                type="button"
-                class="mode-rules-toggle"
-                @click.stop="toggleRules(info.mode)"
-              >
-                <span>{{ expandedRules[info.mode] ? (i18n.locale === 'en' ? 'Hide rules' : 'Скрыть правила') : (i18n.locale === 'en' ? 'Game rules' : 'Правила режима') }}</span>
-                <AppIcon :name="expandedRules[info.mode] ? 'chevron-up' : 'chevron-down'" :size="13" />
-              </button>
-              <ul v-if="expandedRules[info.mode]" class="mode-rules">
-                <li v-for="(r, i) in (i18n.locale === 'en' ? info.rulesEn ?? info.rules : info.rules)" :key="i">{{ r }}</li>
-                <li v-if="info.mode === 'bughouse'">{{ i18n.locale === 'en' ? 'Play with people or bots' : 'Играйте с людьми или ботами' }}</li>
-              </ul>
-            </div>
-          </div>
+          <ModePicker v-model="selectedMode" :disabled="busy" />
         </div>
 
         <!-- Контроль времени -->
@@ -152,7 +112,7 @@ function submit() {
         </div>
 
         <!-- Режим распределения команд -->
-        <div v-if="!isMultiplayer(selectedMode)" class="form-row">
+        <div v-if="!isFreeForAll(selectedMode)" class="form-row">
           <label class="field-label">{{ i18n.t.createModal.teamBalanceLabel }}</label>
           <div class="tc-grid">
             <button
@@ -213,23 +173,10 @@ function submit() {
 </template>
 
 <style scoped>
-.mode-card-head { cursor:pointer; }
-/* Keep native keyboard selection and screen-reader state without a visible radio. */
-.mode-card input[type="radio"] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
-.mode-card:focus-within { outline:2px solid var(--accent); outline-offset:2px; }
 .create-modal {
-  max-width: 620px;
-  max-height: min(92vh, 700px);
+  width: min(1080px, calc(100vw - 32px));
+  max-width: 1080px;
+  max-height: 92dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -255,105 +202,6 @@ function submit() {
 }
 .form-row:last-child {
   margin-bottom: 0;
-}
-
-.mode-cards {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-@media (max-width: 600px) {
-  .mode-cards {
-    grid-template-columns: 1fr;
-  }
-}
-
-.mode-card {
-  position: relative;
-  border: 1.5px solid var(--line-2);
-  border-radius: var(--r-m);
-  padding: 12px 14px;
-  background: var(--surface-inset);
-  cursor: pointer;
-  transition: all 0.15s;
-  display: flex;
-  flex-direction: column;
-}
-
-.mode-card:hover {
-  border-color: var(--accent-2);
-  background: color-mix(in srgb, var(--accent-2) 6%, var(--surface-inset));
-}
-
-.mode-card.active {
-  border-color: var(--accent-2);
-  box-shadow: 0 0 0 2px var(--accent-2);
-  background: var(--surface-2);
-}
-
-.mode-card-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.mode-title {
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--ink);
-}
-
-.mode-check {
-  background: var(--accent-2);
-  color: var(--accent-ink);
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.mode-short {
-  font-size: 12px;
-  color: var(--ink-2);
-  margin: 0 0 6px;
-  line-height: 1.35;
-}
-
-.mode-rules-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: transparent;
-  border: none;
-  color: var(--ink-2);
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 2px 0;
-  margin-top: auto;
-  align-self: flex-start;
-  opacity: 0.85;
-  transition: opacity 0.15s, color 0.15s;
-}
-
-.mode-rules-toggle:hover {
-  opacity: 1;
-  color: var(--ink);
-}
-
-.mode-rules {
-  margin: 8px 0 0;
-  padding-left: 16px;
-  font-size: 11.5px;
-  color: var(--ink-3);
-  line-height: 1.4;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
 }
 
 .tc-grid {

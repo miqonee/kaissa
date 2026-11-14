@@ -170,7 +170,7 @@ gamesRouter.get('/:id/pgn', requireRegistered, asyncRoute(async (req, res) => {
   if (!Number.isFinite(id)) return void res.status(400).json({ error: 'Некорректный id' });
   const data = await getPgnData(id);
   if (!data) return void res.status(404).json({ error: 'Партия не найдена' });
-  if (isMultiplayer(data.mode as GameMode)) return void res.status(404).json({ error: 'PGN недоступен для режимов на 3 и 4 игрока' });
+  if (isMultiplayer(data.mode as GameMode)) return void res.status(404).json({ error: 'Для этой формы доски используйте встроенный повтор' });
 
   const boardQuery = req.query.board !== undefined ? parseInt(String(req.query.board), 10) : undefined;
   const pgn = buildPgn(data.game, data.moves, boardQuery);

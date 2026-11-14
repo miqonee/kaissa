@@ -100,6 +100,11 @@ describe('SEO & Sitemap Specification', () => {
       expect(xml).toContain('<xhtml:link rel="alternate" hreflang="ru" href="https://duochess.ru/" />');
       expect(xml).toContain('<xhtml:link rel="alternate" hreflang="en" href="https://duochess.ru/?lang=en" />');
       expect(xml).toContain('<xhtml:link rel="alternate" hreflang="x-default" href="https://duochess.ru/" />');
+      expect(xml).toContain('<loc>https://duochess.ru/?lang=en</loc>');
+      expect(xml).toContain('<loc>https://duochess.ru/rules/double</loc>');
+      expect(xml).toContain('<loc>https://duochess.ru/rules/double?lang=en</loc>');
+      expect(xml).not.toContain('/login</loc>');
+      expect(xml).not.toContain('/login?lang=en</loc>');
 
       const validation = validateSitemapXml(xml);
       expect(validation.valid).toBe(true);

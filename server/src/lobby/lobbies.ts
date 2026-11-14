@@ -10,7 +10,7 @@ import type {
   TeamMode,
   TimeControl,
 } from 'shared';
-import { GAME_MODES, isMultiplayer, lobbyCapacity, defaultTimeControl, modeLabel, eloToLevel } from 'shared';
+import { GAME_MODES, isMultiplayer, isFreeForAll, lobbyCapacity, defaultTimeControl, modeLabel, eloToLevel } from 'shared';
 import { loadPlayerRatings } from '../ratings/service.js';
 import { presence } from '../socket/presence.js';
 import { prisma } from '../prisma.js';
@@ -695,7 +695,7 @@ export class LobbiesManager {
 
   setTeamChoice(lobbyId: string, uid: number, team: 1 | 2 | null): void {
     const lobby = this.lobbies.get(lobbyId);
-    if (!lobby || isMultiplayer(lobby.mode) || lobby.teamMode !== 'manual') return;
+    if (!lobby || isFreeForAll(lobby.mode) || lobby.teamMode !== 'manual') return;
     const m = lobby.members.get(uid);
     if (!m) return;
 
@@ -719,7 +719,7 @@ export class LobbiesManager {
 
   setTeamMode(lobbyId: string, uid: number, teamMode: TeamMode): void {
     const lobby = this.lobbies.get(lobbyId);
-    if (!lobby || isMultiplayer(lobby.mode)) return;
+    if (!lobby || isFreeForAll(lobby.mode)) return;
     const m = lobby.members.get(uid);
     if (!m?.host) return;
     lobby.teamMode = teamMode;
@@ -1019,7 +1019,9 @@ export class LobbiesManager {
       isBot: m.isBot,
       botLevel: m.isBot ? eloToLevel(m.rating) : m.botLevel,
     });
-    const shuffledSeats = isMultiplayer(lobby.mode)
+    const shuffledSeats = lobby.mode === 'double'
+      ? [team1[0], team2[0], team1[1], team2[1]].map(toSetup)
+      : isMultiplayer(lobby.mode)
       ? [...membersList].sort(() => Math.random() - 0.5).map(toSetup)
       : undefined;
     try { gameId = await this.games!.createGame({
@@ -1107,7 +1109,7 @@ export class LobbiesManager {
     );
 
     // Автоматически переносим ботов из предыдущей игры
-    if (!isMultiplayer(opts.mode) && players.every(p => p.team === 1 || p.team === 2)) {
+    if (!isFreeForAll(opts.mode) && players.every(p => p.team === 1 || p.team === 2)) {
       lobby.rematchTeams = [1, 2].map(team => players.filter(p => p.team === team).sort((a, b) => (a.seat ?? 0) - (b.seat ?? 0)).map(p => p.uid)) as [number[], number[]];
     }
     for (const p of players) {

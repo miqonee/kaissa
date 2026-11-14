@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import type { MPiece, MultiMode, MultiSnapshot } from 'shared';
+import { computed, ref, watch } from 'vue';
+import type { MPiece, MultiMode, MultiSnapshot, PieceType } from 'shared';
 import { getTopology, MultiChess, SEAT_COLORS } from 'shared';
+import PawnPromotionDialog from './PawnPromotionDialog.vue';
 
 const props = withDefaults(
   defineProps<{
     mode: MultiMode;
+    locale?: 'ru' | 'en';
     snapshot?: MultiSnapshot | null;
     fen?: string | null;
     viewerSeat?: number;
@@ -16,6 +18,7 @@ const props = withDefaults(
     mini?: boolean;
   }>(),
   {
+    locale: 'ru',
     snapshot: null,
     fen: null,
     viewerSeat: 0,
@@ -28,10 +31,30 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  (e: 'move', payload: { from: string; to: string }): void;
+  (e: 'move', payload: { from: string; to: string; promotion?: PieceType }): void;
 }>();
 
 const topology = computed(() => getTopology(props.mode));
+
+const viewWidth = computed(() => topology.value.viewWidth ?? topology.value.viewSize);
+const viewHeight = computed(() => topology.value.viewHeight ?? topology.value.viewSize);
+const doubleZoomed = ref(false);
+const promotionMove = ref<{ from: string; to: string; seat: number } | null>(null);
+
+function requestMove(from: string, to: string): void {
+  const piece = boardMap.value[from];
+  if (props.mode === 'double' && piece?.role === 'p' && topology.value.isPromotion(to, piece.seat)) {
+    promotionMove.value = { from, to, seat: piece.seat };
+  } else emit('move', { from, to });
+}
+function promote(promotion: PieceType): void {
+  const move = promotionMove.value;
+  promotionMove.value = null;
+  if (move && props.myTurn && props.dests[move.from]?.includes(move.to)) emit('move', { from: move.from, to: move.to, promotion });
+}
+watch(() => [props.myTurn, props.snapshot?.turn, props.fen, props.mode], () => {
+  selectedFrom.value = null; dragState.value = null; promotionMove.value = null;
+});
 
 const rotationDeg = computed(() => {
   const seat = Math.max(0, Math.min(topology.value.seats - 1, props.viewerSeat ?? 0));
@@ -128,15 +151,14 @@ function clientToBoardPoint(clientX: number, clientY: number): [number, number] 
   if (!svg) return null;
   const rect = svg.getBoundingClientRect();
   if (!rect.width || !rect.height) return null;
-  const vs = topology.value.viewSize;
-  const half = vs / 2;
-  const rawX = ((clientX - rect.left) / rect.width) * vs;
-  const rawY = ((clientY - rect.top) / rect.height) * vs;
+  const halfX = viewWidth.value / 2, halfY = viewHeight.value / 2;
+  const rawX = ((clientX - rect.left) / rect.width) * viewWidth.value;
+  const rawY = ((clientY - rect.top) / rect.height) * viewHeight.value;
   const rad = (-rotationDeg.value * Math.PI) / 180;
-  const dx = rawX - half;
-  const dy = rawY - half;
-  const bx = half + dx * Math.cos(rad) - dy * Math.sin(rad);
-  const by = half + dx * Math.sin(rad) + dy * Math.cos(rad);
+  const dx = rawX - halfX;
+  const dy = rawY - halfY;
+  const bx = halfX + dx * Math.cos(rad) - dy * Math.sin(rad);
+  const by = halfY + dx * Math.sin(rad) + dy * Math.cos(rad);
   return [bx, by];
 }
 
@@ -160,11 +182,11 @@ function findCellAtPoint(pt: [number, number]): string | null {
 }
 
 function onCellClick(cellId: string): void {
-  if (props.mini || !props.myTurn) return;
+  if (props.mini || !props.myTurn || promotionMove.value) return;
   if (selectedFrom.value && activeDests.value.has(cellId)) {
     const from = selectedFrom.value;
     selectedFrom.value = null;
-    emit('move', { from, to: cellId });
+    requestMove(from, cellId);
     return;
   }
   if (canSelectCell(cellId)) {
@@ -175,7 +197,7 @@ function onCellClick(cellId: string): void {
 }
 
 function onPointerDown(cellId: string, e: PointerEvent): void {
-  if (props.mini || !props.myTurn) return;
+  if (props.mini || !props.myTurn || promotionMove.value) return;
   if (e.button !== 0) return;
   if (!canSelectCell(cellId)) return;
   const p = boardMap.value[cellId];
@@ -215,7 +237,7 @@ function onPointerUp(e: PointerEvent): void {
   const target = findCellAtPoint(pt);
   if (target && target !== st.from && (props.dests?.[st.from] ?? []).includes(target)) {
     selectedFrom.value = null;
-    emit('move', { from: st.from, to: target });
+    requestMove(st.from, target);
   } else {
     selectedFrom.value = st.from;
   }
@@ -224,19 +246,25 @@ function onPointerUp(e: PointerEvent): void {
 function resetView(): void {
   selectedFrom.value = null;
   dragState.value = null;
+  promotionMove.value = null;
 }
 
 defineExpose({ resetView });
 </script>
 
 <template>
-  <div class="multi-board-wrap" :class="[mode, { mini, interactive: myTurn && !mini }]">
+  <div class="multi-board-wrap" :class="[mode, { mini, interactive: myTurn && !mini, zoomed: mode === 'double' && doubleZoomed }]">
+    <div v-if="mode === 'double' && !mini" class="double-view-controls">
+      <button class="small" :class="{ primary: !doubleZoomed }" :aria-pressed="!doubleZoomed" @click="doubleZoomed = false">{{ locale === 'en' ? 'Full board' : 'Вся доска' }}</button>
+      <button class="small" :class="{ primary: doubleZoomed }" :aria-pressed="doubleZoomed" @click="doubleZoomed = true">{{ locale === 'en' ? 'Larger' : 'Крупнее' }}</button>
+      <span aria-live="polite">{{ doubleZoomed ? (locale === 'en' ? 'Swipe sideways' : 'Листайте влево и вправо') : '16×8' }}</span>
+    </div>
     <svg
       ref="svgRef"
       class="multi-board-svg"
-      :viewBox="`0 0 ${topology.viewSize} ${topology.viewSize}`"
+      :viewBox="`0 0 ${viewWidth} ${viewHeight}`"
       role="img"
-      :aria-label="mode === 'four-player' ? '4-Player Cross Chessboard' : '3-Player Hexagonal Chessboard'"
+      :aria-label="mode === 'double' ? 'Double Chess 16×8' : mode === 'four-player' ? '4-Player Cross Chessboard' : '3-Player Hexagonal Chessboard'"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
       @pointercancel="dragState = null"
@@ -249,7 +277,13 @@ defineExpose({ resetView });
         </radialGradient>
       </defs>
 
-      <g :transform="`rotate(${rotationDeg} ${topology.viewSize / 2} ${topology.viewSize / 2})`">
+      <g :transform="`rotate(${rotationDeg} ${viewWidth / 2} ${viewHeight / 2})`">
+        <g v-if="mode === 'double' && !mini" class="double-coordinates" pointer-events="none">
+          <template v-for="cell in topology.cells" :key="cell.id">
+            <text v-if="cell.id.endsWith('1')" :x="cell.center[0]" :y="viewHeight - 7" :transform="`rotate(${-rotationDeg} ${cell.center[0]} ${viewHeight - 7})`">{{ cell.id[0] }}</text>
+            <text v-if="cell.id.startsWith('a')" x="12" :y="cell.center[1] + 4" :transform="`rotate(${-rotationDeg} 12 ${cell.center[1] + 4})`">{{ cell.id.slice(1) }}</text>
+          </template>
+        </g>
         <!-- Cells -->
         <g
           v-for="cell in topology.cells"
@@ -333,6 +367,7 @@ defineExpose({ resetView });
         </g>
       </g>
     </svg>
+    <PawnPromotionDialog v-if="promotionMove" :locale="locale" :color="SEAT_COLORS[mode][promotionMove.seat]" @choose="promote" @cancel="promotionMove = null" />
   </div>
 </template>
 
@@ -397,4 +432,15 @@ defineExpose({ resetView });
   stroke: rgba(220, 38, 38, 0.65);
   stroke-width: 5.5;
 }
+</style>
+
+<style scoped>
+.double-coordinates { font: 13px sans-serif; fill: var(--ink-2); text-anchor: middle; }
+.multi-board-wrap.double { aspect-ratio: 1008 / 528; height: auto; }
+.multi-board-wrap.double:not(.mini) { display: block; overflow-x: auto; aspect-ratio: auto; touch-action: pan-x; }
+.multi-board-wrap.double > .multi-board-svg { height: auto; aspect-ratio: 1008 / 528; }
+.multi-board-wrap.double:not(.mini) > .multi-board-svg { min-width: 0; touch-action: pan-x; }
+.multi-board-wrap.double.zoomed:not(.mini) > .multi-board-svg { min-width: 640px; }
+.double-view-controls { display: none; }
+@media (max-width: 640px) { .double-view-controls { display: flex; align-items: center; gap: 6px; padding: 8px 0; position: sticky; left: 0; width: 100%; background: var(--surface); border-radius: var(--r-s); } .double-view-controls span { min-width: 0; font-size: 10px; color: var(--ink-2); margin-left: auto; padding-right: 6px; } }
 </style>

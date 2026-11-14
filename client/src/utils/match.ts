@@ -1,4 +1,4 @@
-import { isMultiplayer, normalizedResult, type GameSummary } from "shared";
+import { isFreeForAll, normalizedResult, type GameSummary } from "shared";
 export function matchOutcome(
   game: GameSummary,
   viewerId?: number,
@@ -10,7 +10,7 @@ export function matchOutcome(
     return en
       ? "Abandoned · no rating change"
       : "Не завершена · без изменения рейтинга";
-  if (isMultiplayer(game.mode)) {
+  if (isFreeForAll(game.mode)) {
     const me = game.participants.find((p) => p.userId === viewerId);
     if (me && me.place != null) {
       const pts = me.score ?? 0;

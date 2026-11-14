@@ -2,7 +2,7 @@ import {
   eloDelta,
   expectedScoreElo,
   ELO_K,
-  isMultiplayer,
+  isFreeForAll,
   START_RATING,
   type GameMode,
   type GameResult,
@@ -29,7 +29,7 @@ export function ratingKind(
   mode?: GameMode,
 ): RatingKind {
   if (players.some((p) => p.isGuest)) return "guest";
-  if (mode && isMultiplayer(mode)) {
+  if (mode && isFreeForAll(mode)) {
     const humans = players.filter((p) => !p.isBot);
     return humans.length >= 2 ? "rated" : "bots";
   }
@@ -104,7 +104,7 @@ export async function saveGameResult(
     try {
       return await prisma.$transaction(
         async (tx) => {
-          const isMulti = isMultiplayer(game.mode);
+          const isMulti = isFreeForAll(game.mode);
           const won = result === "1-0" ? 1 : result === "0-1" ? 2 : null;
           const changed = await tx.game.updateMany({
             where: { id: game.id, status: "active" },

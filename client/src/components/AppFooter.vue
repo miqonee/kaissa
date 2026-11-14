@@ -45,6 +45,8 @@ const i18n = useI18n();
         <nav class="footer-bottom-nav" aria-label="Правила и о платформе">
           <router-link to="/rules/duo" class="footer-link">{{ i18n.t.footer.rulesDuo }}</router-link>
           <span class="footer-sep">·</span>
+          <router-link to="/rules/double" class="footer-link">{{ i18n.locale === 'en' ? 'Double Chess' : 'Двойные шахматы' }}</router-link>
+          <span class="footer-sep">·</span>
           <router-link to="/rules/bughouse" class="footer-link">{{ i18n.t.footer.rulesBughouse }}</router-link>
           <span class="footer-sep">·</span>
           <router-link to="/rules/crazyhouse" class="footer-link">Crazyhouse</router-link>

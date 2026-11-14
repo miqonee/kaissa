@@ -18,7 +18,7 @@ export function chooseMultiMove(snapshot: MultiSnapshot, botRating = 1200): Mult
   const pieceValues = base.topology.pieceValues();
   const candidates: { from: string; to: string; score: number }[] = [];
   const centerX = base.topology.viewSize / 2;
-  const centerY = base.topology.viewSize / 2;
+  const centerY = (base.topology.viewHeight ?? base.topology.viewSize) / 2;
   const maxDist = base.topology.viewSize * 0.7;
 
   for (const [from, tos] of legalMap.entries()) {
@@ -30,6 +30,22 @@ export function chooseMultiMove(snapshot: MultiSnapshot, botRating = 1200): Mult
       const outcome = sim.move(seat, from, to);
 
       let score = outcome.pointsAwarded * 12;
+      if (snapshot.variant === 'double') {
+        if (outcome.captured) score += pieceValues[outcome.captured.role] * 12;
+        if (outcome.over && sim.teamResult() !== '1/2-1/2') {
+          score += sim.teamResult() === (seat % 2 === 0 ? '1-0' : '0-1') ? 10000 : -10000;
+        }
+        const ally = (seat + 2) % 4;
+        if (base.isSeatInCheck(ally) && !sim.isSeatInCheck(ally)) score += 60;
+        if (!base.isSeatInCheck(ally) && sim.isSeatInCheck(ally)) score -= 120;
+        // Account for the next opponent's best capture and immediate team result.
+        if (!outcome.over) for (const [replyFrom, replyTos] of sim.legalMoves()) {
+          for (const replyTo of replyTos) {
+            const captured = sim.pieceAt(replyTo);
+            if (captured && base.areAllies(seat, captured.seat)) score -= pieceValues[captured.role] * 0.7;
+          }
+        }
+      }
 
       // Checkmate / elimination bonus is already included in pointsAwarded (+20),
       // add extra tactical priority for delivering check or mate
@@ -52,7 +68,7 @@ export function chooseMultiMove(snapshot: MultiSnapshot, botRating = 1200): Mult
         const simBoard = sim.snapshot().board;
         delete simBoard[to];
         const defended = sim.isSquareAttacked(to, -1, Object.fromEntries(
-          Object.entries(simBoard).filter(([, p]) => p.seat === seat && !p.dead),
+          Object.entries(simBoard).filter(([, p]) => base.areAllies(p.seat, seat) && !p.dead),
         ));
         if (!defended) {
           score -= myValue * 11;

@@ -253,6 +253,7 @@ export function registerSocketHandlers(io: Server<ClientToServerEvents, ServerTo
       const r = await gamesManager.applyMultiMove(data.gameId, ctx.uid, {
         from: String(data.from),
         to: String(data.to),
+        promotion: data.promotion,
       });
       if (!r.ok) {
         cb?.({ ok: false, error: r.error });

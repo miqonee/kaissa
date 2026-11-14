@@ -5,6 +5,14 @@ import { MultiChess } from 'shared';
 import MultiBoard from '../src/components/MultiBoard.vue';
 
 describe('MultiBoard SVG component', () => {
+  it('renders Double Chess in a rectangular viewbox and rotates about its centre', async () => {
+    const app = createSSRApp({ render: () => h(MultiBoard, { mode: 'double', viewerSeat: 1 }) });
+    const html = await renderToString(app);
+    expect(html.match(/data-cell="/g)).toHaveLength(128);
+    expect(html).toContain('viewBox="0 0 1008 528"');
+    expect(html).toContain('rotate(180 504 264)');
+    for (const color of ['yellow', 'green', 'red', 'blue']) expect(html).toContain(`/pieces/multi/${color}K.svg`);
+  });
   it('renders 160 cells for four-player and legal destination indicators when myTurn=true', async () => {
     const engine = MultiChess.create('four-player');
     const app = createSSRApp({

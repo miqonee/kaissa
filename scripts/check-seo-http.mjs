@@ -92,6 +92,9 @@ assert(!xml.includes("/login</loc>"));
 assert(!xml.includes("/players/Guest_"));
 assert(xml.includes("/rules/crazyhouse</loc>"));
 assert(xml.includes("/rules/multiplayer</loc>"));
+assert(xml.includes("/rules/double</loc>"));
+assert(xml.includes("/rules/double?lang=en</loc>"));
+assert(xml.includes("/?lang=en</loc>"));
 const robots = await (await fetch(base + "/robots.txt")).text();
 assert(robots.includes("Disallow: /api/"));
 assert(robots.includes("Allow: /favicon.ico"));
@@ -107,6 +110,19 @@ for (const [iconPath, mime] of [
   assert(iconRes.headers.get("content-type")?.includes(mime), `${iconPath} content-type`);
   await iconRes.arrayBuffer();
 }
+// Existing profiles must replace the app body as well as the homepage metadata.
+const leaderboard = await (await fetch(base + '/api/users/leaderboard?mode=all')).json();
+const profile = leaderboard.leaderboard?.[0];
+if (profile) for (const locale of ['ru', 'en']) {
+  const path = '/players/' + encodeURIComponent(profile.username) + (locale === 'en' ? '?lang=en' : '');
+  const response = await fetch(base + path);
+  const html = await response.text();
+  assert.equal(response.status, 200, path);
+  assert.equal((html.match(/<h1>/g) ?? []).length, 1, path + ' one H1');
+  assert(html.includes(`<h1>${escape(profile.username)} — `), path + ' profile body');
+  assert(!html.includes(pages['/'][locale].heading), path + ' no homepage body');
+  assert(html.includes(`rel="canonical" href="https://duochess.ru${path}"`), path + ' canonical');
+}
 console.log(
-  "OK: Nginx serves 16 localized public pages, correct canonical/robots headers, transient noindex routes, real 404 (including trailing slash and asset dirs), query-preserving redirect, sitemap, robots, favicons and OG image",
+  `OK: Nginx serves ${(Object.keys(pages).length + 1) * 2} localized public pages, correct canonical/robots headers, transient noindex routes, real 404 (including trailing slash and asset dirs), query-preserving redirect, sitemap, robots, favicons and OG image`,
 );

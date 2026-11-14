@@ -68,8 +68,13 @@ profilePages.get('/players/:username', asyncRoute(async (req, res) => {
     .replace(/<link rel="canonical" href="[^"]*"\s*\/?>/, `<link rel="canonical" href="${escapeHtml(canonical)}">`)
     .replace(/<link rel="alternate" hreflang="([^"]*)" href="[^"]*"\s*\/?>/g, (_tag, lang) => `<link rel="alternate" hreflang="${lang}" href="${escapeHtml(url + (lang === 'en' ? '?lang=en' : ''))}">`)
     .replace(/<meta (property|name)="(og|twitter):(title|description|url)" content="[^"]*"\s*\/?>/g, (_tag, attr, prefix, key) => `<meta ${attr}="${prefix}:${key}" content="${escapeHtml(key === 'title' ? title : key === 'description' ? description : canonical)}">`)
-    .replace(/<script id="kaissa-schema" type="application\/ld\+json">.*?<\/script>/s, '')
-    .replace(/<noscript>.*?<\/noscript>/s, `<noscript><main><h1>${escapeHtml(title)}</h1><p>${escapeHtml(description)}</p><a href="/leaderboard${en ? '?lang=en' : ''}">${en ? 'Player ratings' : 'Рейтинг игроков'}</a></main></noscript>`);
+    .replace(/<script id="kaissa-schema" type="application\/ld\+json">.*?<\/script>/s, '');
+  const body = `<div class="app-shell"><main class="page"><h1>${escapeHtml(title)}</h1><p>${escapeHtml(description)}</p><a href="/leaderboard${en ? '?lang=en' : ''}">${en ? 'Player ratings' : 'Рейтинг игроков'}</a></main></div>`;
+  // Replace the initial app content without touching the head's noscript font links.
+  html = html.includes('<!--kaissa-prerender-start-->')
+    ? html.replace(/<!--kaissa-prerender-start-->[\s\S]*?<!--kaissa-prerender-end-->/, () => body)
+    : html.replace('<div id="app"></div>', () => `<div id="app">${body}</div>`);
+
   res.setHeader('X-Robots-Tag', robots);
   res.type('html').send(html);
 }));

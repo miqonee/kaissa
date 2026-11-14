@@ -1,5 +1,6 @@
 import { CROSS_TOPOLOGY } from './cross.js';
 import { HEX_TOPOLOGY } from './hex.js';
+import { DOUBLE_TOPOLOGY } from './double.js';
 import type { MultiVariant, Role, Topology } from './topology.js';
 
 export interface MPiece {
@@ -11,7 +12,10 @@ export interface MPiece {
 
 export type SeatStatus = 'active' | 'checkmated' | 'stalemated' | 'resigned' | 'timeout';
 
-export type MultiEndReason = 'last-standing' | 'points-lead' | 'fifty' | 'repetition' | 'abandoned';
+export type MultiEndReason = 'last-standing' | 'points-lead' | 'fifty' | 'repetition' | 'abandoned' | 'checkmate' | 'stalemate' | 'resign' | 'timeout';
+
+export interface DoubleEnd { winner: 1 | 2 | null; reason: MultiEndReason }
+export interface EnPassant { target: string; pawn: string; seat: number }
 
 export interface MultiMoveLogItem {
   ply: number;
@@ -21,6 +25,7 @@ export interface MultiMoveLogItem {
   role: Role;
   captured?: { seat: number; role: Role; points: number };
   promoted?: boolean;
+  promotionRole?: Role;
   checkedSeats?: number[];
   checkBonus?: number;
   eliminated?: { seat: number; status: SeatStatus; pointsTo?: number; points?: number }[];
@@ -28,6 +33,8 @@ export interface MultiMoveLogItem {
 
 export interface MultiSnapshot {
   variant: MultiVariant;
+  teamEnd?: DoubleEnd;
+  enPassant?: EnPassant | null;
   board: Record<string, MPiece>;
   turn: number;
   status: SeatStatus[];
@@ -55,7 +62,7 @@ export interface MoveOutcome {
 }
 
 export function getTopology(variant: MultiVariant): Topology {
-  return variant === 'four-player' ? CROSS_TOPOLOGY : HEX_TOPOLOGY;
+  return variant === 'double' ? DOUBLE_TOPOLOGY : variant === 'four-player' ? CROSS_TOPOLOGY : HEX_TOPOLOGY;
 }
 
 export class MultiChessError extends Error {
@@ -69,6 +76,8 @@ export class MultiChess {
   readonly topology: Topology;
   private board: Record<string, MPiece> = {};
   private _turn = 0;
+  private teamEnd?: DoubleEnd;
+  private enPassant: EnPassant | null = null;
   private status: SeatStatus[];
   private scores: number[];
   private eliminationOrder: number[] = [];
@@ -107,6 +116,8 @@ export class MultiChess {
       g.board[k] = { ...v };
     }
     g._turn = s.turn;
+    g.teamEnd = s.teamEnd ? { ...s.teamEnd } : undefined;
+    g.enPassant = s.enPassant ? { ...s.enPassant } : null;
     g.status = [...s.status];
     g.scores = [...s.scores];
     g.eliminationOrder = [...s.eliminationOrder];
@@ -126,6 +137,8 @@ export class MultiChess {
     }
     return {
       variant: this.variant,
+      ...(this.teamEnd ? { teamEnd: { ...this.teamEnd } } : {}),
+      ...(this.enPassant ? { enPassant: { ...this.enPassant } } : {}),
       board: boardCopy,
       turn: this._turn,
       status: [...this.status],
@@ -138,6 +151,17 @@ export class MultiChess {
       lastAttackerOfKing: [...this.lastAttackerOfKing],
       moveLog: this.moveLog.slice(-60),
     };
+  }
+
+  /** Seats 0/2 (Yellow/Red) and 1/3 (Green/Blue) are allies in Double Chess. */
+  areAllies(a: number, b: number): boolean {
+    return a === b || (this.variant === 'double' && a >= 0 && b >= 0 && a % 2 === b % 2);
+  }
+
+  teamOf(seat: number): 1 | 2 { return seat % 2 === 0 ? 1 : 2; }
+
+  teamResult(): '1-0' | '0-1' | '1/2-1/2' {
+    return this.teamEnd?.winner === 1 ? '1-0' : this.teamEnd?.winner === 2 ? '0-1' : '1/2-1/2';
   }
 
   turn(): number {
@@ -189,7 +213,7 @@ export class MultiChess {
   ): { seat: number; from: string; role: Role }[] {
     const attackers: { seat: number; from: string; role: Role }[] = [];
     for (const [sq, p] of Object.entries(boardState)) {
-      if (p.dead || p.seat === defenderSeat || this.status[p.seat] !== 'active') continue;
+      if (p.dead || this.areAllies(p.seat, defenderSeat) || this.status[p.seat] !== 'active') continue;
       if (this.pieceAttacksSquare(sq, p, targetSq, boardState)) {
         attackers.push({ seat: p.seat, from: sq, role: p.role });
       }
@@ -203,7 +227,7 @@ export class MultiChess {
     boardState: Record<string, MPiece> = this.board,
   ): boolean {
     for (const [sq, p] of Object.entries(boardState)) {
-      if (p.dead || p.seat === defenderSeat || this.status[p.seat] !== 'active') continue;
+      if (p.dead || this.areAllies(p.seat, defenderSeat) || this.status[p.seat] !== 'active') continue;
       if (this.pieceAttacksSquare(sq, p, targetSq, boardState)) return true;
     }
     return false;
@@ -255,7 +279,7 @@ export class MultiChess {
   checkedKings(): string[] {
     const out: string[] = [];
     for (let s = 0; s < this.topology.seats; s++) {
-      if (this.status[s] !== 'active') continue;
+      if (this.status[s] !== 'active' && !(this.variant === 'double' && this.status[s] === 'checkmated')) continue;
       const kSq = this.findKing(s);
       if (kSq && this.isSquareAttacked(kSq, s)) out.push(kSq);
     }
@@ -278,7 +302,7 @@ export class MultiChess {
     const canLand = (sq: string): boolean => {
       const occ = this.board[sq];
       if (!occ) return true;
-      if (occ.seat === piece.seat) return false;
+      if (this.areAllies(occ.seat, piece.seat)) return false;
       // Cannot capture dead kings (keep king on board or allow capturing dead pieces except dead king? Dead pieces including dead king can be captured for 0 pts, except let's allow capturing any non-own piece!)
       return true;
     };
@@ -295,7 +319,9 @@ export class MultiChess {
         }
         for (const cap of t.pawnCaptures(from, piece.seat)) {
           const occ = this.board[cap];
-          if (occ && occ.seat !== piece.seat) out.push(cap);
+          if (occ && !this.areAllies(occ.seat, piece.seat)) out.push(cap);
+          if (!occ && this.enPassant?.target === cap && !this.areAllies(this.enPassant.seat, piece.seat)
+              && this.board[this.enPassant.pawn]?.role === 'p') out.push(cap);
         }
         break;
       }
@@ -345,7 +371,7 @@ export class MultiChess {
         if (!occ) {
           out.push(sq);
         } else {
-          if (occ.seat !== seat) out.push(sq);
+          if (!this.areAllies(occ.seat, seat)) out.push(sq);
           break;
         }
       }
@@ -354,7 +380,7 @@ export class MultiChess {
 
   legalMoves(seat = this._turn): Map<string, string[]> {
     const res = new Map<string, string[]>();
-    if (this.status[seat] !== 'active') return res;
+    if (this.teamEnd || this.status[seat] !== 'active') return res;
 
     for (const [from, piece] of Object.entries(this.board)) {
       if (piece.seat !== seat || piece.dead) continue;
@@ -379,12 +405,13 @@ export class MultiChess {
     return out;
   }
 
-  private simulateBoardAfterMove(seat: number, from: string, to: string): Record<string, MPiece> {
+  private simulateBoardAfterMove(seat: number, from: string, to: string, promotion: Role = 'q'): Record<string, MPiece> {
     const next: Record<string, MPiece> = {};
     for (const [k, v] of Object.entries(this.board)) next[k] = { ...v };
     const moving = next[from];
     if (!moving) return next;
     delete next[from];
+    if (moving.role === 'p' && this.enPassant?.target === to && !next[to]) delete next[this.enPassant.pawn];
 
     // Check castling rook move
     if (moving.role === 'k') {
@@ -398,21 +425,32 @@ export class MultiChess {
     const promoted = moving.role === 'p' && this.topology.isPromotion(to, seat);
     next[to] = {
       seat,
-      role: promoted ? 'q' : moving.role,
+      role: promoted ? promotion : moving.role,
       ...(promoted || moving.promoted ? { promoted: true } : {}),
     };
     return next;
   }
 
-  move(seat: number, from: string, to: string): MoveOutcome {
+  move(seat: number, from: string, to: string, promotion: Role = 'q'): MoveOutcome {
+    if (!['q', 'r', 'b', 'n'].includes(promotion)) throw new MultiChessError('Неверное превращение пешки');
     if (seat !== this._turn) throw new MultiChessError('Сейчас ход другого игрока');
     if (this.status[seat] !== 'active') throw new MultiChessError('Вы уже выбыли из партии');
     const legal = this.legalMoves(seat).get(from);
     if (!legal || !legal.includes(to)) throw new MultiChessError('Недопустимый ход');
 
     const moving = this.board[from]!;
-    const captured = this.board[to];
+    const captureSquare = moving.role === 'p' && this.enPassant?.target === to && !this.board[to]
+      ? this.enPassant.pawn : to;
+    const captured = this.board[captureSquare];
+    delete this.board[captureSquare];
     delete this.board[from];
+    this.enPassant = null;
+    if (this.variant === 'double' && moving.role === 'p') {
+      const first = this.topology.pawnForward(from, seat);
+      if (first && this.topology.pawnForward(first, seat) === to) {
+        this.enPassant = { target: first, pawn: to, seat };
+      }
+    }
 
     // Update castling rights
     if (moving.role === 'k') {
@@ -441,7 +479,7 @@ export class MultiChess {
     const promoted = moving.role === 'p' && this.topology.isPromotion(to, seat);
     const placed: MPiece = {
       seat,
-      role: promoted ? 'q' : moving.role,
+      role: promoted ? promotion : moving.role,
       ...(promoted || moving.promoted ? { promoted: true } : {}),
     };
     this.board[to] = placed;
@@ -449,7 +487,7 @@ export class MultiChess {
     // Points for capture
     let pointsAwarded = 0;
     let capLog: MultiMoveLogItem['captured'];
-    if (captured) {
+    if (captured && this.variant !== 'double') {
       if (!captured.dead) {
         const vals = this.topology.pieceValues();
         const capPoints = captured.role === 'q' && captured.promoted ? 1 : vals[captured.role];
@@ -459,6 +497,8 @@ export class MultiChess {
         capLog = { seat: captured.seat, role: captured.role, points: 0 };
       }
     }
+
+    if (captured && this.variant === 'double') capLog = { seat: captured.seat, role: captured.role, points: 0 };
 
     if (captured || moving.role === 'p') {
       this.quietPlies = 0;
@@ -485,7 +525,7 @@ export class MultiChess {
 
     // Multi-check bonus (simultaneous check on 2 or 3 enemy kings by the mover)
     let checkBonus = 0;
-    if (checkedSeats.length >= 2) {
+    if (this.variant !== 'double' && checkedSeats.length >= 2) {
       if (placed.role === 'q') {
         checkBonus = checkedSeats.length >= 3 ? 5 : 1;
       } else {
@@ -504,7 +544,7 @@ export class MultiChess {
       to,
       role: moving.role,
       ...(capLog ? { captured: capLog } : {}),
-      ...(promoted ? { promoted: true } : {}),
+      ...(promoted ? { promoted: true, promotionRole: promotion } : {}),
       ...(checkedSeats.length > 0 ? { checkedSeats } : {}),
       ...(checkBonus > 0 ? { checkBonus } : {}),
     };
@@ -558,6 +598,12 @@ export class MultiChess {
       };
     }
 
+    if (this.variant === 'double') {
+      this.status[seat] = reason;
+      this.teamEnd = { winner: this.teamOf(seat) === 1 ? 2 : 1, reason: reason === 'resigned' ? 'resign' : 'timeout' };
+      return { from: '-', to: '-', seat, pointsAwarded: 0, checkedSeats: [],
+        eliminated: [{ seat, status: reason, points: 0 }], over: true, endReason: this.teamEnd.reason };
+    }
     this.markSeatDead(seat, reason);
     const eliminated: { seat: number; status: SeatStatus; bySeat?: number; points: number }[] = [
       { seat, status: reason, points: 0 },
@@ -605,6 +651,10 @@ export class MultiChess {
     bySeat?: number;
     points: number;
   }[] {
+    if (this.variant === 'double') {
+      this._turn = (this._turn + 1) % 4;
+      return this.resolveDoubleTurn();
+    }
     const n = this.topology.seats;
     const eliminated: { seat: number; status: SeatStatus; bySeat?: number; points: number }[] = [];
 
@@ -656,7 +706,33 @@ export class MultiChess {
     return this.advanceTurnAndResolveEliminations();
   }
 
+  private resolveDoubleTurn(): { seat: number; status: SeatStatus; bySeat?: number; points: number }[] {
+    const seat = this._turn;
+    const moves = this.legalMoves(seat);
+    // Green Chess also ends when the player to move can legally capture an enemy king.
+    for (const tos of moves.values()) for (const to of tos) {
+      const target = this.board[to];
+      if (target?.role === 'k' && !this.areAllies(seat, target.seat)) {
+        this.teamEnd = { winner: this.teamOf(seat), reason: 'checkmate' };
+        this.status[target.seat] = 'checkmated';
+        return [{ seat: target.seat, status: 'checkmated', bySeat: seat, points: 0 }];
+      }
+    }
+    if (moves.size > 0) return [];
+    const check = this.isSeatInCheck(seat);
+    this.status[seat] = check ? 'checkmated' : 'stalemated';
+    this.teamEnd = { winner: check ? (this.teamOf(seat) === 1 ? 2 : 1) : null,
+      reason: check ? 'checkmate' : 'stalemate' };
+    return [{ seat, status: this.status[seat], points: 0 }];
+  }
+
   isOver(): { over: boolean; reason?: MultiEndReason } {
+    if (this.variant === 'double') {
+      if (this.teamEnd) return { over: true, reason: this.teamEnd.reason };
+      if (this.quietPlies >= 200) return { over: true, reason: 'fifty' };
+      if ((this.repetitions.get(this.positionKey()) ?? 0) >= 3) return { over: true, reason: 'repetition' };
+      return { over: false };
+    }
     const active = this.activeSeats();
     if (active.length <= 1) {
       return { over: true, reason: 'last-standing' };
@@ -694,6 +770,8 @@ export class MultiChess {
    * and later elimination beats earlier elimination.
    */
   placements(): number[] {
+    if (this.variant === 'double') return [0, 1, 2, 3].map(s =>
+      this.teamEnd?.winner == null || this.teamOf(s) === this.teamEnd.winner ? 1 : 2);
     const n = this.topology.seats;
     const indices = Array.from({ length: n }, (_, i) => i);
     const survivalRank = (seat: number): number => {
@@ -716,7 +794,9 @@ export class MultiChess {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([sq, p]) => `${sq}:${p.seat}${p.role}${p.dead ? 'd' : ''}`)
       .join(',');
-    return `${this.variant}|${this._turn}|${this.status.join(',')}|${entries}`;
+    const rights = this.castlingRights.map(r => r.map(Number).join('')).join(',');
+    const ep = this.enPassant && [...this.legalMoves(this._turn).values()].some(tos => tos.includes(this.enPassant!.target)) ? this.enPassant.target : '-';
+    return `${this.variant}|${this._turn}|${this.status.join(',')}|${rights}|${ep}|${entries}`;
   }
 
   private recordPosition(): void {
@@ -748,7 +828,7 @@ export class MultiChess {
     if (!serialized.startsWith('multi:')) return null;
     const parts = serialized.slice('multi:'.length).split('|');
     const variant = parts[0] as MultiVariant;
-    if (variant !== 'four-player' && variant !== 'three-player') return null;
+    if (variant !== 'four-player' && variant !== 'three-player' && variant !== 'double') return null;
     let turn = 0;
     let scores: number[] = [];
     let status: SeatStatus[] = [];

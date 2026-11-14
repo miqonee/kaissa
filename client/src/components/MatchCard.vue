@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { isMultiplayer, modeLabel, timeControlLabel, type GameSummary } from "shared";
+import { isFreeForAll, isMultiplayer, modeLabel, timeControlLabel, type GameSummary, type MultiColor } from "shared";
 import { useI18n } from "../stores/i18n";
 import { matchOutcome, ratingLabel, endReason } from "../utils/match";
 import { openLichessAnalysis } from "../api/lichess";
@@ -17,7 +17,11 @@ const en = computed(() => i18n.locale === "en");
 const myTeam = computed(
   () => props.game.participants.find((p) => p.userId === props.viewerId)?.team,
 );
-const isMulti = computed(() => isMultiplayer(props.game.mode));
+function colorName(color?: MultiColor | null): string {
+  if (!color) return '';
+  return (en.value ? { yellow: 'Yellow', red: 'Red', green: 'Green', blue: 'Blue' } : { yellow: 'Жёлтые', red: 'Красные', green: 'Зелёные', blue: 'Синие' })[color] ?? '';
+}
+const isMulti = computed(() => isFreeForAll(props.game.mode));
 const sortedMultiParticipants = computed(() =>
   [...props.game.participants].sort((a, b) => (a.place ?? 99) - (b.place ?? 99)),
 );
@@ -135,7 +139,7 @@ const date = computed(() =>
                   ? `${en ? "Board" : "Доска"} ${p.boardIndex + 1} · `
                   : ""
               }}{{
-                p.color === "w"
+                game.mode === "double" ? colorName(p.multiColor) : p.color === "w"
                   ? en
                     ? "White"
                     : "Белые"
@@ -192,8 +196,8 @@ const date = computed(() =>
       >
       <div v-else-if="!compact" class="match-actions">
         <button class="small brass" @click="emit('replay', game.id)">{{ en ? 'Replay' : 'Смотреть партию' }}</button>
-        <a v-if="!isMulti" class="button small ghost" :href="`/api/games/${game.id}/pgn?download=1`">{{ en ? 'Download PGN' : 'Скачать PGN' }}</a>
-        <button v-if="game.mode !== 'bughouse' && !isMulti" class="small ghost" :disabled="analyzing" @click="analyze">{{ analyzing ? (en ? 'Opening…' : 'Открываем…') : (en ? 'Analyze on Lichess' : 'Анализ на Lichess') }}</button>
+        <a v-if="!isMultiplayer(game.mode)" class="button small ghost" :href="`/api/games/${game.id}/pgn?download=1`">{{ en ? 'Download PGN' : 'Скачать PGN' }}</a>
+        <button v-if="game.mode !== 'bughouse' && !isMultiplayer(game.mode)" class="small ghost" :disabled="analyzing" @click="analyze">{{ analyzing ? (en ? 'Opening…' : 'Открываем…') : (en ? 'Analyze on Lichess' : 'Анализ на Lichess') }}</button>
       </div>
     </footer>
   </article>

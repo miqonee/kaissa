@@ -1,46 +1,48 @@
 {
   "/": {
     "ru": {
-      "title": "Командные шахматы онлайн — 2×2, Багхаус, Crazyhouse, 3 и 4 игрока | Каисса",
-      "description": "Играйте в шахматы 2 на 2, Багхаус, Crazyhouse и шахматы на троих и четверых (3 и 4 игрока) с друзьями или ботами. Быстрый вход без регистрации, рейтинг Elo и просмотр партий.",
+      "title": "Шахматы с друзьями онлайн — 2×2, Двойные и Багхаус | Каисса",
+      "description": "Играйте с друзьями в шахматы 2×2, Двойные шахматы на доске 16×8, Багхаус и Crazyhouse или каждый за себя втроём и вчетвером. Бесплатно, без регистрации, с ботами.",
       "heading": "Командные и многопользовательские шахматы с друзьями",
-      "intro": "Выберите один из шести форматов и начните играть без регистрации. Боты заполняют свободные места: собирать всех друзей одновременно не обязательно.",
+      "intro": "Выберите один из семи форматов и начните играть без регистрации. Боты заполняют свободные места: собирать всех друзей одновременно не обязательно.",
       "sections": [
         {
-          "heading": "Шесть способов играть",
+          "heading": "Семь способов играть",
           "paragraphs": [
             "2×2: одна доска, два игрока в каждой команде. Напарники по очереди ходят фигурами одного цвета.",
+            "Двойные шахматы: четыре цвета и две команды на общей длинной доске 16×8. У каждого свои фигуры, союзники помогают друг другу и побеждают вместе.",
             "Багхаус: две доски, четыре игрока. Взятая фигура переходит в резерв напарника, который играет другим цветом на соседней доске.",
             "Crazyhouse 1×1 и 2×2: взятые фигуры становятся резервом; вместо обычного хода их можно выставить на доску в одиночку или с напарником.",
-            "Шахматы на 3 и 4 игроков (каждый за себя): у каждого свой цвет фигур на крестообразной доске 14×14 (4 игрока) или шестиугольной доске из 96 клеток (3 игрока). Побеждает набравший больше очков за взятия и маты."
+            "Шахматы на 3 и 4 игроков (каждый за себя): у каждого свой цвет фигур на крестообразной доске 14×14 (4 игрока) или семиугольной доске из 96 клеток (3 игрока). Побеждает набравший больше очков за взятия и маты."
           ]
         },
         {
           "heading": "Пригласите друга или начните с ботами",
           "paragraphs": [
-            "Быстрая игра открывает готовый стол выбранного режима. В лобби можно дождаться друзей, выбрать время и распределение мест. Поделиться столом можно ссылкой или шестизначным кодом.",
+            "Быстрая игра открывает готовый стол выбранного режима. В лобби можно дождаться друзей, выбрать время и распределение мест. Поделиться столом можно ссылкой или семизначным кодом.",
             "Гостевая сессия связана с браузером. Чтобы не потерять доступ к истории, сохраните аккаунт, выбрав ник и пароль."
           ]
         },
         {
           "heading": "Понятный рейтинг и история",
           "paragraphs": [
-            "У каждого режима (2×2, Багхаус, Crazyhouse, 3 игрока, 4 игрока) свой Elo. Матчи с гостями и игры только против ботов считаются тренировочными и не меняют публичный рейтинг.",
+            "У каждого режима (2×2, Двойные шахматы, Багхаус, Crazyhouse, 3 игрока, 4 игрока) свой Elo. Матчи с гостями и игры только против ботов считаются тренировочными и не меняют публичный рейтинг.",
             "В архиве видны все участники, очки, причины завершения и изменение рейтинга. Встроенный плеер воспроизводит ходы всех режимов."
           ]
         }
       ]
     },
     "en": {
-      "title": "Team & Multiplayer Chess Online — 2v2, Bughouse, Crazyhouse, 3 & 4 Players | Kaissa",
-      "description": "Play 2v2 team chess, Bughouse, Crazyhouse, 3-player hexagonal chess and 4-player chess with friends or bots. Start as a guest, track Elo ratings by mode and replay games.",
+      "title": "Team Chess Online — Double Chess, 2v2 & Bughouse | Kaissa",
+      "description": "Play Double Chess on a shared 16×8 board, alternating 2v2, Bughouse, Crazyhouse or 3/4-player chess. Free online games with friends or bots. No signup needed.",
       "heading": "Play team and multiplayer chess together",
-      "intro": "Choose one of six formats and start without registering. Bots fill empty seats, so you do not need to gather everyone at the same time.",
+      "intro": "Choose one of seven formats and start without registering. Bots fill empty seats, so you do not need to gather everyone at the same time.",
       "sections": [
         {
-          "heading": "Six ways to play",
+          "heading": "Seven ways to play",
           "paragraphs": [
             "2v2: four players share one board. Teammates alternate moves with the same colour.",
+            "Double Chess: four colours and two teams on one shared 16×8 board. Each player controls their own army; partners help each other and share the result.",
             "Bughouse: four players use two boards. Captured pieces go to your teammate’s reserve on the other board. Partners play opposite colours.",
             "Crazyhouse 1v1 & 2v2: captures enter your reserve on the same board, played solo or alternating turns with a partner.",
             "3-Player & 4-Player Free-For-All: each player controls their own colour on a 14×14 cross board (4 players) or 96-cell hexagonal board (3 players), competing for points from captures and checkmates."
@@ -49,14 +51,14 @@
         {
           "heading": "Invite friends or start with bots",
           "paragraphs": [
-            "Quick play opens a prepared table. In the lobby, wait for friends or choose the clock and seats. Share a table link or a six-character code.",
+            "Quick play opens a prepared table. In the lobby, wait for friends or choose the clock and seats. Share a table link or a seven-character code.",
             "Guest access belongs to this browser. Choose a username and password to keep access to your games on other devices."
           ]
         },
         {
           "heading": "Ratings and replays",
           "paragraphs": [
-            "Each mode (2v2, Bughouse, Crazyhouse, 3-Player, 4-Player) has its own Elo. Games involving guests and games against bots only are training games and do not affect public ratings.",
+            "Each mode (2v2, Double Chess, Bughouse, Crazyhouse, 3-Player, 4-Player) has its own Elo. Games involving guests and games against bots only are training games and do not affect public ratings.",
             "The archive shows participants, scores, ending reasons and rating changes. Replays include moves across all board formats."
           ]
         }
@@ -184,7 +186,7 @@
   "/rules/multiplayer": {
     "ru": {
       "title": "Правила шахмат на 3 и 4 игроков онлайн — каждый за себя | Каисса",
-      "description": "Как играть в шахматы на троих (шестиугольная доска 96 клеток) и на четверых (крестообразная доска 14×14): цвета армий, очки за взятия и маты, серые фигуры и контроль времени.",
+      "description": "Как играть в шахматы на троих (семиугольная доска 96 клеток) и на четверых (крестообразная доска 14×14): цвета армий, очки за взятия и маты, серые фигуры и контроль времени.",
       "heading": "Правила шахмат на троих и четверых (Free-For-All)",
       "intro": "В режимах на 3 и 4 игроков каждый участник управляет армией своего цвета в формате «каждый за себя». Победитель определяется по сумме очков за срубленные фигуры и поставленные маты.",
       "sections": [
@@ -192,7 +194,7 @@
           "heading": "Доска на 4 игроков (крест 14×14) и на 3 игроков (гексагон)",
           "paragraphs": [
             "В шахматах на четверых используется крестообразная доска 14×14 без углов 3×3 (160 клеток). Четыре цвета (Красные, Синие, Жёлтые, Зелёные) ходят по часовой стрелке, а пешки превращаются в ферзя на 8-й горизонтали своего движения.",
-            "В шахматах на троих используется шестиугольная доска из 96 четырёхугольных клеток (три сектора 4×8). Ладьи переходят через рёбра клеток, а слоны движутся по диагоналям через вершины и центральное разветвление."
+            "В шахматах на троих используется семиугольная доска из 96 четырёхугольных клеток (три сектора 4×8). Ладьи переходят через рёбра клеток, а слоны движутся по диагоналям через вершины и центральное разветвление."
           ]
         },
         {
@@ -249,14 +251,14 @@
         {
           "heading": "Что доступно",
           "paragraphs": [
-            "Шесть режимов (2×2, Багхаус, Crazyhouse 1×1 и 2×2, 3 игрока, 4 игрока), приватные столы по ссылке, чат, серверные часы, гостевой вход и постоянные аккаунты. Интерфейс доступен на русском и английском.",
+            "Семь режимов (2×2, Двойные шахматы, Багхаус, Crazyhouse 1×1 и 2×2, 3 игрока, 4 игрока), приватные столы по ссылке, чат, серверные часы, гостевой вход и постоянные аккаунты. Интерфейс доступен на русском и английском.",
             "Для классических и резервных режимов используются Stockfish и Fairy-Stockfish, а для режимов на 3 и 4 игроков — специализированные FFA-боты."
           ]
         },
         {
           "heading": "Рейтинг и история",
           "paragraphs": [
-            "Рейтинги разделены по всем шести режимам. История хранит участников, набранные очки и результат; плеер позволяет воспроизвести ходы любой партии. Исходный код проекта открыт на GitHub."
+            "Рейтинги разделены по всем семи режимам. История хранит участников, набранные очки и результат; плеер позволяет воспроизвести ходы любой партии. Исходный код проекта открыт на GitHub."
           ]
         }
       ]
@@ -270,14 +272,14 @@
         {
           "heading": "Available features",
           "paragraphs": [
-            "Six game modes (2v2, Bughouse, Crazyhouse 1v1 & 2v2, 3-Player, 4-Player), private invitation links, chat, server clocks, guest play and permanent accounts. Available in Russian and English.",
+            "Seven game modes (2v2, Double Chess, Bughouse, Crazyhouse 1v1 & 2v2, 3-Player, 4-Player), private invitation links, chat, server clocks, guest play and permanent accounts. Available in Russian and English.",
             "Standard chess uses Stockfish, reserve variants use Fairy-Stockfish, and 3/4-player modes feature dedicated Free-For-All tactical bots."
           ]
         },
         {
           "heading": "Ratings and history",
           "paragraphs": [
-            "Ratings are separate for each of the six modes. The archive records participants, scores and outcomes; the replayer revisits moves across all board topologies. Source code is on GitHub."
+            "Ratings are separate for each of the seven modes. The archive records participants, scores and outcomes; the replayer revisits moves across all board topologies. Source code is on GitHub."
           ]
         }
       ]
@@ -329,6 +331,88 @@
       "heading": "Sign In and Save a Guest Account",
       "intro": "Sign in to Kaissa or save a guest account while keeping its games and identity. Registration is optional for quick play.",
       "sections": []
+    }
+  },
+  "/rules/double": {
+    "ru": {
+      "title": "Двойные шахматы 2 на 2 — правила доски 16×8 | Каисса",
+      "description": "Как играть в Двойные шахматы: общая доска 16×8, четыре цвета и две команды. Очередь ходов, помощь союзнику, проверка мата и совместная победа.",
+      "heading": "Двойные шахматы: две команды на одной длинной доске",
+      "intro": "Четыре игрока играют на двух соединённых досках 8×8. Вместе они образуют единое поле 16×8: фигуры могут свободно пересекать его середину.",
+      "sections": [
+        {
+          "heading": "Команды и очередь ходов",
+          "paragraphs": [
+            "Жёлтые и красные играют против зелёных и синих. Порядок ходов: жёлтые → зелёные → красные → синие. Каждый управляет только своим цветом; брать фигуры союзника нельзя."
+          ]
+        },
+        {
+          "heading": "Когда мат завершает матч",
+          "paragraphs": [
+            "Мат проверяется в начале хода игрока под шахом. Пока его очередь не наступила, союзник может закрыть шах или создать решающий мат сопернику, чей ход наступит раньше. Мат одному игроку означает поражение всей команды.",
+            "Если в начале хода игрок может легально взять короля соперника, его команда сразу побеждает. Свой король после собственного хода должен оставаться в безопасности."
+          ]
+        },
+        {
+          "heading": "Ходы и завершение партии",
+          "paragraphs": [
+            "Рокировка выполняется в пределах исходной половины. Пешки идут к противоположному краю и могут превратиться в ферзя, ладью, слона или коня. Взятие на проходе доступно только непосредственно следующим ходом после двойного шага вражеской пешки.",
+            "Пат и троекратное повторение дают ничью. Правило 50 ходов считается как 50 полных кругов без взятий и ходов пешками. Сдача одного игрока или истечение его времени проигрывают матч всей команде — так же, как в остальных командных режимах Каиссы."
+          ]
+        },
+        {
+          "heading": "Начните с друзьями или ботами",
+          "paragraphs": [
+            "Выберите «Двойные шахматы» в быстрой игре или при создании стола. Свободные места займут боты. По умолчанию нет общего запаса времени: на первый ход даётся 30 секунд, на следующие — до 5 минут. Контроль времени можно изменить в лобби."
+          ]
+        },
+        {
+          "heading": "Чем отличаются режимы 2×2",
+          "paragraphs": [
+            "В обычном 2×2 напарники делят один цвет на доске 8×8. В багхаусе играют на двух отдельных досках и передают взятые фигуры. В Двойных шахматах у каждого собственная армия на общем поле, а резерва нет."
+          ]
+        }
+      ]
+    },
+    "en": {
+      "title": "Double Chess Rules — 2v2 on a Shared 16×8 Board | Kaissa",
+      "description": "Learn Double Chess: four colours, two teams and one shared 16×8 board. Turn order, allied pieces, teammate rescues, mate timing and shared results.",
+      "heading": "Double Chess: two teams on one long board",
+      "intro": "Four players use two adjoining 8×8 chessboards as one shared 16×8 field. Pieces can move freely across the central seam.",
+      "sections": [
+        {
+          "heading": "Teams and turn order",
+          "paragraphs": [
+            "Yellow and Red play against Green and Blue. Players move in this order: Yellow → Green → Red → Blue. Each player controls one colour and cannot capture allied pieces."
+          ]
+        },
+        {
+          "heading": "When checkmate ends the match",
+          "paragraphs": [
+            "Mate is confirmed at the start of the checked player’s turn. Before then, an ally can block the check or force an earlier decisive mate against an opponent. One confirmed mate loses the game for the entire team.",
+            "If a player can legally capture an enemy king at the start of their turn, their team wins immediately. A player may not leave their own king in check after moving."
+          ]
+        },
+        {
+          "heading": "Moves and game endings",
+          "paragraphs": [
+            "Castling stays within the army’s starting half. Pawns move towards the opposite edge and may promote to a queen, rook, bishop or knight. En passant is available only on the immediately following turn after an enemy pawn’s double step.",
+            "Stalemate and threefold repetition are draws. The 50-move rule counts 50 full rounds without a capture or pawn move. As in Kaissa’s other team modes, one player’s resignation or timeout loses the match for their entire team."
+          ]
+        },
+        {
+          "heading": "Play with friends or bots",
+          "paragraphs": [
+            "Choose Double Chess in quick play or when creating a table. Bots fill empty seats. By default there is no total game clock: the first move has a 30-second limit, subsequent turns have a 5-minute limit. You can select a different clock in the lobby."
+          ]
+        },
+        {
+          "heading": "How the 2v2 modes differ",
+          "paragraphs": [
+            "In alternating 2v2, partners share one colour on an 8×8 board. Bughouse uses two separate boards and passes captures to a partner. Double Chess gives each player a separate army on one shared field, without reserves."
+          ]
+        }
+      ]
     }
   }
 }

@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { multiplayerEloDelta, ratingKind } from '../src/ratings/service.js';
 
 describe('Multiplayer FFA Elo rating calculation', () => {
+  it('rates Double Chess only when both teams contain a permanent human', () => {
+    expect(ratingKind([{ team: 1 }, { team: 1 }, { team: 2, isBot: true }, { team: 2, isBot: true }], 'double')).toBe('bots');
+    expect(ratingKind([{ team: 1 }, { team: 1, isBot: true }, { team: 2 }, { team: 2, isBot: true }], 'double')).toBe('rated');
+    expect(ratingKind([{ team: 1, isGuest: true }, { team: 2 }], 'double')).toBe('guest');
+  });
   it('computes pairwise Elo deltas ordered by placement and sums to ~0 for equal ratings', () => {
     const players = [
       { uid: 1, ratingBefore: 1200, place: 1 },

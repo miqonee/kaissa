@@ -28,6 +28,7 @@ const links = (locale) => {
   const en = locale === "en";
   return `<nav aria-label="${en ? "Explore Kaissa" : "Разделы Каиссы"}"><a href="/${en ? "?lang=en" : ""}">${en ? "Play" : "Играть"}</a> · ${[
     ["/rules/duo", "2×2"],
+    ["/rules/double", en ? "Double Chess" : "Двойные шахматы"],
     ["/rules/bughouse", en ? "Bughouse" : "Багхаус"],
     ["/rules/crazyhouse", "Crazyhouse"],
     ["/rules/multiplayer", en ? "3 & 4 Players" : "3 и 4 игрока"],
@@ -135,8 +136,8 @@ function render(page, route, locale) {
     "name",
     "keywords",
     locale === "en"
-      ? "team chess, bughouse, crazyhouse, 2v2 chess, 3 player chess, 4 player chess, Kaissa"
-      : "командные шахматы, багхаус, crazyhouse, шахматы 2 на 2, шахматы на троих, шахматы на четверых, шахматы на 3 игрока, шахматы на 4 игрока, Каисса",
+      ? "team chess, double chess, bughouse, crazyhouse, 2v2 chess, 3 player chess, 4 player chess, Kaissa"
+      : "командные шахматы, двойные шахматы, багхаус, crazyhouse, шахматы 2 на 2, шахматы на троих, шахматы на четверых, шахматы на 3 игрока, шахматы на 4 игрока, Каисса",
   );
   for (const prefix of ["og", "twitter"]) {
     const attr = prefix === "og" ? "property" : "name";
@@ -167,10 +168,10 @@ function render(page, route, locale) {
     /<script\s+(?:id="kaissa-schema"\s+)?type="application\/ld\+json">.*?<\/script>/s,
     `<script id="kaissa-schema" type="application/ld+json">${JSON.stringify(schemaFor(page, route, locale)).replace(/</g, "\\u003c")}</script>`,
   );
-  html = html.replace(
-    /<!-- Семантический контент для поисковых ботов и пользователей без JS -->\s*<noscript>.*?<\/noscript>/s,
-    `<!-- Семантический контент для поисковых ботов и пользователей без JS -->\n<noscript>${content(page, route, locale)}</noscript>`,
-  );
+  // Publish readable content as the initial app document, not only inside noscript.
+  // Vue replaces this shell on mount; no hydration-specific markup is required.
+  html = html.replace('<div id="app"></div>', `<div id="app"><!--kaissa-prerender-start--><div class="app-shell">${content(page, route, locale).replace('<main>', '<main class="page">')}</div><!--kaissa-prerender-end--></div>`);
+  html = html.replace(/<!-- Семантический контент для поисковых ботов и пользователей без JS -->\s*<noscript>[\s\S]*?<\/noscript>/, '');
   return html;
 }
 const routes = [...Object.keys(pages), "/rules/crazyhouse"];

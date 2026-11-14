@@ -69,6 +69,7 @@ usePageSeo({ canonical: '/about' });
             </router-link>
           </p>
           <h3>3. Crazyhouse 1v1 & 2v2</h3><p>Captures change colour and enter your own reserve on the same board. Play standard 1v1 or Kaissa's team format: partners alternate moves and share a reserve.</p><p><router-link to="/rules/crazyhouse" class="button ghost small">Crazyhouse rules</router-link></p>
+          <h3>Double Chess</h3><p>Four armies share a long 16×8 board in two teams. Partners cannot capture each other and share the result. A teammate can rescue a checked king before its next turn.</p><p><router-link to="/rules/double">Double Chess rules</router-link></p>
           <h3>4. 3-Player & 4-Player Chess (Free-For-All)</h3><p>Every player controls their own colour on a 14×14 cross board (4 players) or a 96-cell hexagonal board (3 players), earning points for captures and checkmates.</p><p><router-link to="/rules/multiplayer" class="button ghost small">{{ i18n.t.footer.rulesMultiplayer }}</router-link></p>
         </section>
 
@@ -142,6 +143,7 @@ usePageSeo({ canonical: '/about' });
             </router-link>
           </p>
           <h3>3. Crazyhouse 1×1 и 2×2</h3><p>Взятые фигуры меняют цвет и попадают в свой резерв на той же доске. В 1×1 играет один против одного; в командном формате клуба 2×2 партнёры чередуют ходы и делят резерв.</p><p><router-link to="/rules/crazyhouse" class="button ghost small">Правила Crazyhouse</router-link></p>
+          <h3>Двойные шахматы</h3><p>Четыре армии играют на общей длинной доске 16×8 в двух командах. Союзники не берут фигуры друг друга и побеждают вместе. До следующего хода игрока под шахом напарник может ему помочь.</p><p><router-link to="/rules/double">Правила Двойных шахмат</router-link></p>
           <h3>4. Шахматы на 3 и 4 игроков (Free-For-All)</h3><p>Каждый игрок управляет армией своего цвета на крестообразной доске 14×14 (4 игрока) или шестиугольной доске из 96 клеток (3 игрока), набирая очки за взятия и маты.</p><p><router-link to="/rules/multiplayer" class="button ghost small">{{ i18n.t.footer.rulesMultiplayer }}</router-link></p>
         </section>
 

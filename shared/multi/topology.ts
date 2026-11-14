@@ -1,5 +1,5 @@
 export type Role = 'p' | 'n' | 'b' | 'r' | 'q' | 'k';
-export type MultiVariant = 'four-player' | 'three-player';
+export type MultiVariant = 'four-player' | 'three-player' | 'double';
 
 export interface Cell {
   id: string;
@@ -24,8 +24,10 @@ export interface Topology {
   readonly seats: number;
   readonly cells: readonly Cell[];
   readonly cellById: ReadonlyMap<string, Cell>;
-  /** Viewbox size (square, 0..viewSize) */
+  /** Square viewbox size; rectangular boards override viewWidth/viewHeight. */
   readonly viewSize: number;
+  readonly viewWidth?: number;
+  readonly viewHeight?: number;
   /** Default rotation degrees so that a given seat is at the bottom */
   rotationForSeat(seat: number): number;
   orthRays(id: string): string[][];

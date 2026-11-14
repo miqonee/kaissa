@@ -158,7 +158,6 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
     // Главная страница: наивысший приоритет, ежедневное обновление
     {
       loc: `${baseUrl}/`,
-      lastmod: today,
       changefreq: 'daily',
       priority: 1.0,
       alternates: makeAlternates(`${baseUrl}/`),
@@ -171,6 +170,8 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
       priority: 0.8,
       alternates: makeAlternates(`${baseUrl}/leaderboard`),
     },
+    { loc: `${baseUrl}/rules/double`, changefreq: 'weekly', priority: 0.9,
+      alternates: makeAlternates(`${baseUrl}/rules/double`) },
     // Правила и информация о платформе
     {
       loc: `${baseUrl}/rules/duo`,
@@ -216,7 +217,11 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
     });
   }
 
-  const urlsXml = entries.map(formatUrlXml).join('\n');
+  // Explicitly list each indexable language URL with reciprocal alternate links.
+  const localizedEntries = entries.flatMap(entry => [entry, { ...entry,
+    loc: `${entry.loc}${entry.loc.includes('?') ? '&' : '?'}lang=en`,
+  }]);
+  const urlsXml = localizedEntries.map(formatUrlXml).join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">

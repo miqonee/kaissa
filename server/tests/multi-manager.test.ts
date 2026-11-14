@@ -141,3 +141,32 @@ describe('GamesManager multiplayer FFA modes', () => {
     expect(m.toGameState(g).turnUserIds).toEqual([3]);
   });
 });
+
+describe('GamesManager Double Chess teams', () => {
+  it('keeps allies in seats 0/2 and 1/3 and saves one shared result', async () => {
+    const m = new GamesManager();
+    const id = await m.createGame({ mode: 'double', timeControl: { kind: 'none', baseMin: 0, incSec: 0 },
+      team1: [player(1), player(3)], team2: [player(2), player(4)] });
+    const g = m.getActive(id)!;
+    expect(g.ratingKind).toBe('rated');
+    expect(g.participants.map(p => [p.uid, p.seat, p.team, p.multiColor])).toEqual([
+      [1, 0, 1, 'yellow'], [2, 1, 2, 'green'], [3, 2, 1, 'red'], [4, 3, 2, 'blue'],
+    ]);
+    expect(await m.applyMultiMove(id, 1, { from: 'm2', to: 'm4' })).toEqual({ ok: true });
+    expect(m.toGameState(g).turnUserIds).toEqual([2]);
+    await m.resign(id, 3);
+    expect(g).toMatchObject({ status: 'finished', result: '0-1', reason: 'resign' });
+    expect(g.participants.every(p => p.score === undefined && p.place === undefined)).toBe(true);
+    expect(prisma.game.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('makes a flag end the match for both teammates', async () => {
+    const m = new GamesManager();
+    const id = await m.createGame({ mode: 'double', timeControl: { kind: 'none', baseMin: 0, incSec: 0 },
+      team1: [player(1), player(3)], team2: [player(2), player(4)] });
+    await m.applyMultiMove(id, 1, { from: 'm2', to: 'm4' });
+    await vi.advanceTimersByTimeAsync(301_000);
+    await m.checkFlags();
+    expect(m.getActive(id)).toMatchObject({ status: 'finished', result: '1-0', reason: 'timeout' });
+  });
+});

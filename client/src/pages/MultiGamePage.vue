@@ -8,6 +8,7 @@ import type {
   MultiColor,
   MultiMode,
   SeatStatus,
+  PieceType,
 } from 'shared';
 import {
   getBotPersonality,
@@ -92,8 +93,9 @@ const myParticipant = computed(
 );
 
 const multiMode = computed<MultiMode>(() =>
-  state.value?.mode === 'three-player' ? 'three-player' : 'four-player',
+  state.value?.mode === 'double' ? 'double' : state.value?.mode === 'three-player' ? 'three-player' : 'four-player',
 );
+const isDouble = computed(() => multiMode.value === 'double');
 const topology = computed(() => getTopology(multiMode.value));
 
 const viewerSeat = computed<number>(() => {
@@ -194,7 +196,7 @@ function fmtClock(ms: number | undefined | null): string {
 interface SeatCardView {
   seat: number;
   color: MultiColor;
-  position: 'bottom' | 'left' | 'top' | 'right' | 'top-left' | 'top-right';
+  position: 'bottom' | 'left' | 'top' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
   participant: GameParticipantInfo | null;
   score: number;
   status: SeatStatus;
@@ -213,7 +215,11 @@ const seatCards = computed<SeatCardView[]>(() => {
   for (let s = 0; s < count; s++) {
     const rel = (s - vSeat + count) % count;
     let position: SeatCardView['position'] = 'bottom';
-    if (count === 4) {
+    if (isDouble.value) {
+      const normal = ['bottom-right', 'top-right', 'bottom-left', 'top-left'] as const;
+      const rotated = ['top-left', 'bottom-left', 'top-right', 'bottom-right'] as const;
+      position = (vSeat % 2 === 0 ? normal : rotated)[s];
+    } else if (count === 4) {
       if (rel === 0) position = 'bottom';
       else if (rel === 1) position = 'left';
       else if (rel === 2) position = 'top';
@@ -280,7 +286,7 @@ function displayName(p: GameParticipantInfo | null): string {
 }
 
 // ---------- Actions ----------
-function onBoardMove(payload: { from: string; to: string }): void {
+function onBoardMove(payload: { from: string; to: string; promotion?: PieceType }): void {
   if (!socket.connected) {
     error.value =
       i18n.locale === 'en'
@@ -293,7 +299,7 @@ function onBoardMove(payload: { from: string; to: string }): void {
     .timeout(8000)
     .emit(
       'game:multi-move',
-      { gameId, from: payload.from, to: payload.to },
+      { gameId, from: payload.from, to: payload.to, promotion: payload.promotion },
       (timeout, ack) => {
         if (timeout || !ack) {
           error.value =
@@ -353,6 +359,12 @@ function resultHeadline(): string {
   const en = i18n.locale === 'en';
   if (st.status === 'abandoned' || st.reason === 'abandoned') {
     return en ? 'Game abandoned' : 'Партия отменена';
+  }
+  if (isDouble.value) {
+    if (st.result === '1/2-1/2') return en ? 'Draw' : 'Ничья';
+    const winner = st.result === '1-0' ? 1 : st.result === '0-1' ? 2 : null;
+    const names = st.participants.filter(p => p.team === winner).map(p => p.username).join(' + ');
+    return winner ? (en ? `Team victory: ${names}` : `Победа команды: ${names}`) : (en ? 'Game finished' : 'Партия завершена');
   }
   const winner = st.participants.find((p) => p.place === 1);
   if (winner) {
@@ -534,7 +546,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="state" class="multi-game-page" :class="state.mode">
+  <div v-if="state" class="multi-game-page" :class="[state.mode, { 'double-game': isDouble }]">
     <!-- Compact 1-line Header Bar -->
     <header ref="topbarRef" class="multi-topbar panel">
       <div class="topbar-left">
@@ -617,6 +629,10 @@ onBeforeUnmount(() => {
       </button>
     </aside>
 
+    <aside v-if="isDouble" class="double-turn-guide">
+      <span>{{ i18n.locale === 'en' ? 'Yellow → Green → Red → Blue · Yellow + Red vs Green + Blue' : 'Жёлтые → Зелёные → Красные → Синие · Жёлтые + Красные против Зелёных + Синих' }}</span>
+      <router-link to="/rules/double">{{ i18n.locale === 'en' ? 'Rules' : 'Правила' }}</router-link>
+    </aside>
     <!-- Full-Viewport Board Arena -->
     <main class="multi-arena">
       <div class="board-stage" :class="state.mode">
@@ -635,8 +651,9 @@ onBeforeUnmount(() => {
           <div class="seat-card-top">
             <span class="seat-swatch" :class="`swatch-${card.color}`"></span>
             <span class="seat-color-label">{{ colorName(card.color) }}</span>
-            <span v-if="card.place" class="place-pill mono">#{{ card.place }}</span>
-            <span class="score-pill mono" :title="i18n.locale === 'en' ? 'Points' : 'Очки'">
+            <span v-if="isDouble" class="team-label">{{ i18n.locale === 'en' ? 'Team' : 'Команда' }} {{ card.participant?.team }}</span>
+            <span v-if="!isDouble && card.place" class="place-pill mono">#{{ card.place }}</span>
+            <span v-if="!isDouble" class="score-pill mono" :title="i18n.locale === 'en' ? 'Points' : 'Очки'">
               {{ card.score }} {{ i18n.locale === 'en' ? 'pts' : 'очк.' }}
             </span>
           </div>
@@ -678,7 +695,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- SVG MultiBoard -->
-        <MultiBoard
+        <MultiBoard :locale="i18n.locale"
           ref="boardRef"
           :mode="multiMode"
           :snapshot="state.multi?.snapshot ?? null"
@@ -994,4 +1011,21 @@ onBeforeUnmount(() => {
     justify-content: space-between;
   }
 }
+</style>
+
+<style scoped>
+.double-turn-guide { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 8px 12px; color: var(--ink-2); font-size: 12px; }
+.double-game .multi-arena { align-items: flex-start; }
+.board-stage.double { width: 100%; max-width: 1500px; height: auto; max-height: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
+.board-stage.double > .multi-board-wrap { grid-column: 1 / -1; grid-row: 2; min-width: 0; }
+.board-stage.double .seat-card { position: static; width: auto; min-width: 0; flex-direction: column; align-items: stretch; justify-content: flex-start; padding: 10px 14px; background: var(--surface); color: var(--ink); border-color: var(--line); box-shadow: none; }
+.board-stage.double .seat-card.active-turn { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.board-stage.double .pos-top-left { grid-column: 1; grid-row: 1; }
+.board-stage.double .pos-top-right { grid-column: 2; grid-row: 1; }
+.board-stage.double .pos-bottom-left { grid-column: 1; grid-row: 3; }
+.board-stage.double .pos-bottom-right { grid-column: 2; grid-row: 3; }
+.double .seat-username { max-width: 100%; }
+.double .seat-clock { color: var(--ink); }
+.team-label { margin-left: auto; font-size: 11px; color: var(--ink-2); }
+@media (max-width: 640px) { .double-turn-guide { font-size: 11px; } .board-stage.double { gap: 8px; } .board-stage.double .seat-card { padding: 8px; } }
 </style>

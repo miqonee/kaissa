@@ -263,14 +263,14 @@ function pieceLabel(t: PieceType): string {
 </script>
 
 <template>
-  <div ref="replayRoot" class="replayer" :class="{ compact }">
+  <div ref="replayRoot" class="replayer" :class="{ compact, 'double-replay': game.mode === 'double' }">
     <!-- Шапка: кто играл и чем кончилось -->
     <header class="replayer-head">
       <div class="rh-teams">
-        <span class="color-tag w">{{ game.mode === 'bughouse' ? (i18n.locale === 'en' ? 'Team 1' : 'Команда 1') : (i18n.locale === 'en' ? 'White' : 'Белые') }}</span>
+        <span class="color-tag w">{{ (game.mode === 'bughouse' || game.mode === 'double') ? (i18n.locale === 'en' ? 'Team 1' : 'Команда 1') : (i18n.locale === 'en' ? 'White' : 'Белые') }}</span>
         <strong class="truncate">{{ teams.t1 }}</strong>
         <span class="rh-vs">vs</span>
-        <span class="color-tag b">{{ game.mode === 'bughouse' ? (i18n.locale === 'en' ? 'Team 2' : 'Команда 2') : (i18n.locale === 'en' ? 'Black' : 'Чёрные') }}</span>
+        <span class="color-tag b">{{ (game.mode === 'bughouse' || game.mode === 'double') ? (i18n.locale === 'en' ? 'Team 2' : 'Команда 2') : (i18n.locale === 'en' ? 'Black' : 'Чёрные') }}</span>
         <strong class="truncate">{{ teams.t2 }}</strong>
       </div>
       <div class="rh-meta">
@@ -311,7 +311,7 @@ function pieceLabel(t: PieceType): string {
           />
 
           <div class="rp-board-stage">
-            <MultiBoard
+            <MultiBoard :locale="i18n.locale"
               v-if="isMultiplayer(game.mode)"
               :mode="game.mode as MultiMode"
               :fen="fenOf(b - 1)"
@@ -1022,4 +1022,9 @@ function pieceLabel(t: PieceType): string {
   .rh-meta .badge { font-size: 10px; }
 }
 @media (max-width: 640px) { .rp-seat { height: 26px; } }
+</style>
+
+<style scoped>
+.double-replay .rp-board-stage { width: 100%; aspect-ratio: 1008 / 528; }
+.double-replay .rp-board-head { width: 100%; }
 </style>

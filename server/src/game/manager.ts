@@ -327,7 +327,9 @@ export class GamesManager {
       const cap = lobbyCapacity(opts.mode);
       let participants: ActiveParticipant[];
       if (isMultiplayer(opts.mode)) {
-        const rawSeats = (opts.seats ?? [...opts.team1, ...opts.team2]).slice(0, cap);
+        const rawSeats = (opts.seats ?? (opts.mode === 'double'
+          ? [opts.team1[0], opts.team2[0], opts.team1[1], opts.team2[1]]
+          : [...opts.team1, ...opts.team2])).filter(Boolean).slice(0, cap);
         if (rawSeats.length !== cap || new Set(rawSeats.map(p => p.uid)).size !== cap) {
           throw new Error('Неверный состав игроков');
         }
@@ -433,7 +435,7 @@ export class GamesManager {
   applyMultiMove(
     gameId: number,
     uid: number,
-    data: { from: string; to: string },
+    data: { from: string; to: string; promotion?: PieceType },
     expectedPosition?: string,
   ): Promise<{ ok: true } | { ok: false; error: string }> {
     return this.serialize(gameId, () => this.applyMultiMoveNow(gameId, uid, data, expectedPosition));
@@ -442,7 +444,7 @@ export class GamesManager {
   private async applyMultiMoveNow(
     gameId: number,
     uid: number,
-    data: { from: string; to: string },
+    data: { from: string; to: string; promotion?: PieceType },
     expectedPosition?: string,
   ): Promise<{ ok: true } | { ok: false; error: string }> {
     const g = this.games.get(gameId);
@@ -479,7 +481,7 @@ export class GamesManager {
 
     let outcome;
     try {
-      outcome = mc.move(p.seat, data.from, data.to);
+      outcome = mc.move(p.seat, data.from, data.to, data.promotion);
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : 'Недопустимый ход' };
     }
@@ -510,7 +512,7 @@ export class GamesManager {
             userId: uid,
             from: data.from,
             to: data.to,
-            promotion: outcome.promoted ? 'q' : null,
+            promotion: outcome.promoted ? data.promotion ?? 'q' : null,
             dropPiece: null,
             fenAfter: serializedFen,
             clocksAfter: clocksAfterJson,
@@ -529,7 +531,7 @@ export class GamesManager {
     this.syncMultiParticipants(g);
 
     if (outcome.over) {
-      await this.finish(g, 'ffa', (outcome.endReason ?? 'last-standing') as EndReason, 0);
+      await this.finish(g, g.mode === 'double' ? mc.teamResult() : 'ffa', (outcome.endReason ?? 'last-standing') as EndReason, 0);
     }
 
     this.io?.to(this.gameRoom(g.id)).emit('game:state', this.toGameState(g));
@@ -546,9 +548,9 @@ export class GamesManager {
     const places = mc.placements();
     for (const p of g.participants) {
       if (p.seat !== undefined) {
-        p.score = mc.scoreOf(p.seat);
+        p.score = g.mode === 'double' ? undefined : mc.scoreOf(p.seat);
         p.outcome = mc.seatStatus(p.seat);
-        p.place = places[p.seat];
+        p.place = g.mode === 'double' ? undefined : places[p.seat];
       }
     }
   }
@@ -567,7 +569,7 @@ export class GamesManager {
       this.systemMessage(g, `У игрока ${flaggedPlayer.username} вышло время`);
     }
     if (outcome.over) {
-      await this.finish(g, 'ffa', (outcome.endReason ?? 'timeout') as EndReason, 0);
+      await this.finish(g, g.mode === 'double' ? mc.teamResult() : 'ffa', (outcome.endReason ?? 'timeout') as EndReason, 0);
     } else {
       this.io?.to(this.gameRoom(g.id)).emit('game:state', this.toGameState(g));
       this.io?.to('live').emit('live:update', this.liveInfo(g));
@@ -839,9 +841,9 @@ export class GamesManager {
         g.multiClock = multiClockSwitchSeat(g.multiClock, outcome.over ? null : g.engine.turn(), now);
       }
       this.syncMultiParticipants(g);
-      this.systemMessage(g, `${p.username} сдался и выбыл из партии`);
+      this.systemMessage(g, g.mode === 'double' ? `${p.username} сдался. Команда проиграла` : `${p.username} сдался и выбыл из партии`);
       if (outcome.over) {
-        await this.finish(g, 'ffa', (outcome.endReason ?? 'resign') as EndReason, 0);
+        await this.finish(g, g.mode === 'double' ? g.engine.teamResult() : 'ffa', (outcome.endReason ?? 'resign') as EndReason, 0);
       } else {
         const remainingHumans = g.participants.filter(
           (hp) => !hp.isBot && hp.seat !== undefined && g.engine instanceof MultiChess && g.engine.seatStatus(hp.seat) === 'active' && !g.disconnected.has(hp.uid),
@@ -1268,7 +1270,7 @@ function buildMultiParticipants(mode: MultiMode, seats: ParticipantSetup[]): Act
   return seats.map((s, idx) => ({
     uid: s.uid,
     username: s.username,
-    team: (idx + 1) as Team,
+    team: (mode === 'double' ? idx % 2 + 1 : idx + 1) as Team,
     color: idx % 2 === 0 ? 'w' : 'b',
     boardIndex: 0,
     moveSlot: 0,
@@ -1280,8 +1282,7 @@ function buildMultiParticipants(mode: MultiMode, seats: ParticipantSetup[]): Act
     botJitter: (Math.random() * 2 - 1) * 0.05,
     seat: idx,
     multiColor: colors[idx],
-    score: 0,
-    place: idx + 1,
+    ...(mode === 'double' ? {} : { score: 0, place: idx + 1 }),
     outcome: 'active',
   }));
 }

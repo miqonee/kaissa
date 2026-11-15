@@ -178,7 +178,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
     <section class="home-banner" :aria-label="i18n.t.home.quickStartChip">
       <div class="banner-intro">
         <h1>{{ seoPages['/'][i18n.locale].heading }}</h1>
-        <p class="dim">{{ i18n.locale === 'en' ? 'Team up on one board, share captures, or play free for all. Choose a board and start with friends or bots.' : 'Играйте в команде, передавайте фигуры напарнику или сражайтесь каждый за себя. Выберите доску и начните с друзьями или ботами.' }}</p>
+        <p class="dim">{{ i18n.locale === 'en' ? 'Team up with friends or play free for all. Start without signing up.' : 'Играйте с друзьями в команде или каждый за себя. Начать можно без регистрации.' }}</p>
       </div>
     </section>
 
@@ -255,10 +255,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
             <p>{{ i18n.locale === 'en' ? 'No public tables yet. Create one to invite your friends.' : 'Публичных столов пока нет. Создайте свой и пригласите друзей.' }}</p>
           </div>
           <div class="table-create-actions">
-            <button class="primary" @click="openCreateModal">
-              <AppIcon name="plus" :size="18" :stroke-width="2.4" />
-              {{ i18n.t.home.createTable }}
-            </button>
+            <button type="button" class="primary" :disabled="joinBusy" @click="openCreateModal"><AppIcon name="plus" :size="17" />{{ i18n.t.home.createTable }}</button>
           </div>
         </div>
       </section>
@@ -270,9 +267,13 @@ function lobbyRosterTitle(l: LobbySummary): string {
     </div>
 
     <section v-if="!auth.user || auth.user.isGuest" class="panel home-guide" aria-labelledby="home-guide-title">
-      <h2 id="home-guide-title">{{ i18n.locale === 'en' ? 'Find your way to play' : 'Выберите свой способ играть' }}</h2>
+      <details class="home-guide-disclosure">
+        <summary><h2 id="home-guide-title"><span>{{ i18n.locale === 'en' ? 'About the modes and rules' : 'О режимах и правилах' }}</span><AppIcon name="chevron-down" :size="18" /></h2></summary>
+        <div class="home-guide-content">
       <div class="guide-grid"><article v-for="section in seoPages['/'][i18n.locale].sections" :key="section.heading"><h3>{{ section.heading }}</h3><p v-for="paragraph in section.paragraphs" :key="paragraph">{{ paragraph }}</p></article></div>
       <nav :aria-label="i18n.locale === 'en' ? 'Learn the rules' : 'Изучить правила'"><router-link to="/rules/duo">{{ i18n.locale === 'en' ? '2v2 rules' : 'Правила 2×2' }}</router-link><router-link to="/rules/double">{{ i18n.locale === 'en' ? 'Double Chess rules' : 'Правила Двойных шахмат' }}</router-link><router-link to="/rules/bughouse">{{ i18n.locale === 'en' ? 'Bughouse rules' : 'Правила багхауса' }}</router-link><router-link to="/rules/crazyhouse">{{ i18n.locale === 'en' ? 'Crazyhouse rules' : 'Правила Crazyhouse' }}</router-link><router-link to="/rules/multiplayer">{{ i18n.locale === 'en' ? '3 & 4 player rules' : 'Правила 3 и 4 игрока' }}</router-link></nav>
+        </div>
+      </details>
     </section>
 
     <!-- Модальное окно создания стола -->
@@ -296,14 +297,25 @@ function lobbyRosterTitle(l: LobbySummary): string {
 
 <style scoped>
 .play-panel { box-shadow: none; }
-.home-guide {padding:22px;}.home-guide h2 {font-size:22px;margin-bottom:18px;}.guide-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:24px;}.guide-grid h3 {margin-bottom:10px;}.guide-grid p {font-size:14px;color:var(--ink-2);line-height:1.65;}.home-guide nav {display:flex;flex-wrap:wrap;gap:18px;margin-top:16px;}.home-guide a {text-decoration:underline;text-underline-offset:3px;}
+.home-guide { padding: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; }
+.home-guide summary { list-style: none; cursor: pointer; }
+.home-guide summary::-webkit-details-marker { display: none; }
+.home-guide h2 { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 58px; font-size: 17px; margin: 0; }
+.home-guide h2 svg { color: var(--ink-2); flex: none; }
+.home-guide-disclosure[open] summary svg { transform: rotate(180deg); }
+.home-guide-content { padding: 10px 0 14px; }
+.guide-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 28px; }
+.guide-grid h3 { margin-bottom: 10px; }
+.guide-grid p { font-size: 13px; color: var(--ink-2); line-height: 1.65; }
+.home-guide nav { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 20px; }
+.home-guide a { font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
 .home {
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
-.home-banner { padding: 4px 2px; }
+.home-banner { padding: 4px 0; }
 
 .banner-intro {
   min-width: 0;
@@ -322,11 +334,8 @@ function lobbyRosterTitle(l: LobbySummary): string {
   margin: 0;
 }
 
-.table-create-actions {
-  display: flex;
-  justify-content: center;
-  padding: 16px;
-}
+.table-create-actions { display: flex; justify-content: center; padding: 0 16px 16px; }
+.table-create-actions button { min-height: var(--control-size); font-size: 12px; }
 
 .quick-join {
   display: flex;
@@ -525,4 +534,19 @@ function lobbyRosterTitle(l: LobbySummary): string {
 .lobby-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .lobby-name { overflow-wrap: anywhere; }
 @media (max-width: 560px) { .open-tables-head .quick-join { flex: 1 1 100%; } .join-input { min-width: 0; } }
+</style>
+
+<style scoped>
+@media (max-width: 740px) {
+  .home { gap: 14px; }
+  .home-banner { padding: 2px 0; }
+  .banner-intro p.dim { font-size: 12px; line-height: 1.45; }
+  .home-grid { gap: 12px; }
+  .home-guide h2 { min-height: 52px; font-size: 15px; }
+  .guide-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .guide-grid p { font-size: 12px; line-height: 1.55; }
+  .lobbies-col .empty, .home-grid :deep(.live-col .empty) { padding: 18px 14px; gap: 6px; min-height: 0; }
+  .home-grid :deep(.empty p) { margin: 0; font-size: 12px; line-height: 1.5; }
+  .home-guide nav { gap: 12px; font-size: 12px; }
+}
 </style>

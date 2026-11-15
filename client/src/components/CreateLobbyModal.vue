@@ -174,8 +174,8 @@ function submit() {
 
 <style scoped>
 .create-modal {
-  width: min(1080px, calc(100vw - 32px));
-  max-width: 1080px;
+  width: min(760px, calc(100vw - 32px));
+  max-width: 760px;
   max-height: 92dvh;
   display: flex;
   flex-direction: column;

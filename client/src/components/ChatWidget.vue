@@ -116,6 +116,7 @@ onBeforeUnmount(() => {
   window.visualViewport?.removeEventListener('resize', measureViewport);
   window.visualViewport?.removeEventListener('scroll', measureViewport);
 });
+defineExpose({ toggleOpen });
 </script>
 
 <template>

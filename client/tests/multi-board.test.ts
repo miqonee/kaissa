@@ -9,7 +9,7 @@ describe('MultiBoard SVG component', () => {
     const app = createSSRApp({ render: () => h(MultiBoard, { mode: 'double', viewerSeat: 1 }) });
     const html = await renderToString(app);
     expect(html.match(/data-cell="/g)).toHaveLength(128);
-    expect(html).toContain('viewBox="0 0 1008 528"');
+    expect(html).toContain('viewBox="24 24 960 480"');
     expect(html).toContain('rotate(180 504 264)');
     for (const color of ['yellow', 'green', 'red', 'blue']) expect(html).toContain(`/pieces/multi/${color}K.svg`);
   });

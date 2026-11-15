@@ -4,6 +4,7 @@ export function useDialog(root: Ref<HTMLElement | null>, close: () => void): voi
   let previous: HTMLElement | null = null;
   let overflow = '';
   function onKey(event: KeyboardEvent) {
+    if (event.defaultPrevented) return;
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); return; }
     if (event.key !== 'Tab' || !root.value) return;
     const nodes = [...root.value.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')].filter(el => el.getClientRects().length > 0);
@@ -16,12 +17,12 @@ export function useDialog(root: Ref<HTMLElement | null>, close: () => void): voi
     previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('keydown', onKey);
     await nextTick();
     root.value?.querySelector<HTMLElement>('[autofocus], input, button')?.focus();
   });
   onBeforeUnmount(() => {
-    document.removeEventListener('keydown', onKey, true);
+    document.removeEventListener('keydown', onKey);
     document.body.style.overflow = overflow;
     if (previous?.isConnected) previous.focus();
   });

@@ -11,9 +11,20 @@ const browser = await chromium.launch({ headless: true,
 });
 const errors = [];
 const modes = ['team', 'double', 'bughouse', 'crazyhouse', 'crazyhouse-team', 'three-player', 'four-player'];
+async function chooseQuickMode(page, mode) {
+  const scope = page.locator('.quick-play');
+  if (await scope.locator('.mode-select').isVisible()) await scope.locator('.mode-select').selectOption(mode);
+  else await scope.locator(`.mode-choice:has(input[value="${mode}"])`).click();
+  assert.equal(await scope.locator('.mode-choice.selected input').inputValue(), mode);
+  const sizes = await page.evaluate(() => ({ width: document.documentElement.scrollWidth, viewport: innerWidth }));
+  assert(sizes.width <= sizes.viewport + 1, `${mode}: quick mode row overflows: ${JSON.stringify(sizes)}`);
+}
 async function choose(page, scope, mode) {
-  await scope.locator('.mode-option').filter({ has: page.locator(`input[value="${mode}"]`) }).click();
-  assert.equal(await scope.locator('.mode-option.selected').count(), 1);
+  await scope.locator('.mode-trigger').click();
+  await scope.locator(`.mode-option[data-mode="${mode}"]`).click();
+  await scope.locator('.mode-popup').waitFor({ state: 'hidden' });
+  await scope.locator('.mode-trigger').hover();
+  await scope.locator('.mode-popup.preview-only').waitFor();
   const bounds = await scope.locator('.mode-preview').evaluate(el => {
     const preview = el.getBoundingClientRect();
     const detail = el.closest('.mode-detail').getBoundingClientRect();
@@ -30,17 +41,23 @@ async function choose(page, scope, mode) {
   }
   const sizes = await page.evaluate(() => ({ width: document.documentElement.scrollWidth, viewport: innerWidth }));
   assert(sizes.width <= sizes.viewport + 1, `${mode}: page overflows: ${JSON.stringify(sizes)}`);
+  await page.mouse.move(0, 0);
+  await scope.locator('.mode-popup').waitFor({ state: 'hidden' });
 }
 try {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ ignoreHTTPSErrors: process.env.KAISSA_QA_IGNORE_HTTPS_ERRORS === 'true' });
   const page = await context.newPage();
   page.on('pageerror', error => errors.push(error.message));
   for (const locale of ['ru', 'en']) {
     await page.goto(base + (locale === 'en' ? '/?lang=en' : '/'), { waitUntil: 'networkidle' });
+    await page.evaluate(() => document.fonts.ready);
+    if (process.env.KAISSA_QA_REQUIRE_FONTS === 'true') {
+      assert(await page.evaluate(() => ['Spectral', 'IBM Plex Sans', 'IBM Plex Mono'].every(name => [...document.fonts].some(font => font.family === name && font.status === 'loaded'))), 'Brand fonts must be loaded for visual review');
+    }
     for (const width of [320, 390, 640, 768, 1080, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
-      for (const mode of modes) await choose(page, page.locator('.quick-play'), mode);
-      await choose(page, page.locator('.quick-play'), 'double');
+      for (const mode of modes) await chooseQuickMode(page, mode);
+      await chooseQuickMode(page, 'double');
       await page.locator('.table-create-actions button').click();
       const modal = page.locator('.create-modal');
       await modal.waitFor();
@@ -51,5 +68,5 @@ try {
     }
   }
   assert.deepEqual(errors, []);
-  console.log('OK: all 7 mode previews stay inside their cards in quick play and creation, RU/EN, 320/390/640/768/1080/1440 px; no page overflow or browser errors.');
+  console.log('OK: all 7 quick mode buttons/native options and creation previews work in RU/EN at 320/390/640/768/1080/1440 px; no page overflow or browser errors.');
 } finally { await browser.close(); }

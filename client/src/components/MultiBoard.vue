@@ -16,6 +16,7 @@ const props = withDefaults(
     lastMove?: (string | null)[] | null;
     checkedKingSquares?: string[];
     mini?: boolean;
+    coordinates?: boolean;
   }>(),
   {
     locale: 'ru',
@@ -27,6 +28,7 @@ const props = withDefaults(
     lastMove: null,
     checkedKingSquares: () => [],
     mini: false,
+    coordinates: false,
   },
 );
 
@@ -38,6 +40,20 @@ const topology = computed(() => getTopology(props.mode));
 
 const viewWidth = computed(() => topology.value.viewWidth ?? topology.value.viewSize);
 const viewHeight = computed(() => topology.value.viewHeight ?? topology.value.viewSize);
+const boardFrame = computed(() => {
+  if (props.mode !== 'double' || (!props.mini && props.coordinates)) {
+    return { x: 0, y: 0, width: viewWidth.value, height: viewHeight.value };
+  }
+  // Reclaim the coordinate margins while retaining every playable cell.
+  const points = topology.value.cells.flatMap(cell => cell.polygon);
+  const left = Math.min(...points.map(point => point[0]));
+  const top = Math.min(...points.map(point => point[1]));
+  return {
+    x: left, y: top,
+    width: Math.max(...points.map(point => point[0])) - left,
+    height: Math.max(...points.map(point => point[1])) - top,
+  };
+});
 const doubleZoomed = ref(false);
 const promotionMove = ref<{ from: string; to: string; seat: number } | null>(null);
 
@@ -152,8 +168,13 @@ function clientToBoardPoint(clientX: number, clientY: number): [number, number] 
   const rect = svg.getBoundingClientRect();
   if (!rect.width || !rect.height) return null;
   const halfX = viewWidth.value / 2, halfY = viewHeight.value / 2;
-  const rawX = ((clientX - rect.left) / rect.width) * viewWidth.value;
-  const rawY = ((clientY - rect.top) / rect.height) * viewHeight.value;
+  // SVG preserves the whole field when the available screen is a different shape.
+  const frame = boardFrame.value;
+  const scale = Math.min(rect.width / frame.width, rect.height / frame.height);
+  const insetX = (rect.width - frame.width * scale) / 2;
+  const insetY = (rect.height - frame.height * scale) / 2;
+  const rawX = frame.x + (clientX - rect.left - insetX) / scale;
+  const rawY = frame.y + (clientY - rect.top - insetY) / scale;
   const rad = (-rotationDeg.value * Math.PI) / 180;
   const dx = rawX - halfX;
   const dy = rawY - halfY;
@@ -253,7 +274,7 @@ defineExpose({ resetView });
 </script>
 
 <template>
-  <div class="multi-board-wrap" :class="[mode, { mini, interactive: myTurn && !mini, zoomed: mode === 'double' && doubleZoomed }]">
+  <div class="multi-board-wrap" :class="[mode, { mini, interactive: myTurn && !mini, zoomed: mode === 'double' && doubleZoomed }]" :style="{ '--board-aspect': `${boardFrame.width} / ${boardFrame.height}` }">
     <div v-if="mode === 'double' && !mini" class="double-view-controls">
       <button class="small" :class="{ primary: !doubleZoomed }" :aria-pressed="!doubleZoomed" @click="doubleZoomed = false">{{ locale === 'en' ? 'Full board' : 'Вся доска' }}</button>
       <button class="small" :class="{ primary: doubleZoomed }" :aria-pressed="doubleZoomed" @click="doubleZoomed = true">{{ locale === 'en' ? 'Larger' : 'Крупнее' }}</button>
@@ -262,7 +283,7 @@ defineExpose({ resetView });
     <svg
       ref="svgRef"
       class="multi-board-svg"
-      :viewBox="`0 0 ${viewWidth} ${viewHeight}`"
+      :viewBox="`${boardFrame.x} ${boardFrame.y} ${boardFrame.width} ${boardFrame.height}`"
       role="img"
       :aria-label="mode === 'double' ? 'Double Chess 16×8' : mode === 'four-player' ? '4-Player Cross Chessboard' : '3-Player Hexagonal Chessboard'"
       @pointermove="onPointerMove"
@@ -278,7 +299,7 @@ defineExpose({ resetView });
       </defs>
 
       <g :transform="`rotate(${rotationDeg} ${viewWidth / 2} ${viewHeight / 2})`">
-        <g v-if="mode === 'double' && !mini" class="double-coordinates" pointer-events="none">
+        <g v-if="mode === 'double' && !mini && coordinates" class="double-coordinates" pointer-events="none">
           <template v-for="cell in topology.cells" :key="cell.id">
             <text v-if="cell.id.endsWith('1')" :x="cell.center[0]" :y="viewHeight - 7" :transform="`rotate(${-rotationDeg} ${cell.center[0]} ${viewHeight - 7})`">{{ cell.id[0] }}</text>
             <text v-if="cell.id.startsWith('a')" x="12" :y="cell.center[1] + 4" :transform="`rotate(${-rotationDeg} 12 ${cell.center[1] + 4})`">{{ cell.id.slice(1) }}</text>
@@ -436,11 +457,11 @@ defineExpose({ resetView });
 
 <style scoped>
 .double-coordinates { font: 13px sans-serif; fill: var(--ink-2); text-anchor: middle; }
-.multi-board-wrap.double { aspect-ratio: 1008 / 528; height: auto; }
+.multi-board-wrap.double { aspect-ratio: var(--board-aspect); height: auto; }
 .multi-board-wrap.double:not(.mini) { display: block; overflow-x: auto; aspect-ratio: auto; touch-action: pan-x; }
-.multi-board-wrap.double > .multi-board-svg { height: auto; aspect-ratio: 1008 / 528; }
-.multi-board-wrap.double:not(.mini) > .multi-board-svg { min-width: 0; touch-action: pan-x; }
-.multi-board-wrap.double.zoomed:not(.mini) > .multi-board-svg { min-width: 640px; }
+.multi-board-wrap.double > .multi-board-svg { height: auto; aspect-ratio: var(--board-aspect); }
+.multi-board-wrap.double:not(.mini) > .multi-board-svg { min-width: 0; touch-action: none; }
+.multi-board-wrap.double.zoomed:not(.mini) > .multi-board-svg { min-width: 640px; touch-action: pan-x; }
 .double-view-controls { display: none; }
 @media (max-width: 640px) { .double-view-controls { display: flex; align-items: center; gap: 6px; padding: 8px 0; position: sticky; left: 0; width: 100%; background: var(--surface); border-radius: var(--r-s); } .double-view-controls span { min-width: 0; font-size: 10px; color: var(--ink-2); margin-left: auto; padding-right: 6px; } }
 </style>

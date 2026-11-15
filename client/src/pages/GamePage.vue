@@ -934,7 +934,7 @@ function resultHeadline(): string {
               :dests="destsByBoard[0]"
               :check-square="checkByBoard[0]"
               :last-move="lastMoveOf(0)"
-              :coordinates="true"
+              :coordinates="false"
               :clock-remaining-ms="effectiveClockMsForBoard(0)"
               @move="onMove(0, $event)"
               @premove-set="playMoveSound"
@@ -1064,7 +1064,7 @@ function resultHeadline(): string {
               :check-square="checkByBoard[bc.index]" :last-move="lastMoveOf(bc.index)"
               :drop-piece="myTurnOn(bc.index) ? selectedDrop : null"
               :drop-dests="myTurnOn(bc.index) && selectedDrop ? state.legalDrops?.[bc.index]?.[selectedDrop] ?? [] : []"
-              :coordinates="true"
+              :coordinates="false"
               :clock-remaining-ms="effectiveClockMsForBoard(bc.index)"
               @move="onMove(bc.index, $event)" @drop="onDrop(bc.index, $event)"
               @cancel-drop="selectedDrop = null" @premove-set="playMoveSound" />

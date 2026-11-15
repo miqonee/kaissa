@@ -26,11 +26,6 @@ const i18n = useI18n();
         </p>
       </div>
 
-      <div class="footer-tech-badges">
-        <span class="badge tiny mono">Stockfish · Fairy-Stockfish</span>
-        <span class="badge tiny mono">WebSocket Realtime</span>
-        <span class="badge tiny mono">Elo Rating</span>
-      </div>
     </div>
 
     <!-- Нижняя полоса: правила и копирайт (всегда доступна) -->
@@ -109,11 +104,6 @@ const i18n = useI18n();
   font-size: 13px;
   color: var(--ink-3);
   margin: 0;
-}
-.footer-tech-badges {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
 }
 .footer-bottom {
   padding: 12px var(--gap-m);

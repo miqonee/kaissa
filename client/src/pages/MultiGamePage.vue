@@ -63,11 +63,13 @@ const showReplay = ref(false);
 const rematchBusy = ref(false);
 const rematchInvite = ref<string | null>(null);
 const lastMove = ref<(string | null)[] | null>(null);
+const chatWidgetRef = ref<InstanceType<typeof ChatWidget> | null>(null);
 const boardRef = ref<InstanceType<typeof MultiBoard> | null>(null);
 const topbarRef = ref<HTMLElement | null>(null);
 let autoScrolled = false;
 
 function scrollToBoardTop(): void {
+  if (state.value?.mode === 'double') return;
   if (autoScrolled || typeof window === 'undefined') return;
   autoScrolled = true;
   void nextTick(() => {
@@ -574,6 +576,8 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="topbar-right">
+        <router-link v-if="isDouble" class="landscape-rules button small ghost" to="/rules/double" target="_blank" :aria-label="i18n.locale === 'en' ? 'Double Chess rules' : 'Правила Двойных шахмат'"><AppIcon name="book-open" :size="17" /></router-link>
+        <button v-if="isDouble" type="button" class="landscape-chat small" :aria-label="i18n.locale === 'en' ? 'Open chat' : 'Открыть чат'" @click="chatWidgetRef?.toggleOpen()"><AppIcon name="message-square" :size="17" /></button>
         <span v-if="error" class="inline-error">{{ error }}</span>
         <button
           v-if="canViewArchive && state.status !== 'active'"
@@ -630,7 +634,8 @@ onBeforeUnmount(() => {
     </aside>
 
     <aside v-if="isDouble" class="double-turn-guide">
-      <span>{{ i18n.locale === 'en' ? 'Yellow → Green → Red → Blue · Yellow + Red vs Green + Blue' : 'Жёлтые → Зелёные → Красные → Синие · Жёлтые + Красные против Зелёных + Синих' }}</span>
+      <span class="double-turn-desktop">{{ i18n.locale === 'en' ? 'Yellow → Green → Red → Blue · Yellow + Red vs Green + Blue' : 'Жёлтые → Зелёные → Красные → Синие · Жёлтые + Красные против Зелёных + Синих' }}</span>
+      <details class="double-turn-mobile"><summary>{{ i18n.locale === 'en' ? 'Teams and turn order' : 'Команды и очередь ходов' }}</summary><p>{{ i18n.locale === 'en' ? 'Yellow → Green → Red → Blue. Yellow + Red vs Green + Blue.' : 'Жёлтые → Зелёные → Красные → Синие. Жёлтые + Красные против Зелёных + Синих.' }}</p></details>
       <router-link to="/rules/double">{{ i18n.locale === 'en' ? 'Rules' : 'Правила' }}</router-link>
     </aside>
     <!-- Full-Viewport Board Arena -->
@@ -641,6 +646,7 @@ onBeforeUnmount(() => {
           v-for="card in seatCards"
           :key="card.seat"
           class="seat-card panel"
+          :aria-current="card.isTurn ? 'step' : undefined"
           :class="[
             `pos-${card.position}`,
             `color-${card.color}`,
@@ -712,6 +718,7 @@ onBeforeUnmount(() => {
 
     <!-- Right-side Collapsible Chat & Move Log Widget (Closed by Default) -->
     <ChatWidget
+      ref="chatWidgetRef"
       :messages="chat"
       :moves="movesSanHistory"
       :my-user-id="myId"
@@ -1028,4 +1035,56 @@ onBeforeUnmount(() => {
 .double .seat-clock { color: var(--ink); }
 .team-label { margin-left: auto; font-size: 11px; color: var(--ink-2); }
 @media (max-width: 640px) { .double-turn-guide { font-size: 11px; } .board-stage.double { gap: 8px; } .board-stage.double .seat-card { padding: 8px; } }
+</style>
+
+<style scoped>
+.double-turn-mobile, .landscape-chat, .landscape-rules { display: none; }
+@media (max-width: 640px) {
+  .double-turn-desktop { display: none; }
+  .double-turn-mobile { display: block; }
+  .double-turn-mobile summary { cursor: pointer; }
+  .double-turn-mobile p { margin: 8px 0 0; max-width: 250px; line-height: 1.5; }
+  .double-turn-guide { padding: 5px 8px; }
+  .board-stage.double .seat-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: 5px; padding: 7px; }
+  .double .seat-card-top { grid-column: 1 / -1; flex-wrap: nowrap; }
+  .double .seat-color-label, .double .team-label { font-size: 9px; }
+  .double .seat-card-mid { grid-column: 1; grid-row: 2; min-width: 0; flex-wrap: nowrap; gap: 3px; }
+  .double .seat-card-mid :deep(.bot-hover-trigger) { min-width: 0; }
+  .double .seat-username { font-size: 11px; min-width: 0; flex: 1; }
+  .double .seat-rating { display: none; }
+  .double .you-tag { flex: none; font-size: 8px; }
+  .double .seat-card-bottom { grid-column: 2; grid-row: 2; }
+  .double .seat-clock { font-size: 13px; }
+  .double .seat-status-tag { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+}
+@media (orientation: landscape) and (max-height: 600px) and (max-width: 1100px) {
+  .multi-game-page.double-game { min-height: 0; height: 100%; padding: 0; gap: 4px; }
+  .double-game .multi-topbar { flex: none; padding: 3px 8px; min-height: 34px; gap: 6px; }
+  .double-game .topbar-left, .double-game .topbar-right { min-width: 0; gap: 6px; }
+  .double-game .topbar-left > .badge { display: none; }
+  .double-game .topbar-left > .first-move-chip { display: inline; }
+  .double-game .mode-title { font-size: 12px; }
+  .double-game .topbar-right button { min-height: 28px; height: 28px; }
+  .landscape-chat, .landscape-rules { display: inline-flex; }
+  .double-turn-guide { display: none; }
+  .double-game .multi-arena { flex: 1; min-height: 0; align-items: stretch; }
+  .board-stage.double { width: 100%; height: 100%; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr) 34px; gap: 4px; }
+  .board-stage.double > .multi-board-wrap { width: 100%; height: 100%; min-height: 0; grid-column: 1 / -1; grid-row: 1; overflow: hidden; }
+  .board-stage.double :deep(.multi-board-svg) { width: 100%; height: 100%; min-width: 0 !important; aspect-ratio: auto; touch-action: none !important; }
+  .board-stage.double :deep(.double-view-controls) { display: none; }
+  .board-stage.double .seat-card { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 5px; padding: 3px 6px; min-width: 0; overflow: hidden; }
+  .board-stage.double .color-yellow { grid-column: 1; grid-row: 2; }
+  .board-stage.double .color-green { grid-column: 2; grid-row: 2; }
+  .board-stage.double .color-red { grid-column: 3; grid-row: 2; }
+  .board-stage.double .color-blue { grid-column: 4; grid-row: 2; }
+  .double .seat-card-top { flex: none; }
+  .double .seat-color-label, .double .team-label, .double .seat-rating, .double .you-tag { display: none; }
+  .double .seat-card-mid { min-width: 0; flex: 1; flex-wrap: nowrap; overflow: hidden; }
+  .double .seat-username { font-size: 10px; min-width: 0; }
+  .double .seat-card-bottom { flex: none; }
+  .double .seat-clock { font-size: 12px; }
+  .double .seat-status-tag { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .double-game :deep(.chat-fab) { display: none; }
+  .double-game :deep(.chat-drawer) { top: 42px; bottom: 8px; }
+}
 </style>

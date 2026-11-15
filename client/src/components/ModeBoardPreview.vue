@@ -39,7 +39,8 @@ const cells = Array.from({ length: 64 }, (_, n) => {
 .mode-preview { width: 100%; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .mode-preview :deep(svg) { pointer-events: none; }
 .mode-preview :deep(.multi-board-wrap) { width: min(100%, 220px); }
-.mode-preview.double :deep(.multi-board-wrap) { width: 100%; }
+.mode-preview.double :deep(.multi-board-wrap) { width: 100%; max-width: 420px; }
+.mode-preview.double :deep(svg) { border-radius: 5px; overflow: hidden; }
 .standard-boards { display: flex; justify-content: center; gap: 12px; width: 100%; }
 .standard-boards svg { width: min(100%, 200px); min-width: 0; aspect-ratio: 1; border-radius: 5px; overflow: hidden; box-shadow: 0 3px 12px #0002; }
 .bughouse .standard-boards svg { width: calc(50% - 6px); }

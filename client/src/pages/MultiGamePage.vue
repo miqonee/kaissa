@@ -303,6 +303,13 @@ function onBoardMove(payload: { from: string; to: string; promotion?: PieceType 
 
 const resignPending = ref(false);
 let resignTimer: ReturnType<typeof setTimeout> | undefined;
+function onSeatActionsToggle(event: Event): void {
+  // Opening must not reset a confirmation clicked before the async toggle event.
+  if (!(event.currentTarget as HTMLDetailsElement).open) {
+    clearTimeout(resignTimer);
+    resignPending.value = false;
+  }
+}
 function resign(): void {
   if (!isParticipant.value || state.value?.status !== 'active' || mySeatStatus.value !== 'active') return;
   if (!resignPending.value) {
@@ -647,7 +654,7 @@ onBeforeUnmount(() => {
             <details
               v-if="isDouble && card.participant?.userId === myId && isParticipant && state.status === 'active' && mySeatStatus === 'active'"
               class="seat-actions"
-              @toggle="resignPending = false"
+              @toggle="onSeatActionsToggle"
               @keydown.esc.prevent="($event.currentTarget as HTMLDetailsElement).open = false"
             >
               <summary :aria-label="i18n.locale === 'en' ? 'Your game actions' : 'Действия в партии'">⋯</summary>
@@ -724,6 +731,7 @@ onBeforeUnmount(() => {
       ref="chatWidgetRef"
       :messages="chat"
       :moves="movesSanHistory"
+      :total-moves="state.moveNumber"
       :my-user-id="myId"
       @send="sendChat"
     />
@@ -1045,11 +1053,18 @@ onBeforeUnmount(() => {
 .double .seat-status-tag { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .spectator-view { display: flex; gap: 6px; align-items: center; font-size: 12px; min-width: 0; }
 .spectator-view select { max-width: 200px; min-width: 0; }
+/* .panel clips overflow globally. The menu must escape its player card. */
+.board-stage.double .seat-card { overflow: visible; }
+.board-stage.double .seat-card:has(.seat-actions[open]) { z-index: 30; }
 .seat-actions { position: static; flex: none; }
 .seat-actions summary { cursor: pointer; list-style: none; min-width: 32px; min-height: 28px; display: grid; place-items: center; border-radius: 6px; font-size: 20px; line-height: 1; }
 .seat-actions summary::-webkit-details-marker { display: none; }
 .seat-actions summary:hover, .seat-actions summary:focus-visible { background: var(--surface-2); outline: 2px solid var(--accent); }
 .seat-actions-menu { position: absolute; right: 4px; top: 100%; width: max-content; max-width: calc(100% - 8px); box-sizing: border-box; z-index: 20; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 16px #0003; white-space: normal; }
+/* A player's own team sits below the board: open towards the board, not
+   outside the viewport (also important in the clipped landscape shell). */
+.double .pos-bottom-left .seat-actions-menu,
+.double .pos-bottom-right .seat-actions-menu { top: auto; bottom: calc(100% + 4px); }
 .seat-actions-menu button { min-height: 40px; }
 
 .double .seat-clock { color: var(--ink); }

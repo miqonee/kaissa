@@ -8,6 +8,7 @@ const props = withDefaults(
   defineProps<{
     messages: ChatMessage[];
     moves?: string[];
+    totalMoves?: number;
     myUserId?: number;
     showMoves?: boolean;
   }>(),
@@ -23,6 +24,9 @@ const emit = defineEmits<{
 }>();
 
 const i18n = useI18n();
+// Some server snapshots contain only the tail of the move history.
+const moveCount = computed(() => Math.max(props.moves.length, props.totalMoves ?? 0));
+const moveOffset = computed(() => moveCount.value - props.moves.length);
 const isOpen = ref(false);
 const activeTab = ref<'chat' | 'moves'>('chat');
 const unreadCount = ref(0);
@@ -87,7 +91,7 @@ watch(
 );
 
 watch(
-  () => props.moves.length,
+  () => [props.moves, props.moves.length, moveCount.value],
   () => {
     if (isOpen.value && activeTab.value === 'moves') {
       scrollBottom();
@@ -164,7 +168,7 @@ defineExpose({ toggleOpen });
             >
               <AppIcon name="book-open" :size="14" />
               <span>{{ i18n.locale === 'en' ? 'Moves' : 'Ходы' }}</span>
-              <span class="tab-count mono">{{ moves.length }}</span>
+              <span class="tab-count mono">{{ moveCount }}</span>
             </button>
           </div>
           <button
@@ -209,8 +213,11 @@ defineExpose({ toggleOpen });
         <!-- Moves Tab -->
         <div v-else class="drawer-body">
           <div ref="logRef" class="drawer-log moves-log mono">
+            <div v-if="moveOffset > 0" class="history-window dim">
+              {{ i18n.locale === 'en' ? `Showing the latest ${moves.length} of ${moveCount} moves` : `Показаны последние ${moves.length} из ${moveCount} ходов` }}
+            </div>
             <div v-for="(san, idx) in moves" :key="idx" class="move-entry">
-              <span class="move-idx dim">{{ idx + 1 }}.</span>
+              <span class="move-idx dim">{{ moveOffset + idx + 1 }}.</span>
               <span class="move-san">{{ san }}</span>
             </div>
             <div v-if="!moves.length" class="empty-hint dim">

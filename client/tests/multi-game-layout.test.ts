@@ -5,6 +5,7 @@ import { createPinia } from 'pinia';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { MultiChess, type GameState, type MultiMode } from 'shared';
 import MultiGamePage from '../src/pages/MultiGamePage.vue';
+import multiGameSource from '../src/pages/MultiGamePage.vue?raw';
 import { useAuthStore } from '../src/stores/auth';
 const wire = vi.hoisted(() => ({ emit: vi.fn() }));
 vi.mock('../src/api/socket', () => ({ getSocket: () => ({ emit: wire.emit, on: vi.fn(), off: vi.fn() }), onSocketResync: () => () => {}, resetSocket: vi.fn() }));
@@ -63,4 +64,33 @@ describe('multiplayer layout controls', () => {
   root.querySelector<HTMLButtonElement>('.seat-actions .danger')!.click(); await nextTick();
   expect(wire.emit.mock.calls.some(call => call[0] === 'game:resign')).toBe(false);
  });
+ it('keeps the Double actions menu outside the clipping panel and opens bottom menus upwards', () => {
+  // jsdom has no layout engine: assert the exact CSS regression contracts.
+  expect(multiGameSource).toContain('.board-stage.double .seat-card { overflow: visible; }');
+  expect(multiGameSource).toContain('.board-stage.double .seat-card:has(.seat-actions[open]) { z-index: 30; }');
+  expect(multiGameSource).toContain('.double .pos-bottom-right .seat-actions-menu { top: auto; bottom: calc(100% + 4px); }');
+ });
+ it('opens actions without surrendering and resets confirmation on close and Escape', async () => {
+  await mount('double', 1);
+  const details = root.querySelector<HTMLDetailsElement>('.seat-actions')!;
+  const summary = details.querySelector('summary')!;
+  summary.click(); await nextTick();
+  expect(details.open).toBe(true);
+  expect(wire.emit.mock.calls.some(call => call[0] === 'game:resign')).toBe(false);
+  const resignButton = details.querySelector<HTMLButtonElement>('.danger')!;
+  resignButton.click(); await nextTick();
+  // Native toggle is asynchronous: a delayed opening event must not disarm it.
+  details.dispatchEvent(new Event('toggle')); await nextTick();
+  expect(resignButton.textContent).toContain('Подтвердить');
+  details.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  details.dispatchEvent(new Event('toggle')); await nextTick();
+  expect(details.open).toBe(false);
+  summary.click(); details.dispatchEvent(new Event('toggle')); await nextTick();
+  expect(resignButton.textContent).not.toContain('Подтвердить');
+  resignButton.click(); await nextTick();
+  expect(wire.emit.mock.calls.some(call => call[0] === 'game:resign')).toBe(false);
+  resignButton.click(); await nextTick();
+  expect(wire.emit).toHaveBeenCalledWith('game:resign', 1);
+ });
+
 });

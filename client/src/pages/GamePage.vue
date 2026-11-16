@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { applyMoveUpdate, applyEndUpdate } from '../game/sync';
+import { createPositionAnalysis } from '../game/positionAnalysis';
 import { ratingLabel } from '../utils/match';
 import MatchCard from '../components/MatchCard.vue';
 import GuestNotice from '../components/GuestNotice.vue';
@@ -23,6 +24,9 @@ import {
   playGameEndSound,
 } from '../audio/sounds';
 import ChessBoard from '../components/ChessBoard.vue';
+import ClockDisplay from '../components/ClockDisplay.vue';
+import { animationClockRange } from '../game/clockDisplay';
+import { useVisualClockTicker } from '../composables/useVisualClockTicker';
 import PocketBar from '../components/PocketBar.vue';
 import AppIcon from '../components/AppIcon.vue';
 import GameReplayModal from '../components/GameReplayModal.vue';
@@ -242,6 +246,13 @@ function movableOn(b: 0 | 1): 'white' | 'black' | null {
   return myParticipant.value?.color === 'w' ? 'white' : 'black';
 }
 
+// Primitive FEN dependencies survive clock/chat/full-state replacements unchanged.
+// Two board-scoped entries bound memory; turn permissions remain outside the cache.
+const board1Fen = computed(() => fenOf(1));
+const positionByBoard = [
+  computed(() => createPositionAnalysis(board0Fen.value)),
+  computed(() => createPositionAnalysis(board1Fen.value)),
+];
 const destsByBoard = computed<Record<number, Record<string, string[]>>>(() => {
   const out: Record<number, Record<string, string[]>> = { 0: {}, 1: {} };
   const st = state.value;
@@ -249,12 +260,7 @@ const destsByBoard = computed<Record<number, Record<string, string[]>>>(() => {
   const boards = st.mode === 'bughouse' ? 2 : 1;
   for (let b = 0; b < boards; b++) {
     if (!myTurnOn(b as 0 | 1)) continue;
-    try {
-      const c = new Chess(st.fens[b]);
-      for (const m of c.moves({ verbose: true })) {
-        (out[b][m.from] ??= []).push(m.to);
-      }
-    } catch {}
+    out[b] = positionByBoard[b].value.destinations();
   }
   return out;
 });
@@ -265,12 +271,7 @@ const checkByBoard = computed<Record<number, string | null>>(() => {
   if (!st) return out;
   const boards = st.mode === 'bughouse' ? 2 : 1;
   for (let b = 0; b < boards; b++) {
-    try {
-      const c = new Chess(st.fens[b]);
-      if (!c.isCheck()) continue;
-      const king = c.findPiece({ type: 'k', color: c.turn() });
-      out[b] = king.length ? String(king[0]) : null;
-    } catch {}
+    out[b] = positionByBoard[b].value.checkedKing();
   }
   return out;
 });
@@ -300,7 +301,6 @@ function pocketOfBoard(b: 0 | 1, color: 'w' | 'b') {
 // ---------- Часы ----------
 const localClocks = ref<[number, number][]>([]);
 const nowTs = ref(Date.now());
-let ticker: number | undefined;
 let lastTickAt = Date.now();
 
 const firstMoveSec = computed(() => {
@@ -343,15 +343,6 @@ function clockMs(b: 0 | 1, color: 'w' | 'b'): number | null {
   return localClocks.value[idx]?.[color === 'w' ? 0 : 1] ?? null;
 }
 
-function fmtClock(ms: number | null): string {
-  if (ms === null) return '—';
-  const s = Math.max(0, Math.ceil(ms / 100) / 10);
-  if (ms < 20_000) return s.toFixed(1);
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${String(sec).padStart(2, '0')}`;
-}
-
 function effectiveClockMsForBoard(b: 0 | 1): number | null {
   if (!state.value || state.value.timeControl.kind !== 'clock') return null;
   if (isParticipant.value) {
@@ -370,6 +361,10 @@ function effectiveClockMsForBoard(b: 0 | 1): number | null {
   if (bl === null) return w;
   return Math.min(w, bl);
 }
+
+const animationClock0 = computed(() => animationClockRange(effectiveClockMsForBoard(0)));
+const animationClock1 = computed(() => animationClockRange(effectiveClockMsForBoard(1)));
+useVisualClockTicker(tickClocks);
 
 // ---------- Игроки для 2х2 (одна доска) и Багхауса ----------
 
@@ -691,7 +686,6 @@ onMounted(() => {
   offResync = onSocketResync(() => requestWatch(2));
 
   lastTickAt = Date.now();
-  ticker = window.setInterval(tickClocks, 100);
 });
 
 onBeforeUnmount(() => {
@@ -708,7 +702,6 @@ onBeforeUnmount(() => {
   socket.off('game:players-left');
   socket.off('game:rematch');
   socket.off('game:next');
-  clearInterval(ticker);
 });
 
 // ---------- Реванш и Анализ Lichess ----------
@@ -879,7 +872,7 @@ function resultHeadline(): string {
             <div class="side-clock-group">
               <MaterialBalance :fen="fenOf(0)" :color="teamModeSides.top.color" :pockets="[pocketOfBoard(0, 'w'), pocketOfBoard(0, 'b')]" />
               <div v-if="state.timeControl.kind === 'clock'" class="clock-display mono center" :class="{ running: state.clocksActive[0] === teamModeSides.top.color }">
-                {{ fmtClock(clockMs(0, teamModeSides.top.color)) }}
+                <ClockDisplay :read="() => clockMs(0, teamModeSides!.top.color)" />
               </div>
             </div>
 
@@ -935,7 +928,7 @@ function resultHeadline(): string {
               :check-square="checkByBoard[0]"
               :last-move="lastMoveOf(0)"
               :coordinates="false"
-              :clock-remaining-ms="effectiveClockMsForBoard(0)"
+              :clock-remaining-ms="animationClock0"
               @move="onMove(0, $event)"
               @premove-set="playMoveSound"
             />
@@ -1005,7 +998,7 @@ function resultHeadline(): string {
             <div class="side-clock-group">
               <MaterialBalance :fen="fenOf(0)" :color="teamModeSides.bottom.color" :pockets="[pocketOfBoard(0, 'w'), pocketOfBoard(0, 'b')]" />
               <div v-if="state.timeControl.kind === 'clock'" class="clock-display mono center" :class="{ running: state.clocksActive[0] === teamModeSides.bottom.color }">
-                {{ fmtClock(clockMs(0, teamModeSides.bottom.color)) }}
+                <ClockDisplay :read="() => clockMs(0, teamModeSides!.bottom.color)" />
               </div>
             </div>
 
@@ -1052,7 +1045,7 @@ function resultHeadline(): string {
             <span :title="boardPlayerName(bc.index, otherColor(viewedColor(bc.index)))">{{ boardPlayerName(bc.index, otherColor(viewedColor(bc.index))) }}</span>
             <div class="side-clock-group">
               <MaterialBalance :fen="fenOf(bc.index)" :color="otherColor(viewedColor(bc.index))" :pockets="[pocketOfBoard(bc.index, 'w'), pocketOfBoard(bc.index, 'b')]" />
-              <strong v-if="state.timeControl.kind === 'clock'" class="mono">{{ fmtClock(clockMs(bc.index, otherColor(viewedColor(bc.index)) )) }}</strong>
+              <strong v-if="state.timeControl.kind === 'clock'" class="mono"><ClockDisplay :read="() => clockMs(bc.index, otherColor(viewedColor(bc.index)))" /></strong>
             </div>
           </div>
           <span class="pocket-label dim">{{ i18n.t.bughouse.opponentPocket }}</span>
@@ -1065,7 +1058,7 @@ function resultHeadline(): string {
               :drop-piece="myTurnOn(bc.index) ? selectedDrop : null"
               :drop-dests="myTurnOn(bc.index) && selectedDrop ? state.legalDrops?.[bc.index]?.[selectedDrop] ?? [] : []"
               :coordinates="false"
-              :clock-remaining-ms="effectiveClockMsForBoard(bc.index)"
+              :clock-remaining-ms="bc.index === 0 ? animationClock0 : animationClock1"
               @move="onMove(bc.index, $event)" @drop="onDrop(bc.index, $event)"
               @cancel-drop="selectedDrop = null" @premove-set="playMoveSound" />
             <!-- Набортный выбор превращения (стандарт Lichess) -->
@@ -1105,7 +1098,7 @@ function resultHeadline(): string {
             <span :title="boardPlayerName(bc.index, viewedColor(bc.index))">{{ boardPlayerName(bc.index, viewedColor(bc.index)) }}</span>
             <div class="side-clock-group">
               <MaterialBalance :fen="fenOf(bc.index)" :color="viewedColor(bc.index)" :pockets="[pocketOfBoard(bc.index, 'w'), pocketOfBoard(bc.index, 'b')]" />
-              <strong v-if="state.timeControl.kind === 'clock'" class="mono">{{ fmtClock(clockMs(bc.index, viewedColor(bc.index))) }}</strong>
+              <strong v-if="state.timeControl.kind === 'clock'" class="mono"><ClockDisplay :read="() => clockMs(bc.index, viewedColor(bc.index))" /></strong>
             </div>
           </div>
         </div>

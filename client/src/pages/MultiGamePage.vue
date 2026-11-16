@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type {
   ChatMessage,
@@ -18,6 +18,9 @@ import {
   SEAT_COLORS,
   timeControlLabel,
 } from 'shared';
+import ClockDisplay from '../components/ClockDisplay.vue';
+import { useVisualClockTicker } from '../composables/useVisualClockTicker';
+import { useInitialBoardScroll } from '../composables/useInitialBoardScroll';
 import { applyEndUpdate } from '../game/sync';
 import { ratingLabel } from '../utils/match';
 import { getSocket, onSocketResync } from '../api/socket';
@@ -66,24 +69,10 @@ const lastMove = ref<(string | null)[] | null>(null);
 const chatWidgetRef = ref<InstanceType<typeof ChatWidget> | null>(null);
 const boardRef = ref<InstanceType<typeof MultiBoard> | null>(null);
 const topbarRef = ref<HTMLElement | null>(null);
-let autoScrolled = false;
-
-function scrollToBoardTop(): void {
-  if (state.value?.mode === 'double') return;
-  if (autoScrolled || typeof window === 'undefined') return;
-  autoScrolled = true;
-  void nextTick(() => {
-    setTimeout(() => {
-      const el = topbarRef.value;
-      if (el) {
-        const y = el.getBoundingClientRect().top + window.scrollY - 6;
-        if (y > 4) {
-          window.scrollTo({ top: y, behavior: 'smooth' });
-        }
-      }
-    }, 60);
-  });
-}
+const boardStageRef = ref<HTMLElement | null>(null);
+const scrollToBoardTop = useInitialBoardScroll(() =>
+  state.value?.mode === 'double' ? boardStageRef.value : topbarRef.value,
+);
 
 const myId = computed(() => auth.user?.id ?? 0);
 const canViewArchive = computed(() => !!auth.user && !auth.user.isGuest);
@@ -100,9 +89,10 @@ const multiMode = computed<MultiMode>(() =>
 const isDouble = computed(() => multiMode.value === 'double');
 const topology = computed(() => getTopology(multiMode.value));
 
+const spectatorSeat = ref(0);
 const viewerSeat = computed<number>(() => {
   const p = myParticipant.value;
-  if (!p) return 0;
+  if (!p) return Math.min(Math.max(spectatorSeat.value, 0), topology.value.seats - 1);
   return p.seat ?? p.boardIndex ?? 0;
 });
 
@@ -151,7 +141,6 @@ const movesSanHistory = computed<string[]>(() => {
 // ---------- Clocks ----------
 const localRemainingMs = ref<number[]>([0, 0, 0, 0]);
 const nowTs = ref(Date.now());
-let ticker: number | undefined;
 let lastTickAt = Date.now();
 
 const firstMoveSec = computed(() => {
@@ -185,14 +174,7 @@ function tickClocks(): void {
   }
 }
 
-function fmtClock(ms: number | undefined | null): string {
-  if (ms === null || ms === undefined) return '—';
-  const s = Math.max(0, Math.ceil(ms / 100) / 10);
-  if (ms < 20_000) return s.toFixed(1);
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${String(sec).padStart(2, '0')}`;
-}
+useVisualClockTicker(tickClocks);
 
 // ---------- Seats & Corner Placement ----------
 interface SeatCardView {
@@ -204,7 +186,6 @@ interface SeatCardView {
   status: SeatStatus;
   place: number | null;
   isTurn: boolean;
-  clockMs: number;
 }
 
 const seatCards = computed<SeatCardView[]>(() => {
@@ -238,7 +219,6 @@ const seatCards = computed<SeatCardView[]>(() => {
     const status = (st.multi?.snapshot.status?.[s] ?? participant?.outcome ?? 'active') as SeatStatus;
     const place = participant?.place ?? null;
     const isTurn = st.status === 'active' && st.multi?.snapshot.turn === s && status === 'active';
-    const clockMs = localRemainingMs.value[s] ?? st.multi?.clocksMs?.[s] ?? 0;
     cards.push({
       seat: s,
       color,
@@ -248,7 +228,6 @@ const seatCards = computed<SeatCardView[]>(() => {
       status,
       place,
       isTurn,
-      clockMs,
     });
   }
   return cards;
@@ -325,6 +304,7 @@ function onBoardMove(payload: { from: string; to: string; promotion?: PieceType 
 const resignPending = ref(false);
 let resignTimer: ReturnType<typeof setTimeout> | undefined;
 function resign(): void {
+  if (!isParticipant.value || state.value?.status !== 'active' || mySeatStatus.value !== 'active') return;
   if (!resignPending.value) {
     resignPending.value = true;
     resignTimer = setTimeout(() => {
@@ -528,7 +508,6 @@ onMounted(() => {
   requestWatch(3);
   offResync = onSocketResync(() => requestWatch(2));
   lastTickAt = Date.now();
-  ticker = window.setInterval(tickClocks, 100);
 });
 
 onBeforeUnmount(() => {
@@ -543,7 +522,6 @@ onBeforeUnmount(() => {
   socket.off('game:chat');
   socket.off('game:players-left');
   socket.off('game:rematch');
-  clearInterval(ticker);
 });
 </script>
 
@@ -576,6 +554,14 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="topbar-right">
+        <label v-if="!isParticipant" class="spectator-view">
+          <span>{{ i18n.locale === 'en' ? 'View from' : 'Обзор со стороны' }}</span>
+          <select v-model.number="spectatorSeat">
+            <option v-for="card in seatCards" :key="card.seat" :value="card.seat">
+              {{ colorName(card.color) }}{{ card.participant ? ` · ${displayName(card.participant)}` : '' }}
+            </option>
+          </select>
+        </label>
         <router-link v-if="isDouble" class="landscape-rules button small ghost" to="/rules/double" target="_blank" :aria-label="i18n.locale === 'en' ? 'Double Chess rules' : 'Правила Двойных шахмат'"><AppIcon name="book-open" :size="17" /></router-link>
         <button v-if="isDouble" type="button" class="landscape-chat small" :aria-label="i18n.locale === 'en' ? 'Open chat' : 'Открыть чат'" @click="chatWidgetRef?.toggleOpen()"><AppIcon name="message-square" :size="17" /></button>
         <span v-if="error" class="inline-error">{{ error }}</span>
@@ -595,7 +581,7 @@ onBeforeUnmount(() => {
           {{ i18n.locale === 'en' ? 'Standings' : 'Итоги' }}
         </button>
         <button
-          v-if="isParticipant && state.status === 'active' && mySeatStatus === 'active'"
+          v-if="!isDouble && isParticipant && state.status === 'active' && mySeatStatus === 'active'"
           class="danger small"
           @click="resign"
         >
@@ -608,7 +594,7 @@ onBeforeUnmount(() => {
           }}
         </button>
         <button
-          v-if="resignPending && state.status === 'active'"
+          v-if="!isDouble && resignPending && state.status === 'active'"
           class="small ghost"
           @click="resignPending = false"
         >
@@ -640,7 +626,7 @@ onBeforeUnmount(() => {
     </aside>
     <!-- Full-Viewport Board Arena -->
     <main class="multi-arena">
-      <div class="board-stage" :class="state.mode">
+      <div ref="boardStageRef" class="board-stage" :class="state.mode">
         <!-- Player Cards Positioned in Board Cutouts / Corners -->
         <div
           v-for="card in seatCards"
@@ -658,6 +644,22 @@ onBeforeUnmount(() => {
             <span class="seat-swatch" :class="`swatch-${card.color}`"></span>
             <span class="seat-color-label">{{ colorName(card.color) }}</span>
             <span v-if="isDouble" class="team-label">{{ i18n.locale === 'en' ? 'Team' : 'Команда' }} {{ card.participant?.team }}</span>
+            <details
+              v-if="isDouble && card.participant?.userId === myId && isParticipant && state.status === 'active' && mySeatStatus === 'active'"
+              class="seat-actions"
+              @toggle="resignPending = false"
+              @keydown.esc.prevent="($event.currentTarget as HTMLDetailsElement).open = false"
+            >
+              <summary :aria-label="i18n.locale === 'en' ? 'Your game actions' : 'Действия в партии'">⋯</summary>
+              <div class="seat-actions-menu">
+                <button type="button" class="danger small" @click="resign">
+                  {{ resignPending ? (i18n.locale === 'en' ? 'Confirm resign?' : 'Подтвердить сдачу?') : i18n.t.game.resignBtn }}
+                </button>
+                <button v-if="resignPending" type="button" class="small ghost" @click="resignPending = false">
+                  {{ i18n.locale === 'en' ? 'Cancel' : 'Отмена' }}
+                </button>
+              </div>
+            </details>
             <span v-if="!isDouble && card.place" class="place-pill mono">#{{ card.place }}</span>
             <span v-if="!isDouble" class="score-pill mono" :title="i18n.locale === 'en' ? 'Points' : 'Очки'">
               {{ card.score }} {{ i18n.locale === 'en' ? 'pts' : 'очк.' }}
@@ -673,7 +675,7 @@ onBeforeUnmount(() => {
               >
                 <span class="seat-username bot">{{ displayName(card.participant) }}</span>
               </BotHoverCard>
-              <span v-else class="seat-username">{{ card.participant.username }}</span>
+              <span v-else class="seat-username" :title="card.participant.username">{{ card.participant.username }}</span>
               <span v-if="!card.participant.isGuest" class="seat-rating mono dim">
                 ({{ card.participant.ratingBefore }})
               </span>
@@ -684,12 +686,13 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="seat-card-bottom">
-            <div
+            <ClockDisplay
+              tag="div"
               class="seat-clock mono"
-              :class="{ running: card.isTurn, low: card.clockMs < 20_000 && card.status === 'active' }"
-            >
-              {{ fmtClock(card.clockMs) }}
-            </div>
+              :class="{ running: card.isTurn }"
+              :warn-low="card.status === 'active'"
+              :read="() => localRemainingMs[card.seat] ?? state?.multi?.clocksMs?.[card.seat] ?? 0"
+            />
             <span
               v-if="statusLabel(card.status, card.isTurn)"
               class="seat-status-tag"
@@ -1031,7 +1034,24 @@ onBeforeUnmount(() => {
 .board-stage.double .pos-top-right { grid-column: 2; grid-row: 1; }
 .board-stage.double .pos-bottom-left { grid-column: 1; grid-row: 3; }
 .board-stage.double .pos-bottom-right { grid-column: 2; grid-row: 3; }
-.double .seat-username { max-width: 100%; }
+.board-stage.double .seat-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; }
+.double .seat-card-top { grid-column: 1 / -1; flex-wrap: nowrap; min-width: 0; }
+.double .seat-card-mid { grid-column: 1; grid-row: 2; min-width: 0; flex-wrap: nowrap; }
+.double .seat-card-mid :deep(.bot-hover-trigger) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.double .seat-card-bottom { grid-column: 2; grid-row: 2; flex-wrap: nowrap; }
+.double .seat-username { max-width: 100%; min-width: 0; }
+.double .seat-rating, .double .you-tag { flex-shrink: 0; }
+.double .seat-clock { font-size: 24px; line-height: 1.15; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.double .seat-status-tag { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.spectator-view { display: flex; gap: 6px; align-items: center; font-size: 12px; min-width: 0; }
+.spectator-view select { max-width: 200px; min-width: 0; }
+.seat-actions { position: static; flex: none; }
+.seat-actions summary { cursor: pointer; list-style: none; min-width: 32px; min-height: 28px; display: grid; place-items: center; border-radius: 6px; font-size: 20px; line-height: 1; }
+.seat-actions summary::-webkit-details-marker { display: none; }
+.seat-actions summary:hover, .seat-actions summary:focus-visible { background: var(--surface-2); outline: 2px solid var(--accent); }
+.seat-actions-menu { position: absolute; right: 4px; top: 100%; width: max-content; max-width: calc(100% - 8px); box-sizing: border-box; z-index: 20; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 16px #0003; white-space: normal; }
+.seat-actions-menu button { min-height: 40px; }
+
 .double .seat-clock { color: var(--ink); }
 .team-label { margin-left: auto; font-size: 11px; color: var(--ink-2); }
 @media (max-width: 640px) { .double-turn-guide { font-size: 11px; } .board-stage.double { gap: 8px; } .board-stage.double .seat-card { padding: 8px; } }
@@ -1045,7 +1065,7 @@ onBeforeUnmount(() => {
   .double-turn-mobile summary { cursor: pointer; }
   .double-turn-mobile p { margin: 8px 0 0; max-width: 250px; line-height: 1.5; }
   .double-turn-guide { padding: 5px 8px; }
-  .board-stage.double .seat-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: 5px; padding: 7px; }
+  .board-stage.double .seat-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: 5px; padding: 7px; }
   .double .seat-card-top { grid-column: 1 / -1; flex-wrap: nowrap; }
   .double .seat-color-label, .double .team-label { font-size: 9px; }
   .double .seat-card-mid { grid-column: 1; grid-row: 2; min-width: 0; flex-wrap: nowrap; gap: 3px; }
@@ -1054,7 +1074,7 @@ onBeforeUnmount(() => {
   .double .seat-rating { display: none; }
   .double .you-tag { flex: none; font-size: 8px; }
   .double .seat-card-bottom { grid-column: 2; grid-row: 2; }
-  .double .seat-clock { font-size: 13px; }
+  .double .seat-clock { font-size: 19px; }
   .double .seat-status-tag { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 }
 @media (orientation: landscape) and (max-height: 600px) and (max-width: 1100px) {
@@ -1068,22 +1088,17 @@ onBeforeUnmount(() => {
   .landscape-chat, .landscape-rules { display: inline-flex; }
   .double-turn-guide { display: none; }
   .double-game .multi-arena { flex: 1; min-height: 0; align-items: stretch; }
-  .board-stage.double { width: 100%; height: 100%; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr) 34px; gap: 4px; }
-  .board-stage.double > .multi-board-wrap { width: 100%; height: 100%; min-height: 0; grid-column: 1 / -1; grid-row: 1; overflow: hidden; }
-  .board-stage.double :deep(.multi-board-svg) { width: 100%; height: 100%; min-width: 0 !important; aspect-ratio: auto; touch-action: none !important; }
+  .board-stage.double { width: 100%; height: auto; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 8px; }
+  .board-stage.double > .multi-board-wrap { grid-column: 1 / -1; grid-row: 2; min-height: 0; }
   .board-stage.double :deep(.double-view-controls) { display: none; }
-  .board-stage.double .seat-card { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 5px; padding: 3px 6px; min-width: 0; overflow: hidden; }
-  .board-stage.double .color-yellow { grid-column: 1; grid-row: 2; }
-  .board-stage.double .color-green { grid-column: 2; grid-row: 2; }
-  .board-stage.double .color-red { grid-column: 3; grid-row: 2; }
-  .board-stage.double .color-blue { grid-column: 4; grid-row: 2; }
-  .double .seat-card-top { flex: none; }
-  .double .seat-color-label, .double .team-label, .double .seat-rating, .double .you-tag { display: none; }
-  .double .seat-card-mid { min-width: 0; flex: 1; flex-wrap: nowrap; overflow: hidden; }
-  .double .seat-username { font-size: 10px; min-width: 0; }
-  .double .seat-card-bottom { flex: none; }
-  .double .seat-clock { font-size: 12px; }
-  .double .seat-status-tag { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .board-stage.double .seat-card { padding: 3px 8px; gap: 2px 8px; }
+  .double .seat-card-top { grid-column: 1; grid-row: 1; }
+  .double .team-label { margin-left: 0; }
+  .double .seat-card-mid { grid-column: 1; grid-row: 2; }
+  .double .seat-card-bottom { grid-column: 2; grid-row: 1 / span 2; }
+  .double .seat-clock { font-size: 20px; }
+  .double .seat-rating { display: none; }
+  .double .seat-actions { margin-left: auto; }
   .double-game :deep(.chat-fab) { display: none; }
   .double-game :deep(.chat-drawer) { top: 42px; bottom: 8px; }
 }

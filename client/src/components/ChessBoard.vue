@@ -208,11 +208,11 @@ onMounted(() => {
 
 watch(
   animConfig,
-  (cfg) => {
-    if (!cg) return;
+  (cfg, previous) => {
+    if (!cg || (cfg.enabled === previous.enabled && cfg.duration === previous.duration)) return;
     cg.set({ animation: cfg } as never);
   },
-  { deep: true },
+  { deep: false },
 );
 
 watch(

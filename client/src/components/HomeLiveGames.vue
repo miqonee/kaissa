@@ -72,13 +72,14 @@ function botDisplayName(p: LiveGameInfo['players'][number]): string {
               v-for="g in sortedLiveGames"
               :key="g.gameId"
               class="live-game"
+              :class="{ 'multi-game': isMultiplayer(g.mode) }"
               role="button"
               tabindex="0"
               :aria-label="`${i18n.t.home.spectateHint} ${modeLabel(g.mode)}`"
               @click="router.push(`/game/${g.gameId}`)"
               @keydown.enter.space.prevent="router.push(`/game/${g.gameId}`)"
             >
-              <div class="live-boards" :class="{ two: g.mode === 'bughouse' }">
+              <div class="live-boards" :class="{ two: g.mode === 'bughouse', double: g.mode === 'double' }">
                 <MultiBoard
                   v-if="isMultiplayer(g.mode)"
                   :mode="g.mode as MultiMode"
@@ -99,16 +100,13 @@ function botDisplayName(p: LiveGameInfo['players'][number]): string {
               <div class="live-meta">
                 <div class="live-row">
                   <span class="badge mode-badge">{{ modeLabel(g.mode) }}</span>
-                  <div v-if="isMultiplayer(g.mode)" class="players-line">
-                    <span class="team t1">
-                      <template v-for="(p, pIdx) in g.players" :key="p.username">
-                        <span v-if="pIdx > 0" class="team-sep">·</span>
+                  <div v-if="isMultiplayer(g.mode)" class="players-line multi-players">
+                      <span v-for="p in g.players" :key="p.userId" class="multi-player" :title="`${p.username} (${p.rating})`">
                         <BotHoverCard v-if="p.isBot" :username="p.username" :rating="p.rating">
                           <span class="live-player is-bot">{{ botDisplayName(p) }}</span>
                         </BotHoverCard>
                         <span v-else class="live-player">{{ p.username }}</span>
-                      </template>
-                    </span>
+                      </span>
                   </div>
                   <div v-else class="players-line">
                     <span class="team t1">
@@ -164,13 +162,15 @@ function botDisplayName(p: LiveGameInfo['players'][number]): string {
 
 .live-list.multi-games {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  align-items: start;
   gap: 12px;
 }
 
 .live-list.grid-games {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 12px;
 }
 
@@ -181,12 +181,13 @@ function botDisplayName(p: LiveGameInfo['players'][number]): string {
 }
 
 .live-game {
+  min-width: 0;
   cursor: pointer;
   border: 1px solid var(--line);
   border-radius: var(--r-m);
   padding: 10px 12px;
   background: var(--surface-inset);
-  transition: all 0.15s;
+  transition: border-color 0.15s, background-color 0.15s, transform 0.15s;
   touch-action: manipulation;
 }
 
@@ -198,14 +199,38 @@ function botDisplayName(p: LiveGameInfo['players'][number]): string {
 
 .live-boards {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
   gap: 8px;
   width: 100%;
-  aspect-ratio: 1;
+  min-width: 0;
 }
 
 .live-boards.two {
-  grid-template-columns: 1fr 1fr;
-  aspect-ratio: 2 / 1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Boards own their aspect ratio: 16×8 must not stretch into a square grid row.
+   Miniatures are navigation targets, not draggable boards; allow page scrolling. */
+.live-boards :deep(.board-wrap),
+.live-boards :deep(.multi-board-wrap) { min-width: 0; pointer-events: none; }
+
+.multi-game .live-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+.multi-game .mode-badge { justify-self: start; }
+.multi-game .spectate-hint { grid-column: 2; grid-row: 1; }
+.multi-game .multi-players {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 8px;
+}
+.multi-player { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.multi-player .live-player { max-width: none; }
+.multi-player :deep(.bot-hover-trigger) { max-width: 100%; }
+.live-game:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  .live-game { transition: none; }
+  .live-game:hover { transform: none; }
 }
 
 .live-meta {

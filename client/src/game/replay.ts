@@ -233,20 +233,22 @@ function buildMultiReplay(game: GameSummary, records: MoveRecord[]): ReplayData 
     },
   ];
   [...records].sort((a, b) => a.ply - b.ply).forEach((rec, index) => {
-    const fen = rec.fenAfter || frames[frames.length - 1]!.boards[0].fen;
+    const parsed = rec.fenAfter ? MultiChess.deserializeBoard(rec.fenAfter) : null;
+    const ok = parsed?.variant === game.mode;
+    const fen = ok ? rec.fenAfter : frames[frames.length - 1]!.boards[0].fen;
     views.push({
       index,
       boardIndex: 0,
       ply: rec.ply,
       userId: rec.userId,
-      san: rec.from + '–' + rec.to,
+      san: rec.from + '–' + rec.to + (rec.promotion ? '=' + rec.promotion.toUpperCase() : ''),
       from: rec.from,
       to: rec.to,
-      ok: true,
+      ok,
     });
     frames.push({
       ply: index + 1,
-      boards: [{ fen, lastMove: [rec.from, rec.to], check: null }],
+      boards: [{ fen, lastMove: ok ? [rec.from, rec.to] : [null, null], check: null }],
       pockets: null,
     });
   });

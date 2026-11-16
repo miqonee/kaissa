@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { isMultiplayer, modeLabel as sharedModeLabel, type GameMode, type MultiMode } from 'shared';
+import { getTopology, SEAT_COLORS, isMultiplayer, modeLabel as sharedModeLabel, type GameMode, type MultiMode } from 'shared';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { GameSummary, MoveRecord, PieceType, Pocket } from 'shared';
 import { detectOpening, timeControlLabel } from 'shared';
@@ -22,7 +22,7 @@ import {
 } from '../audio/sounds';
 
 const i18n = useI18n();
-const { replayRoot } = useReplayLayout();
+
 
 const props = withDefaults(
   defineProps<{
@@ -33,6 +33,26 @@ const props = withDefaults(
   }>(),
   { compact: false },
 );
+
+const isMulti = computed(() => isMultiplayer(props.game.mode));
+const replayAspect = computed(() => {
+  if (!isMulti.value) return 1;
+  const topology = getTopology(props.game.mode as MultiMode);
+  return (topology.viewWidth ?? topology.viewSize) / (topology.viewHeight ?? topology.viewSize);
+});
+const { replayRoot } = useReplayLayout(replayAspect);
+const viewerSeat = ref(0);
+const multiPlayers = computed(() => [...props.game.participants].sort((a, b) => (a.seat ?? 0) - (b.seat ?? 0)));
+function playerColor(seat: number | null | undefined): string {
+  return isMulti.value ? (SEAT_COLORS[props.game.mode as MultiMode][seat ?? 0] ?? 'currentColor') : 'currentColor';
+}
+function moverName(mv: ReplayMoveView): string {
+  return props.game.participants.find(p => p.userId === mv.userId)?.username ?? (i18n.locale === 'en' ? 'Unknown player' : 'Неизвестный игрок');
+}
+function moverColor(mv: ReplayMoveView): string {
+  return playerColor(props.game.participants.find(p => p.userId === mv.userId)?.seat);
+}
+watch(() => props.game.id, () => { stop(); cursor.value = total.value; viewerSeat.value = 0; });
 
 const SPEEDS = [
   { label: '0,5×', value: 0.5 },
@@ -144,7 +164,7 @@ watch(total, (n) => {
 
 function onKey(e: KeyboardEvent): void {
   const t = e.target as HTMLElement | null;
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.tagName === 'BUTTON' || t.isContentEditable)) return;
   switch (e.key) {
     case 'ArrowLeft':
       e.preventDefault();
@@ -266,7 +286,14 @@ function pieceLabel(t: PieceType): string {
   <div ref="replayRoot" class="replayer" :class="{ compact, 'double-replay': game.mode === 'double' }">
     <!-- Шапка: кто играл и чем кончилось -->
     <header class="replayer-head">
-      <div class="rh-teams">
+      <div v-if="isMulti" class="rh-multi-players">
+        <span v-for="player in multiPlayers" :key="player.userId" class="rh-player" :title="player.username">
+          <i class="seat-dot" :style="{ background: playerColor(player.seat) }" />
+          <strong class="truncate">{{ player.username }}</strong>
+          <small v-if="game.mode === 'double'">{{ i18n.locale === 'en' ? 'Team' : 'Команда' }} {{ player.team }}</small>
+        </span>
+      </div>
+      <div v-else class="rh-teams">
         <span class="color-tag w">{{ (game.mode === 'bughouse' || game.mode === 'double') ? (i18n.locale === 'en' ? 'Team 1' : 'Команда 1') : (i18n.locale === 'en' ? 'White' : 'Белые') }}</span>
         <strong class="truncate">{{ teams.t1 }}</strong>
         <span class="rh-vs">vs</span>
@@ -285,6 +312,12 @@ function pieceLabel(t: PieceType): string {
       <section class="rp-boards" aria-label="Шахматные доски" :class="{ two: boardsCount === 2 }">
         <div v-for="b in boardsCount" :key="b" class="rp-board-col">
           <div class="rp-board-head">
+            <label v-if="isMulti" class="rp-viewer">
+              {{ i18n.locale === 'en' ? 'View from' : 'Вид со стороны' }}
+              <select v-model.number="viewerSeat">
+                <option v-for="player in multiPlayers" :key="player.userId" :value="player.seat ?? 0">{{ player.username }}</option>
+              </select>
+            </label>
             <span class="rp-board-num mono">{{ i18n.locale === 'en' ? 'Board' : 'Доска' }} {{ b }}</span>
             <span
               v-show="checkOf(b - 1)"
@@ -310,10 +343,15 @@ function pieceLabel(t: PieceType): string {
             :selected="null"
           />
 
-          <div class="rp-board-stage">
+          <p v-if="isMulti && activeMoveIndex !== null && !data.moves[activeMoveIndex]?.ok" class="hint rp-position-warning" role="status">
+            {{ i18n.locale === 'en' ? 'Position unavailable for this move. Showing the last saved position.' : 'Позиция этого хода недоступна. Показана последняя сохранённая позиция.' }}
+          </p>
+          <div class="rp-board-stage" :style="{ aspectRatio: replayAspect }">
             <MultiBoard :locale="i18n.locale"
               v-if="isMultiplayer(game.mode)"
               :mode="game.mode as MultiMode"
+              :viewer-seat="viewerSeat"
+              :coordinates="true"
               :fen="fenOf(b - 1)"
               :last-move="lastMoveOf(b - 1)"
             />
@@ -352,7 +390,15 @@ function pieceLabel(t: PieceType): string {
           <span class="hint rp-mover" :title="activeMover ?? undefined">{{ i18n.locale === 'en' ? 'Move by:' : 'Ход:' }} {{ activeMover }}</span>
         </div>
 
-        <div class="rp-moves" :class="{ two: boardsCount === 2 }">
+        <div v-if="isMulti" class="rp-moves rp-multi-moves">
+          <button v-for="mv in data.moves" :key="mv.index" class="rp-move rp-multi-move" :class="moveClasses(mv)" @click="stepToMove(mv.index)">
+            <span class="mono">{{ mv.ply }}.</span>
+            <span class="rp-move-player truncate" :title="moverName(mv)"><i class="seat-dot" :style="{ background: moverColor(mv) }" />{{ moverName(mv) }}</span>
+            <span class="mono">{{ mv.san }}</span>
+            <span v-if="!mv.ok" :title="i18n.locale === 'en' ? 'Position unavailable' : 'Позиция недоступна'">⚠</span>
+          </button>
+        </div>
+        <div v-else class="rp-moves" :class="{ two: boardsCount === 2 }">
           <div v-for="(rows, b) in rowsByBoard" :key="b" class="rp-move-col">
             <div v-if="boardsCount === 2" class="rp-col-title mono">{{ i18n.locale === 'en' ? 'Board' : 'Доска' }} {{ b + 1 }}</div>
             <div class="rp-move-grid">
@@ -1025,6 +1071,16 @@ function pieceLabel(t: PieceType): string {
 </style>
 
 <style scoped>
-.double-replay .rp-board-stage { width: 100%; aspect-ratio: 1008 / 528; }
-.double-replay .rp-board-head { width: 100%; }
+ .rh-multi-players { display: flex; flex-wrap: wrap; gap: 4px 14px; width: 100%; min-width: 0; }
+.rh-player { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 48%; font-size: 12px; }
+.rh-player small { flex-shrink: 0; color: var(--ink-3); }
+.seat-dot { display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; }
+.replayer-head:has(.rh-multi-players) { max-height: none; overflow: visible; }
+.rp-viewer { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 11px; }
+.rp-viewer select { min-width: 0; max-width: 150px; }
+.rp-board-head { flex-wrap: wrap; }
+.rp-multi-moves { display: flex; flex-direction: column; gap: 3px; }
+.rp-multi-move { display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-height: 32px; text-align: left; }
+.rp-move-player { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; }
+@media (max-width: 400px) { .rh-player { max-width: 100%; } .rh-player small { font-size: 9px; } }
 </style>

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { MPiece, MultiMode, MultiSnapshot, PieceType } from 'shared';
 import { getTopology, MultiChess, SEAT_COLORS } from 'shared';
 import PawnPromotionDialog from './PawnPromotionDialog.vue';
+import MultiDragPiece from './MultiDragPiece.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -69,7 +70,7 @@ function promote(promotion: PieceType): void {
   if (move && props.myTurn && props.dests[move.from]?.includes(move.to)) emit('move', { from: move.from, to: move.to, promotion });
 }
 watch(() => [props.myTurn, props.snapshot?.turn, props.fen, props.mode], () => {
-  selectedFrom.value = null; dragState.value = null; promotionMove.value = null;
+  selectedFrom.value = null; cancelDrag(); promotionMove.value = null;
 });
 
 const rotationDeg = computed(() => {
@@ -122,6 +123,16 @@ const dragState = ref<{
 } | null>(null);
 
 const svgRef = ref<SVGSVGElement | null>(null);
+const dragPieceRef = ref<InstanceType<typeof MultiDragPiece> | null>(null);
+let dragFrame: number | null = null;
+let pendingPointer: [number, number] | null = null;
+function cancelDrag(): void {
+  if (dragFrame !== null) cancelAnimationFrame(dragFrame);
+  dragFrame = null;
+  pendingPointer = null;
+  dragState.value = null;
+}
+onBeforeUnmount(cancelDrag);
 
 const activeDests = computed<Set<string>>(() => {
   const from = dragState.value?.from ?? selectedFrom.value;
@@ -146,21 +157,14 @@ function polygonPoints(poly: [number, number][]): string {
   return poly.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
 }
 
-function cellSize(cellId: string): number {
-  const cell = topology.value.cellById.get(cellId);
-  if (!cell) return 54;
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (const [x, y] of cell.polygon) {
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-  }
-  return Math.min(maxX - minX, maxY - minY) * 0.82;
-}
+// Topology is static for a mode: format polygons and measure pieces only once.
+const renderCells = computed(() => topology.value.cells.map(cell => {
+  const xs = cell.polygon.map(point => point[0]);
+  const ys = cell.polygon.map(point => point[1]);
+  return { ...cell, points: polygonPoints(cell.polygon), pieceSize: Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) * 0.82 };
+}));
+const pieceSizes = computed(() => new Map(renderCells.value.map(cell => [cell.id, cell.pieceSize])));
+function cellSize(cellId: string): number { return pieceSizes.value.get(cellId) ?? 54; }
 
 function clientToBoardPoint(clientX: number, clientY: number): [number, number] | null {
   const svg = svgRef.value;
@@ -226,6 +230,7 @@ function onPointerDown(cellId: string, e: PointerEvent): void {
   const pt = clientToBoardPoint(e.clientX, e.clientY);
   if (!pt) return;
   (e.currentTarget as Element | null)?.setPointerCapture?.(e.pointerId);
+  cancelDrag();
   dragState.value = {
     from: cellId,
     piece: p,
@@ -235,23 +240,33 @@ function onPointerDown(cellId: string, e: PointerEvent): void {
   };
 }
 
+function updateDrag(clientX: number, clientY: number): void {
+  const st = dragState.value;
+  if (!st) return;
+  const pt = clientToBoardPoint(clientX, clientY);
+  if (!pt) return;
+  const cell = topology.value.cellById.get(st.from);
+  if (cell && Math.hypot(pt[0] - cell.center[0], pt[1] - cell.center[1]) > 10) st.moved = true;
+  dragPieceRef.value?.setPosition(pt[0], pt[1]);
+}
 function onPointerMove(e: PointerEvent): void {
   if (!dragState.value) return;
-  const pt = clientToBoardPoint(e.clientX, e.clientY);
-  if (!pt) return;
-  const cell = topology.value.cellById.get(dragState.value.from);
-  if (cell) {
-    const dist = Math.hypot(pt[0] - cell.center[0], pt[1] - cell.center[1]);
-    if (dist > 10) dragState.value.moved = true;
-  }
-  dragState.value.svgX = pt[0];
-  dragState.value.svgY = pt[1];
+  pendingPointer = [e.clientX, e.clientY];
+  if (dragFrame !== null) return;
+  dragFrame = requestAnimationFrame(() => {
+    dragFrame = null;
+    const point = pendingPointer;
+    pendingPointer = null;
+    if (point) updateDrag(point[0], point[1]);
+  });
 }
 
 function onPointerUp(e: PointerEvent): void {
   if (!dragState.value) return;
+  // A quick release may arrive before the scheduled animation frame.
+  if (pendingPointer) updateDrag(pendingPointer[0], pendingPointer[1]);
   const st = dragState.value;
-  dragState.value = null;
+  cancelDrag();
   if (!st.moved) return;
   const pt = clientToBoardPoint(e.clientX, e.clientY);
   if (!pt) return;
@@ -266,7 +281,7 @@ function onPointerUp(e: PointerEvent): void {
 
 function resetView(): void {
   selectedFrom.value = null;
-  dragState.value = null;
+  cancelDrag();
   promotionMove.value = null;
 }
 
@@ -288,7 +303,7 @@ defineExpose({ resetView });
       :aria-label="mode === 'double' ? 'Double Chess 16×8' : mode === 'four-player' ? '4-Player Cross Chessboard' : '3-Player Hexagonal Chessboard'"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
-      @pointercancel="dragState = null"
+      @pointercancel="cancelDrag"
     >
       <defs>
         <radialGradient id="multi-check-grad" cx="50%" cy="50%" r="55%">
@@ -307,7 +322,7 @@ defineExpose({ resetView });
         </g>
         <!-- Cells -->
         <g
-          v-for="cell in topology.cells"
+          v-for="cell in renderCells"
           :key="cell.id"
           class="multi-cell"
           :class="{
@@ -322,14 +337,14 @@ defineExpose({ resetView });
           @click="onCellClick(cell.id)"
           @pointerdown="onPointerDown(cell.id, $event)"
         >
-          <polygon :points="polygonPoints(cell.polygon)" class="cell-poly" />
+          <polygon :points="cell.points" class="cell-poly" />
 
           <!-- Check glow -->
           <circle
             v-if="checkedSquareSet.has(cell.id)"
             :cx="cell.center[0]"
             :cy="cell.center[1]"
-            :r="cellSize(cell.id) * 0.62"
+            :r="cell.pieceSize * 0.62"
             fill="url(#multi-check-grad)"
             pointer-events="none"
           />
@@ -342,10 +357,10 @@ defineExpose({ resetView });
           >
             <image
               :href="pieceHref(boardMap[cell.id]!)"
-              :x="cell.center[0] - cellSize(cell.id) / 2"
-              :y="cell.center[1] - cellSize(cell.id) / 2"
-              :width="cellSize(cell.id)"
-              :height="cellSize(cell.id)"
+              :x="cell.center[0] - cell.pieceSize / 2"
+              :y="cell.center[1] - cell.pieceSize / 2"
+              :width="cell.pieceSize"
+              :height="cell.pieceSize"
               class="multi-piece-img"
               :class="{ dead: boardMap[cell.id]?.dead }"
             />
@@ -357,7 +372,7 @@ defineExpose({ resetView });
               v-if="!boardMap[cell.id]"
               :cx="cell.center[0]"
               :cy="cell.center[1]"
-              :r="cellSize(cell.id) * 0.19"
+              :r="cell.pieceSize * 0.19"
               class="dest-dot"
               pointer-events="none"
             />
@@ -365,27 +380,17 @@ defineExpose({ resetView });
               v-else
               :cx="cell.center[0]"
               :cy="cell.center[1]"
-              :r="cellSize(cell.id) * 0.48"
+              :r="cell.pieceSize * 0.48"
               class="dest-capture-ring"
               pointer-events="none"
             />
           </template>
         </g>
 
-        <!-- Dragged piece overlay -->
-        <g
-          v-if="dragState && dragState.moved"
-          :transform="`rotate(${-rotationDeg} ${dragState.svgX} ${dragState.svgY})`"
-          pointer-events="none"
-        >
-          <image
-            :href="pieceHref(dragState.piece)"
-            :x="dragState.svgX - cellSize(dragState.from) * 0.56"
-            :y="dragState.svgY - cellSize(dragState.from) * 0.56"
-            :width="cellSize(dragState.from) * 1.12"
-            :height="cellSize(dragState.from) * 1.12"
-          />
-        </g>
+        <!-- Only this small component reacts to pointer coordinates. -->
+        <MultiDragPiece v-if="dragState" ref="dragPieceRef"
+          :href="pieceHref(dragState.piece)" :size="cellSize(dragState.from)"
+          :rotation="rotationDeg" :x="dragState.svgX" :y="dragState.svgY" :visible="dragState.moved" />
       </g>
     </svg>
     <PawnPromotionDialog v-if="promotionMove" :locale="locale" :color="SEAT_COLORS[mode][promotionMove.seat]" @choose="promote" @cancel="promotionMove = null" />

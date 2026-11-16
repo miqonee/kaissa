@@ -1,6 +1,6 @@
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue';
 
-export function useReplayLayout() {
+export function useReplayLayout(aspect: Ref<number> = ref(1)) {
   const replayRoot = ref<HTMLElement | null>(null);
   let observer: ResizeObserver | undefined;
   let pending = 0;
@@ -20,11 +20,12 @@ export function useReplayLayout() {
       // On small phones the content scrolls; keep the board readable rather than
       // shrinking it to make room for every reserve and analysis panel at once.
       const minimum = window.innerWidth <= 720 ? Math.min(260, width) : 120;
-      const size = `${Math.floor(Math.max(minimum, Math.min(width, body.clientHeight - chrome)))}px`;
+      const size = `${Math.floor(Math.max(minimum, Math.min(width, Math.max(0, body.clientHeight - chrome) * aspect.value)))}px`;
       if (column.style.getPropertyValue('--replay-board-size') !== size) column.style.setProperty('--replay-board-size', size);
     }
   }
   function schedule(): void { if (!pending) pending = requestAnimationFrame(fit); }
+  watch(aspect, schedule);
   watch(replayRoot, async () => {
     await nextTick();
     observer?.disconnect();

@@ -4,6 +4,7 @@ import { createApp, h, nextTick, reactive, type App } from "vue";
 import { Chess } from "chess.js";
 import { createPinia } from "pinia";
 import ChessBoard from "../src/components/ChessBoard.vue";
+import { useSettingsStore } from "../src/stores/settings";
 const captured = vi.hoisted(() => ({ api: null as any }));
 vi.mock("@lichess-org/chessground", async (importOriginal) => {
   const real = await importOriginal<any>();
@@ -49,6 +50,7 @@ async function mount(premove = false) {
     canPremove: premove,
     dests: { e2: ["e3", "e4"], d2: ["d3", "d4"] },
     lastMove: null as string[] | null,
+    clockRemainingMs: 60000,
   });
   const move = vi.fn();
   app = createApp({ render: () => h(ChessBoard, { ...props, onMove: move }) });
@@ -74,6 +76,25 @@ function click(key: string) {
   document.dispatchEvent(new MouseEvent("mouseup", { ...options, buttons: 0 }));
 }
 describe("Chessboard selection across layout changes", () => {
+  it("updates animation only when the effective preset changes", async () => {
+    const { props } = await mount();
+    const set = vi.spyOn(captured.api, 'set');
+    props.clockRemainingMs = 59900;
+    await nextTick();
+    expect(set).not.toHaveBeenCalled();
+    props.clockRemainingMs = 59800;
+    await nextTick();
+    expect(set).not.toHaveBeenCalled();
+    const settings = useSettingsStore();
+    settings.setAnimationMode('adaptive');
+    await nextTick();
+    expect(set).toHaveBeenLastCalledWith({ animation: { enabled: false, duration: 0 } });
+    set.mockClear();
+    props.clockRemainingMs = 120001;
+    await nextTick();
+    expect(set).toHaveBeenLastCalledWith({ animation: { enabled: true, duration: 170 } });
+    settings.setAnimationMode('normal');
+  });
   it("selects the correct piece on the first click after a banner above the board disappears", async () => {
     await mount();
     captured.api.state.dom.bounds(); // cache the original location

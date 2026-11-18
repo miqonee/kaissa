@@ -1,13 +1,19 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, defineAsyncComponent, h } from 'vue';
 import { useRouter } from 'vue-router';
 import { getBotPersonality, isMultiplayer, modeLabel as sharedModeLabel, type GameMode, type LiveGameInfo, type MultiMode } from 'shared';
 import { useConnectionStore } from '../stores/connection';
 import { useI18n } from '../stores/i18n';
-import ChessBoard from './ChessBoard.vue';
 import MultiBoard from './MultiBoard.vue';
 import BotHoverCard from './BotHoverCard.vue';
 import AppIcon from './AppIcon.vue';
+
+const ChessBoard = defineAsyncComponent({
+  loader: () => import('./ChessBoard.vue').then(module => module.default),
+  delay: 0,
+  loadingComponent: { render: () => h('div', { class: 'board-loading', 'aria-hidden': 'true' }) },
+});
+
 const props = defineProps<{ games: LiveGameInfo[]; liveLoaded: boolean }>();
 const router = useRouter();
 const connection = useConnectionStore();
@@ -208,6 +214,11 @@ function botDisplayName(p: LiveGameInfo['players'][number]): string {
 
 .live-boards.two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.live-boards :deep(.board-loading) {
+  width: 100%;
+  aspect-ratio: 1;
 }
 
 /* Boards own their aspect ratio: 16×8 must not stretch into a square grid row.

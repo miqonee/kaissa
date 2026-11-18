@@ -11,5 +11,13 @@ import './styles/main.css';
 
 const app = createApp(App);
 
-app.use(createPinia()).use(router).mount('#app');
+app.use(createPinia()).use(router);
+
+const mount = () => app.mount('#app');
+if (window.location.pathname === '/') {
+  // Keep the prerendered homepage visible while the initial route loads.
+  void router.isReady().then(mount, mount);
+} else {
+  mount();
+}
 

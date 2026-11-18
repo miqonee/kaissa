@@ -6,7 +6,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import type { GameMode, LiveGameInfo } from 'shared';
 import HomeLiveGames from '../src/components/HomeLiveGames.vue';
 
-vi.mock('../src/components/ChessBoard.vue', () => ({ default: { props: ['fen'], template: '<div class="board-wrap" />' } }));
+vi.mock('../src/components/ChessBoard.vue', () => ({ default: { props: ['fen'], template: '<div class="board-wrap" :data-fen="fen" />' } }));
 vi.mock('../src/components/MultiBoard.vue', () => ({ default: { props: ['mode', 'fen', 'mini'], template: '<div class="multi-board-wrap" :data-mode="mode" :data-mini="mini" />' } }));
 let app: App, root: HTMLElement;
 const game = (mode: GameMode, gameId = 1): LiveGameInfo => ({
@@ -32,10 +32,13 @@ describe('live game previews', () => {
     expect(root.querySelectorAll('.multi-player[title]')).toHaveLength(4);
     expect(root.querySelector('.live-boards.two')).toBeNull();
   });
-  it('keeps both bughouse boards and renders every irregular-mode participant', () => {
+  it('keeps both bughouse boards and renders every irregular-mode participant', async () => {
     mount([game('bughouse'), game('three-player', 2), game('four-player', 3)]);
-    expect(root.querySelectorAll('.live-boards.two .board-wrap')).toHaveLength(2);
     expect(root.querySelectorAll('.multi-player')).toHaveLength(7);
+    await vi.waitFor(() => {
+      const positions = [...root.querySelectorAll('.live-boards.two .board-wrap')].map(board => board.getAttribute('data-fen'));
+      expect(positions).toEqual(['position-a', 'position-b']);
+    });
   });
   it('opens the selected game with keyboard without creating a game', async () => {
     const router = mount([game('double', 42)]);

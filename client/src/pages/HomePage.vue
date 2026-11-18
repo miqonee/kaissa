@@ -108,7 +108,7 @@ function handleCtaAction(action: unknown): void {
     quickMode.value = GAME_MODES.includes(route.query.mode as GameMode) ? route.query.mode as GameMode : 'team';
     const target = autoLobbies.value.find(l => l.mode === quickMode.value);
     if (target) {
-      enterLobby(target);
+      playQuick(target);
     } else if (!lobbyError.value) {
       openCreateModal();
     }
@@ -117,6 +117,8 @@ function handleCtaAction(action: unknown): void {
       document.getElementById('lobbies-section')?.scrollIntoView({ behavior: 'smooth' });
     }, 150);
   } else if (action === 'create') {
+    const mode = route.query.mode as GameMode;
+    if (GAME_MODES.includes(mode)) quickMode.value = mode;
     openCreateModal();
   }
 }
@@ -248,6 +250,10 @@ function lobbyRosterTitle(l: LobbySummary): string {
         <summary><h2 id="home-guide-title"><span>{{ i18n.locale === 'en' ? 'About the modes and rules' : 'О режимах и правилах' }}</span><AppIcon name="chevron-down" :size="18" /></h2></summary>
         <div class="home-guide-content">
       <div class="guide-grid"><article v-for="section in seoPages['/'][i18n.locale].sections" :key="section.heading"><h3>{{ section.heading }}</h3><p v-for="paragraph in section.paragraphs" :key="paragraph">{{ paragraph }}</p></article></div>
+      <nav :aria-label="i18n.locale === 'en' ? 'Play with friends' : 'Игра с друзьями'">
+        <router-link :to="i18n.localizedPage('/play/three-player')">{{ seoPages['/play/three-player'][i18n.locale].heading }}</router-link>
+        <router-link :to="i18n.localizedPage('/play/four-player')">{{ seoPages['/play/four-player'][i18n.locale].heading }}</router-link>
+      </nav>
       <nav :aria-label="i18n.locale === 'en' ? 'Learn the rules' : 'Изучить правила'"><router-link :to="i18n.localizedPage('/rules/duo')">{{ i18n.locale === 'en' ? '2v2 rules' : 'Правила 2×2' }}</router-link><router-link :to="i18n.localizedPage('/rules/double')">{{ i18n.locale === 'en' ? 'Double Chess rules' : 'Правила Двойных шахмат' }}</router-link><router-link :to="i18n.localizedPage('/rules/bughouse')">{{ i18n.locale === 'en' ? 'Bughouse rules' : 'Правила багхауса' }}</router-link><router-link :to="i18n.localizedPage('/rules/crazyhouse')">{{ i18n.locale === 'en' ? 'Crazyhouse rules' : 'Правила Crazyhouse' }}</router-link><router-link :to="i18n.localizedPage('/rules/multiplayer')">{{ i18n.locale === 'en' ? '3 & 4 player rules' : 'Правила 3 и 4 игрока' }}</router-link></nav>
         </div>
       </details>

@@ -74,6 +74,12 @@ export const router = createRouter({
       },
     },
     { path: '/rules/double', name: 'rules-double', component: () => import('./pages/DoubleRulesPage.vue'), meta: { title: 'Двойные шахматы — правила 16×8 | Каисса' } },
+    {
+      path: '/play/:mode(three-player|four-player)',
+      name: 'multiplayer-play',
+      component: () => import('./pages/MultiplayerPlayPage.vue'),
+      props: true,
+    },
     { path: '/rules', redirect: '/rules/duo' },
     {
       path: '/rules/multiplayer',

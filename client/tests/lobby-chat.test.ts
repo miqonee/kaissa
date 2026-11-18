@@ -20,7 +20,7 @@ vi.mock('../src/api/socket', () => ({
 }));
 vi.mock('../src/stores/auth', () => ({ useAuthStore: () => ({ user: { id: 1 } }) }));
 
-it('keeps lobby messages and drafts while collapsed and counts only other players as unread', async () => {
+it('shows the chat and countdown inline, preserves drafts and clears only countdown messages', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/lobby/:id', component: LobbyPage }] });
   await router.push('/lobby/table');
   const root = document.createElement('div');
@@ -33,32 +33,32 @@ it('keeps lobby messages and drafts while collapsed and counts only other player
       started: false, timeControl: { kind: 'none', baseMin: 0, incSec: 0 },
     } satisfies LobbySummary);
     await nextTick();
-    const toggle = root.querySelector<HTMLButtonElement>('.chat-toggle')!;
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    const message: ChatMessage = { id: 1, userId: 2, username: 'Guest', text: 'Привет!', at: 0 };
-    events.emit('lobby:chat', message);
-    events.emit('lobby:chat', { ...message, id: 2, userId: 1 });
-    events.emit('lobby:chat', { ...message, id: 3, system: true, isCountdown: true });
-    events.emit('lobby:chat:clear-countdown');
-    await nextTick();
-    expect(toggle.querySelector('.unread')?.textContent).toBe('1');
-
-    toggle.click();
-    await nextTick();
-    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    expect(dialog.getAttribute('aria-label')).toBe('Чат лобби');
-    expect(dialog.querySelectorAll('.chat-message')).toHaveLength(2);
-    const input = dialog.querySelector('input')!;
+    const chat = root.querySelector<HTMLElement>('.lobby-chat')!;
+    expect(chat.getAttribute('aria-label')).toBe('Чат лобби');
+    expect(chat.querySelector('.chat-toggle')).toBeNull();
+    expect(chat.querySelector('[role="dialog"]')).toBeNull();
+    const input = chat.querySelector('input')!;
     input.value = '  Мой ход  ';
     input.dispatchEvent(new Event('input'));
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    const message: ChatMessage = { id: 1, userId: 2, username: 'Guest', text: 'Привет!', at: 0 };
+    events.emit('lobby:chat', message);
+    events.emit('lobby:chat', { ...message, id: 2, text: '3...', system: true, isCountdown: true });
+    const tick = { lobbyId: 'table', seconds: 3, paused: false, pausedCount: 0, neededCount: 2 };
+    events.emit('lobby:countdown', tick);
     await nextTick();
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(toggle.querySelector('.unread')).toBeNull();
-    toggle.click();
+    expect(chat.querySelector('[role="log"]')?.textContent).toContain('3...');
+    expect(chat.querySelector('[role="timer"]')?.textContent).toContain('3 с');
+    events.emit('lobby:countdown', { ...tick, paused: true, pausedCount: 2 });
     await nextTick();
+    expect(chat.querySelector('[role="timer"]')?.textContent).toContain('Пауза');
+    events.emit('lobby:countdown', { ...tick, seconds: null });
+    events.emit('lobby:chat:clear-countdown');
+    await nextTick();
+    expect(chat.querySelector('[role="timer"]')).toBeNull();
+    expect(chat.querySelectorAll('.chat-message')).toHaveLength(1);
+    expect(chat.querySelector('[role="log"]')?.textContent).toContain(message.text);
     expect(input.value).toBe('  Мой ход  ');
-    dialog.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+    chat.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
     await nextTick();
     expect(send).toHaveBeenCalledWith('lobby:chat', 'Мой ход');
     expect(input.value).toBe('');

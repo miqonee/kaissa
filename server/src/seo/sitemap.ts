@@ -170,6 +170,10 @@ export async function generateSitemapXml(options: GenerateSitemapOptions = {}): 
       priority: 0.8,
       alternates: makeAlternates(`${baseUrl}/leaderboard`),
     },
+    ...['/play/three-player', '/play/four-player'].map(path => ({
+      loc: baseUrl + path,
+      alternates: makeAlternates(baseUrl + path),
+    })),
     { loc: `${baseUrl}/rules/double`, changefreq: 'weekly', priority: 0.9,
       alternates: makeAlternates(`${baseUrl}/rules/double`) },
     // Правила и информация о платформе

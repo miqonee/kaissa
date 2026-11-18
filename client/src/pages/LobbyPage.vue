@@ -38,8 +38,6 @@ usePageSeo({
 const error = ref('');
 const chat = ref<ChatMessage[]>([]);
 const chatText = ref('');
-const chatOpen = ref(false);
-const unreadMessages = ref(0);
 const lobbyId = computed(() => lobby.value?.id ?? String(route.params.id));
 
 const me = computed(() => auth.user);
@@ -110,11 +108,6 @@ function showNotification(text: string) {
   toastTimer = window.setTimeout(() => (toastText.value = ''), 2500);
 }
 
-function toggleChat(): void {
-  chatOpen.value = !chatOpen.value;
-  if (chatOpen.value) unreadMessages.value = 0;
-}
-
 function joinLobby(): void {
   socket.timeout(8000).emit('lobby:join', lobbyId.value, (timeout, ack) => {
     if (timeout || !ack) { error.value = i18n.locale === 'en' ? 'Could not connect. Check your connection and try again.' : 'Не удалось подключиться. Проверьте связь и повторите попытку.'; return; }
@@ -141,11 +134,13 @@ onMounted(() => {
     if (state.id !== lobbyId.value) return;
     lobby.value = state;
     if (state.autoCountdown !== undefined && state.autoCountdown !== null) {
+      const humans = state.players.filter(p => !p.isBot);
+      const pausedCount = state.pausedBy?.length ?? 0;
       countdown.value = {
         seconds: state.autoCountdown,
-        paused: state.pausedBy?.length ? true : false,
-        pausedCount: state.pausedBy?.length || 0,
-        neededCount: state.players.filter((p) => !p.isBot).length,
+        paused: humans.length > 0 && pausedCount === humans.length,
+        pausedCount,
+        neededCount: humans.length,
       };
     } else {
       countdown.value = null;
@@ -161,7 +156,6 @@ onMounted(() => {
   });
   socket.on('lobby:chat', (msg) => {
     chat.value.push(msg);
-    if (!chatOpen.value && !msg.system && msg.userId !== me.value?.id) unreadMessages.value++;
   });
   socket.on('lobby:chat:clear-countdown', () => {
     chat.value = chat.value.filter((m) => !m.isCountdown);
@@ -321,22 +315,21 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
       </div>
     </header>
 
-    <section class="panel" aria-labelledby="lobby-players-heading">
+    <MatchChat v-model="chatText" class="lobby-chat" :title="i18n.t.lobby.chatTitle" :messages="chat" @send="sendChat">
+      <template #status>
+        <span v-if="countdown?.seconds != null" class="chat-timer mono" role="timer">
+          <AppIcon :name="countdown.paused ? 'pause' : 'clock'" :size="13" />
+          {{ countdown.paused
+            ? (i18n.locale === 'en' ? 'Paused' : 'Пауза')
+            : (i18n.locale === 'en' ? `Starts in ${countdown.seconds}s` : `Старт через ${countdown.seconds} с`) }}
+        </span>
+      </template>
+    </MatchChat>
+
+    <section class="panel players-panel" aria-labelledby="lobby-players-heading">
       <div class="panel-head">
         <h2 id="lobby-players-heading">{{ i18n.locale === 'en' ? 'Players at Table' : 'Игроки за столом' }}</h2>
         <span class="hint">{{ lobby.players.length }}/{{ capacity }} {{ i18n.t.home.playersCount }}</span>
-        <MatchChat
-          v-model="chatText"
-          class="lobby-chat"
-          :title="i18n.t.lobby.chatTitle"
-          :messages="chat"
-          drawer
-          :open="chatOpen"
-          :unread="unreadMessages"
-          @toggle="toggleChat"
-          @close="chatOpen = false"
-          @send="sendChat"
-        />
       </div>
 
       <div class="panel-body">
@@ -345,7 +338,8 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
           <div class="auto-banner-info">
             <span class="countdown-chip" :class="{ paused: countdown?.paused }">
               <span v-if="countdown?.paused">{{ i18n.locale === 'en' ? 'Paused' : 'Пауза' }} ({{ countdown?.pausedCount }}/{{ countdown?.neededCount }})</span>
-              <span v-else>{{ i18n.locale === 'en' ? `Auto-start in ${countdown?.seconds ?? 5}s` : `Автостарт через ${countdown?.seconds ?? 5} с` }}</span>
+              <span v-else-if="countdown?.seconds != null">{{ i18n.locale === 'en' ? `Auto-start in ${countdown.seconds}s` : `Автостарт через ${countdown.seconds} с` }}</span>
+              <span v-else>{{ i18n.locale === 'en' ? 'Waiting to start' : 'Ожидание старта' }}</span>
             </span>
             <p class="dim tiny auto-hint">
               {{ lobby.rematchOf
@@ -582,9 +576,36 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
 
 <style scoped>
 .lobby-page {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(252px, 24vw, 300px);
+  grid-template-areas: "hero hero" "players chat" "start chat";
+  align-items: start;
+  gap: 16px;
+}
+.lobby-hero { grid-area: hero; }
+.players-panel { grid-area: players; min-width: 0; }
+.start-bar { grid-area: start; }
+.lobby-chat { grid-area: chat; height: 230px; }
+.lobby-chat :deep(.chat-message) { font-size: 13px; }
+.chat-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border-radius: var(--r-xs);
+  color: var(--accent-2);
+  background: var(--accent-soft);
+  font-size: 12px;
+  white-space: nowrap;
+}
+@media (max-width: 800px) {
+  .lobby-page {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "hero" "chat" "players" "start";
+    gap: 12px;
+  }
+  .lobby-chat { width: min(100%, 420px); height: 170px; }
+  .lobby-chat :deep(.match-chat-input input) { height: 40px; font-size: 16px; }
 }
 
 .lobby-hero {
@@ -669,8 +690,6 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
   display: flex;
   gap: 8px;
 }
-
-.lobby-chat { margin-inline-start: auto; }
 
 /* Слоты */
 .slots {

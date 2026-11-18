@@ -4,7 +4,7 @@ import type { ChatMessage } from 'shared';
 import { useI18n } from '../stores/i18n';
 import AppIcon from './AppIcon.vue';
 
-const props = defineProps<{ title?: string; messages: ChatMessage[]; modelValue: string; drawer: boolean; open: boolean; unread: number }>();
+const props = defineProps<{ title?: string; messages: ChatMessage[]; modelValue: string; drawer?: boolean; open?: boolean; unread?: number }>();
 const emit = defineEmits<{ 'update:modelValue': [value: string]; toggle: []; close: []; send: [] }>();
 const i18n = useI18n();
 const chatTitle = computed(() => props.title ?? i18n.t.matchChat.title);
@@ -27,7 +27,7 @@ function unlockPage(): void {
 }
 const drawerStyle = computed(() => props.drawer && props.open ? {
   bottom: `${keyboardOffset.value + 8}px`,
-  maxHeight: `${Math.min(440, viewportHeight.value - 24)}px`,
+  height: `${Math.min(440, viewportHeight.value - 24)}px`,
 } : undefined);
 
 function measureViewport(): void {
@@ -84,11 +84,10 @@ defineExpose({ scrollToEnd });
 
 <template>
   <section class="match-chat" :class="{ drawer, 'is-open': open }" :aria-label="chatTitle">
-    <button v-if="drawer" ref="toggle" type="button" class="chat-toggle" aria-haspopup="dialog" :aria-expanded="open"
-      :aria-label="unread && !open ? `${chatTitle} (${i18n.locale === 'en' ? 'Unread' : 'Непрочитано'}: ${unread})` : chatTitle" @click="emit('toggle')">
+    <button v-if="drawer" ref="toggle" type="button" class="chat-toggle" :aria-expanded="open" @click="emit('toggle')">
       <AppIcon name="message-square" :size="16" /><span>{{ chatTitle }}</span>
       <span v-if="unread && !open" class="unread">{{ unread }}</span>
-      <span v-else-if="messages.length" class="message-count mono">{{ messages.length }}</span>
+      <span class="message-count mono">{{ messages.length }}</span>
       <AppIcon :name="open ? 'chevron-down' : 'chevron-up'" :size="15" />
     </button>
     <Teleport to="body" :disabled="!drawer">
@@ -98,6 +97,7 @@ defineExpose({ scrollToEnd });
         <header class="panel-head">
           <AppIcon name="message-square" :size="15" /><h3>{{ chatTitle }}</h3>
           <span class="message-count mono">{{ messages.length }}</span>
+          <slot name="status" />
           <button v-if="drawer" class="small ghost icon-only" :aria-label="i18n.t.matchChat.close" @click="emit('close')"><AppIcon name="close" :size="16" /></button>
         </header>
         <div ref="log" class="match-chat-log" role="log" aria-live="polite" aria-relevant="additions">
@@ -133,12 +133,6 @@ defineExpose({ scrollToEnd });
 .unread { background: var(--accent); color: var(--accent-ink); font-size: 11px; padding: 1px 6px; border-radius: 12px; }
 .match-chat-shade { position: fixed; inset: 0; background: rgb(0 0 0 / .3); z-index: 79; }
 .match-chat-panel.floating { position: fixed; z-index: 80; left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); width: auto; padding-bottom: env(safe-area-inset-bottom); max-height: calc(100dvh - 24px); box-shadow: var(--shadow-l); }
-.floating .match-chat-log { flex: 0 1 auto; padding: 12px; }
-.floating .chat-message { font-size: 14px; }
-@media (max-width: 720px) {
-  .floating .match-chat-input input { height: 40px; font-size: 16px; }
-  .floating button { min-width: 40px; min-height: 40px; }
-}
 @media (min-width: 721px) {
   .match-chat-panel.floating { left: auto; right: 12px; width: min(380px, calc(100vw - 24px)); }
 }

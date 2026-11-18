@@ -62,6 +62,12 @@ for (const [route, variants] of Object.entries(content))
     );
     const appContent = html.match(/<div id="app">([\s\S]*?)<\/div>/)?.[1] ?? '';
     assert(appContent.includes(`<h1>${escape(variants[locale].heading)}</h1>`), `${file}: primary content is in app HTML`);
+    for (const action of variants[locale].actions ?? []) {
+      assert(appContent.includes(`<a href="${escape(action.href)}">${escape(action.label)}</a>`), `${file}: playable link`);
+      const target = new URL(action.href, url);
+      assert.equal(target.searchParams.get("mode"), route.split("/").pop());
+      assert.equal(target.searchParams.get("lang"), locale === "en" ? "en" : null);
+    }
     // Favicons must be present and located before any <script> in <head>
     const faviconIcoIdx = html.indexOf('href="/favicon.ico"');
     const faviconSvgIdx = html.indexOf('href="/favicon.svg"');

@@ -27,6 +27,8 @@ const canonical = (route, locale) =>
 const links = (locale) => {
   const en = locale === "en";
   return `<nav aria-label="${en ? "Explore Kaissa" : "Разделы Каиссы"}"><a href="/${en ? "?lang=en" : ""}">${en ? "Play" : "Играть"}</a> · ${[
+    ["/play/three-player", pages["/play/three-player"][locale].heading],
+    ["/play/four-player", pages["/play/four-player"][locale].heading],
     ["/rules/duo", "2×2"],
     ["/rules/double", en ? "Double Chess" : "Двойные шахматы"],
     ["/rules/bughouse", en ? "Bughouse" : "Багхаус"],
@@ -47,7 +49,10 @@ function content(page, route, locale) {
     const c = crazyhouse[locale];
     return `<main><h1>${escape(c.heading)}</h1><p>${escape(c.intro)}</p><h2>${escape(c.formatsTitle)}</h2><p>${escape(c.solo)}</p><p>${escape(c.team)}</p><p>${escape(c.difference)}</p><h2>${escape(c.rulesTitle)}</h2><ul>${c.rules.map((rule) => `<li>${escape(rule)}</li>`).join("")}</ul><h2>${escape(c.examplesTitle)}</h2>${c.examples.map((e) => `<section><h3>${escape(e.title)}</h3><p>${escape(e.caption)}</p></section>`).join("")}<h2>${escape(c.endTitle)}</h2><p>${escape(c.end)}</p><h2>${escape(c.startTitle)}</h2><p>${escape(c.start)}</p><a href="/?action=quick&amp;mode=crazyhouse${locale === "en" ? "&amp;lang=en" : ""}">${escape(c.playSolo)}</a> · <a href="/?action=quick&amp;mode=crazyhouse-team${locale === "en" ? "&amp;lang=en" : ""}">${escape(c.playTeam)}</a>${links(locale)}</main>`;
   }
-  return `<main><h1>${escape(page.heading)}</h1><p>${escape(page.intro)}</p>${page.sections.map((s) => `<section><h2>${escape(s.heading)}</h2>${s.paragraphs.map((p) => `<p>${escape(p)}</p>`).join("")}</section>`).join("")}${links(locale)}</main>`;
+  const actions = (page.actions ?? []).map(action =>
+    `<a href="${escape(action.href)}">${escape(action.label)}</a>`
+  ).join(" · ");
+  return `<main><h1>${escape(page.heading)}</h1><p>${escape(page.intro)}</p>${actions}${page.sections.map((s) => `<section><h2>${escape(s.heading)}</h2>${s.paragraphs.map((p) => `<p>${escape(p)}</p>`).join("")}</section>`).join("")}${links(locale)}</main>`;
 }
 function schemaFor(page, route, locale) {
   const url = canonical(route, locale);

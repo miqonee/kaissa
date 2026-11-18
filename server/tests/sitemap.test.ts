@@ -82,6 +82,10 @@ describe('SEO & Sitemap Specification', () => {
       expect(xml).toContain('<loc>https://duochess.ru/rules/crazyhouse</loc>');
       expect(xml).toContain('href="https://duochess.ru/rules/crazyhouse?lang=en"');
       expect(xml).toContain('<loc>https://duochess.ru/rules/multiplayer</loc>');
+      for (const path of ['/play/three-player', '/play/four-player']) {
+        expect(xml).toContain(`<loc>https://duochess.ru${path}</loc>`);
+        expect(xml).toContain(`<loc>https://duochess.ru${path}?lang=en</loc>`);
+      }
       expect(xml).toContain('href="https://duochess.ru/rules/multiplayer?lang=en"');
 
       // Check priorities

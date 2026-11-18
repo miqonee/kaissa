@@ -200,7 +200,7 @@
         {
           "heading": "Начисление очков и выбывание",
           "paragraphs": [
-            "За взятие живых фигур начисляются очки: пешка +1, конь +3, слон +5, ладья +5, ферзь +9. Постановка мата королю соперника приносит +20 очков, а одновременный шах двум королям даёт бонус +5 очков.",
+            "За взятие живых фигур начисляются очки: пешка +1, конь +3, слон +3 на троих или +5 на четверых, ладья +5, ферзь +9. Постановка мата королю соперника приносит +20 очков, а одновременный шах двум королям даёт бонус +5 очков.",
             "Фигуры выбывшего игрока (после мата, сдачи или истечения времени) становятся нейтральными серыми: они не ходят, не дают шах и приносят 0 очков при взятии."
           ]
         },
@@ -228,7 +228,7 @@
         {
           "heading": "Scoring system and eliminated armies",
           "paragraphs": [
-            "Capturing live pieces awards points: Pawn +1, Knight +3, Bishop +5, Rook +5, Queen +9. Delivering checkmate awards +20 points, and checking two enemy kings in one move grants a +5 bonus.",
+            "Capturing live pieces awards points: Pawn +1, Knight +3, Bishop +3 with three players or +5 with four, Rook +5, Queen +9. Delivering checkmate awards +20 points, and checking two enemy kings in one move grants a +5 bonus.",
             "When a player is checkmated, resigns or times out, their remaining pieces turn neutral grey: they no longer move, do not give check, and yield 0 points when captured."
           ]
         },
@@ -410,6 +410,154 @@
           "heading": "How the 2v2 modes differ",
           "paragraphs": [
             "In alternating 2v2, partners share one colour on an 8×8 board. Bughouse uses two separate boards and passes captures to a partner. Double Chess gives each player a separate army on one shared field, without reserves."
+          ]
+        }
+      ]
+    }
+  },
+  "/play/three-player": {
+    "ru": {
+      "title": "Шахматы на троих онлайн — играть с друзьями или ботами | Каисса",
+      "description": "Сыграйте в шахматы на троих бесплатно в браузере. У каждого своя армия на шестиугольной доске из 96 клеток. Пригласите друзей по ссылке или начните с ботами.",
+      "heading": "Шахматы на троих онлайн",
+      "intro": "Красные, синие и жёлтые начинают на трёх сторонах одной доски. Играйте каждый за себя. Для первой партии достаточно открыть быстрый стол, даже если вы пришли одни.",
+      "actions": [
+        {
+          "label": "Быстрая партия",
+          "href": "/?action=quick&mode=three-player"
+        },
+        {
+          "label": "Создать стол для друзей",
+          "href": "/?action=create&mode=three-player"
+        }
+      ],
+      "sections": [
+        {
+          "heading": "Как ходят фигуры на шестиугольной доске",
+          "paragraphs": [
+            "У каждого игрока свой сектор из 32 клеток. Ладья переходит через общие стороны клеток, а слон идёт через их углы. У центра диагональ может разветвиться. Когда наступит ваш ход, нажмите на слона, чтобы увидеть доступные поля."
+          ]
+        },
+        {
+          "heading": "Пешка может дойти до двух разных соперников",
+          "paragraphs": [
+            "Доведите пешку до первой горизонтали любого из двух соперников, чтобы превратить её в ферзя, ладью, слона или коня. Выбирая направление у центра, посмотрите, какой путь свободнее и сможет ли третий игрок взять вашу пешку после следующего хода."
+          ]
+        },
+        {
+          "heading": "Как сыграть втроём по ссылке",
+          "paragraphs": [
+            "Создайте стол для друзей и отправьте ссылку двум игрокам. Если вас двое, добавьте бота на третье место. В быстром столе свободные места уже занимают боты, а до старта их могут заменить люди."
+          ]
+        }
+      ]
+    },
+    "en": {
+      "title": "Play 3-Player Chess Online with Friends or Bots | Kaissa",
+      "description": "Play three-player chess for free on a 96-square hexagonal board. Invite two friends by link or try a quick game against bots. No account required.",
+      "heading": "Play 3-player chess online",
+      "intro": "Red, Blue and Yellow start on three sides of one board. Each player has a separate army and score. You can take a seat at a quick table even when neither opponent is online.",
+      "actions": [
+        {
+          "label": "Quick game",
+          "href": "/?action=quick&mode=three-player&lang=en"
+        },
+        {
+          "label": "Create a table for friends",
+          "href": "/?action=create&mode=three-player&lang=en"
+        }
+      ],
+      "sections": [
+        {
+          "heading": "How pieces cross the centre",
+          "paragraphs": [
+            "Each home sector contains 32 squares. Rooks cross the edges of squares and bishops pass through their corners. A bishop’s diagonal can split at the centre. Select the bishop on your turn to see which continuations are legal."
+          ]
+        },
+        {
+          "heading": "Where a pawn promotes",
+          "paragraphs": [
+            "A pawn can promote on the home rank of either opponent. When choosing a route near the centre, look at both paths and check whether the third player can capture your pawn on the next turn."
+          ]
+        },
+        {
+          "heading": "Set up a game for three friends",
+          "paragraphs": [
+            "Create a table and send the link to your two opponents. If there are only two of you, add a bot in the third seat. At a quick table bots already occupy the spare seats and people can replace them before play starts."
+          ]
+        }
+      ]
+    }
+  },
+  "/play/four-player": {
+    "ru": {
+      "title": "Шахматы на четверых онлайн — играть бесплатно | Каисса",
+      "description": "Играйте в шахматы на четверых на доске-кресте 14×14. Узнайте порядок ходов и цену фигур, соберите друзей по ссылке или займите место за быстрым столом с ботами.",
+      "heading": "Шахматы на четверых онлайн",
+      "intro": "Четыре армии стоят на четырёх сторонах доски-креста 14×14. Каждый играет за себя и получает очки за взятия и маты. Можно начать без регистрации.",
+      "actions": [
+        {
+          "label": "Быстрая партия",
+          "href": "/?action=quick&mode=four-player"
+        },
+        {
+          "label": "Создать стол для друзей",
+          "href": "/?action=create&mode=four-player"
+        }
+      ],
+      "sections": [
+        {
+          "heading": "В каком порядке ходят четыре игрока",
+          "paragraphs": [
+            "Первыми ходят красные, затем синие, жёлтые и зелёные. Между двумя вашими ходами позицию меняют три соперника. Перед разменом проверьте, кто ходит сразу после вас и может забрать оставшуюся без защиты фигуру."
+          ]
+        },
+        {
+          "heading": "Сколько очков дают за слона и за мат",
+          "paragraphs": [
+            "В этом режиме взятие слона приносит 5 очков, столько же, сколько взятие ладьи. За мат дают 20. Фигуры выбывшего игрока сереют и продолжают закрывать линии, но их взятие очков не приносит."
+          ]
+        },
+        {
+          "heading": "Как собрать четверых за одним столом",
+          "paragraphs": [
+            "Создайте стол и отправьте ссылку трём друзьям. В лобби можно выбрать контроль времени и добавить ботов на свободные места. Для тренировки в одиночку откройте быструю партию."
+          ]
+        }
+      ]
+    },
+    "en": {
+      "title": "Play 4-Player Chess Online for Free | Kaissa",
+      "description": "Play four-player chess on a 14×14 cross-shaped board. Learn the turn order and capture values, invite friends by link or sit down to a quick game with bots.",
+      "heading": "Play 4-player chess online",
+      "intro": "Four armies face each other across a 14×14 cross-shaped board. Everyone plays for their own score, earning points for captures and checkmates. You can start without an account.",
+      "actions": [
+        {
+          "label": "Quick game",
+          "href": "/?action=quick&mode=four-player&lang=en"
+        },
+        {
+          "label": "Create a table for friends",
+          "href": "/?action=create&mode=four-player&lang=en"
+        }
+      ],
+      "sections": [
+        {
+          "heading": "Who moves first in four-player chess?",
+          "paragraphs": [
+            "Red moves first, followed by Blue, Yellow and Green clockwise. Three opponents can change the position between your turns. Before exchanging pieces, check who moves immediately after you and whether they can take the piece you leave behind."
+          ]
+        },
+        {
+          "heading": "What are bishops and checkmates worth?",
+          "paragraphs": [
+            "Capturing a bishop scores 5 points in this format, the same as a rook. Checkmate earns 20. An eliminated army turns grey and still blocks lines, but capturing one of its pieces scores nothing."
+          ]
+        },
+        {
+          "heading": "Get four players around the same board",
+          "paragraphs": [
+            "Create a table and send the link to three friends. In the lobby you can choose the time control and fill any empty seats with bots. If you want to practise on your own, join a quick game."
           ]
         }
       ]

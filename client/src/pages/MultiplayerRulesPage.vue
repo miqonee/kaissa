@@ -62,7 +62,7 @@ usePageSeo({ canonical: '/rules/multiplayer' });
             <AppIcon name="book-open" :size="20" />
             Two Board Topologies: 4-Player Cross & 3-Player Hexagon
           </h2>
-          <h3>1. 4-Player Chess (14×14 Cross Board, 160 Squares)</h3>
+          <h3>1. <router-link :to="i18n.localizedPage('/play/four-player')">4-Player Chess (14×14 Cross Board, 160 Squares)</router-link></h3>
           <p>
             Four players sit around a 14×14 cross-shaped board with the 3×3 corners removed (160 playable squares). Each player controls a full 16-piece army of their own color and moves clockwise:
           </p>
@@ -76,7 +76,7 @@ usePageSeo({ canonical: '/rules/multiplayer' });
             The board automatically rotates on your screen so your own army is always at the bottom facing forward. Pawns promote to a Queen on the 8th rank of their advance direction.
           </p>
 
-          <h3>2. 3-Player Hexagonal Chess (96 Cells)</h3>
+          <h3>2. <router-link :to="i18n.localizedPage('/play/three-player')">3-Player Hexagonal Chess (96 Cells)</router-link></h3>
           <p>
             Three players battle on a symmetric three-wing hexagonal board consisting of 96 quadrilateral cells (three 4×8 sectors meeting along three central seam lines):
           </p>
@@ -97,7 +97,7 @@ usePageSeo({ canonical: '/rules/multiplayer' });
             In Free-For-All (FFA) chess, victory is determined by <strong>total points</strong> scored by the end of the match (or being the last survivor with the highest score):
           </p>
           <ul>
-            <li><strong>Capturing a live piece:</strong> Pawn = <strong>+1</strong>, Knight = <strong>+3</strong>, Bishop = <strong>+5</strong>, Rook = <strong>+5</strong>, Queen = <strong>+9</strong>.</li>
+            <li><strong>Capturing a live piece:</strong> Pawn = <strong>+1</strong>, Knight = <strong>+3</strong>, Bishop = <strong>+3</strong> with three players or <strong>+5</strong> with four, Rook = <strong>+5</strong>, Queen = <strong>+9</strong>.</li>
             <li><strong>Delivering Checkmate:</strong> <strong>+20 points</strong> to the player whose move checkmates an opponent.</li>
             <li><strong>Stalemate:</strong> <strong>+20 points</strong> for self-stalemate (or +10 split among remaining active players).</li>
             <li><strong>Double / Simultaneous Check:</strong> Delivering check to two enemy kings in one move awards a <strong>+5 bonus</strong> (three kings — <strong>+15</strong>).</li>
@@ -158,7 +158,7 @@ usePageSeo({ canonical: '/rules/multiplayer' });
             <AppIcon name="book-open" :size="20" />
             Две геометрии доски: крест 14×14 и гексагон на троих
           </h2>
-          <h3>1. Шахматы на четверых (крестообразная доска 14×14, 160 клеток)</h3>
+          <h3>1. <router-link :to="i18n.localizedPage('/play/four-player')">Шахматы на четверых (крестообразная доска 14×14, 160 клеток)</router-link></h3>
           <p>
             Четыре игрока располагаются по сторонам крестообразной доски 14×14 с вырезанными углами 3×3 (160 игровых полей). Каждый управляет собственной армией из 16 фигур своего цвета и ходит по часовой стрелке:
           </p>
@@ -172,7 +172,7 @@ usePageSeo({ canonical: '/rules/multiplayer' });
             Доска автоматически поворачивается для каждого участника так, чтобы ваши фигуры всегда находились снизу. Пешки превращаются в ферзя на 8-й горизонтали своего движения вперёд.
           </p>
 
-          <h3>2. Шахматы на троих (шестиугольная доска из 96 полей)</h3>
+          <h3>2. <router-link :to="i18n.localizedPage('/play/three-player')">Шахматы на троих (шестиугольная доска из 96 полей)</router-link></h3>
           <p>
             Три игрока сражаются на симметричной шестиугольной доске из 96 четырёхугольных клеток (три сектора 4×8, сходящихся по трём центральным швам):
           </p>
@@ -193,7 +193,7 @@ usePageSeo({ canonical: '/rules/multiplayer' });
             В режиме «каждый за себя» (Free-For-All) места распределяются по <strong>сумме набранных очков</strong> к концу партии:
           </p>
           <ul>
-            <li><strong>Взятие живой фигуры соперника:</strong> пешка = <strong>+1</strong>, конь = <strong>+3</strong>, слон = <strong>+5</strong>, ладья = <strong>+5</strong>, ферзь = <strong>+9</strong>.</li>
+            <li><strong>Взятие живой фигуры соперника:</strong> пешка = <strong>+1</strong>, конь = <strong>+3</strong>, слон = <strong>+3</strong> на троих или <strong>+5</strong> на четверых, ладья = <strong>+5</strong>, ферзь = <strong>+9</strong>.</li>
             <li><strong>Постановка мата:</strong> <strong>+20 очков</strong> игроку, чей ход поставил мат королю соперника.</li>
             <li><strong>Пат:</strong> <strong>+20 очков</strong> при пате самому себе (или по +10 активным соперникам).</li>
             <li><strong>Двойной / одновременный шах:</strong> шах двум вражеским королям одним ходом приносит бонус <strong>+5 очков</strong> (трём королям — <strong>+15 очков</strong>).</li>

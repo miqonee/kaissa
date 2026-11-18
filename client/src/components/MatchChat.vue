@@ -4,10 +4,9 @@ import type { ChatMessage } from 'shared';
 import { useI18n } from '../stores/i18n';
 import AppIcon from './AppIcon.vue';
 
-const props = defineProps<{ title?: string; messages: ChatMessage[]; modelValue: string; drawer?: boolean; open?: boolean; unread?: number }>();
+const props = defineProps<{ messages: ChatMessage[]; modelValue: string; drawer: boolean; open: boolean; unread: number }>();
 const emit = defineEmits<{ 'update:modelValue': [value: string]; toggle: []; close: []; send: [] }>();
 const i18n = useI18n();
-const chatTitle = computed(() => props.title ?? i18n.t.matchChat.title);
 const log = ref<HTMLElement | null>(null);
 const input = ref<HTMLInputElement | null>(null);
 const toggle = ref<HTMLButtonElement | null>(null);
@@ -83,9 +82,9 @@ defineExpose({ scrollToEnd });
 </script>
 
 <template>
-  <section class="match-chat" :class="{ drawer, 'is-open': open }" :aria-label="chatTitle">
+  <section class="match-chat" :class="{ drawer, 'is-open': open }" :aria-label="i18n.t.matchChat.title">
     <button v-if="drawer" ref="toggle" type="button" class="chat-toggle" :aria-expanded="open" @click="emit('toggle')">
-      <AppIcon name="message-square" :size="16" /><span>{{ chatTitle }}</span>
+      <AppIcon name="message-square" :size="16" /><span>{{ i18n.t.matchChat.title }}</span>
       <span v-if="unread && !open" class="unread">{{ unread }}</span>
       <span class="message-count mono">{{ messages.length }}</span>
       <AppIcon :name="open ? 'chevron-down' : 'chevron-up'" :size="15" />
@@ -93,11 +92,10 @@ defineExpose({ scrollToEnd });
     <Teleport to="body" :disabled="!drawer">
       <div v-if="modalDrawer && open" class="match-chat-shade" @click="emit('close')"></div>
       <div ref="panel" v-show="!drawer || open" class="match-chat-panel panel" :class="{ floating: drawer }" :style="drawerStyle"
-        :role="drawer ? 'dialog' : undefined" :aria-modal="modalDrawer ? true : undefined" :aria-label="chatTitle">
+        :role="drawer ? 'dialog' : undefined" :aria-modal="modalDrawer ? true : undefined" :aria-label="i18n.t.matchChat.title">
         <header class="panel-head">
-          <AppIcon name="message-square" :size="15" /><h3>{{ chatTitle }}</h3>
+          <AppIcon name="message-square" :size="15" /><h3>{{ i18n.t.matchChat.title }}</h3>
           <span class="message-count mono">{{ messages.length }}</span>
-          <slot name="status" />
           <button v-if="drawer" class="small ghost icon-only" :aria-label="i18n.t.matchChat.close" @click="emit('close')"><AppIcon name="close" :size="16" /></button>
         </header>
         <div ref="log" class="match-chat-log" role="log" aria-live="polite" aria-relevant="additions">

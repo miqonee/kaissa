@@ -338,6 +338,7 @@ main.page {
 
 /* Browsing follows the navigation width; longer boards can use more space. */
 main.page:has(.home) { max-width: calc(var(--site-width) + 2 * var(--gap-m)); }
+main.page:has(.lobby-page) { max-width: 1480px; }
 main.page:has(.multi-game-page.double-game) { max-width: 1680px; }
 
 @media (orientation: landscape) and (max-height: 600px) and (max-width: 1100px) {

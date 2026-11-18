@@ -8,7 +8,6 @@ import { getSocket, onSocketResync } from '../api/socket';
 import { useAuthStore } from '../stores/auth';
 import { useI18n } from '../stores/i18n';
 import AppIcon from '../components/AppIcon.vue';
-import MatchChat from '../components/MatchChat.vue';
 import ModeBoardPreview from '../components/ModeBoardPreview.vue';
 import BotHoverCard from '../components/BotHoverCard.vue';
 import { usePageSeo } from '../composables/useSeo';
@@ -35,11 +34,10 @@ usePageSeo({
   description: computed(() => (i18n.locale === 'en' ? 'Waiting for players and game preparation on Kaissa.' : 'Ожидание игроков и подготовка к командной шахматной партии на платформе Каисса.')),
   canonical: computed(() => `/lobby/${route.params.id}`),
 });
-const preview = computed(() => lobby.value ? modeGuide(lobby.value.mode, i18n.locale) : null);
-
 const error = ref('');
 const chat = ref<ChatMessage[]>([]);
 const chatText = ref('');
+const chatBox = ref<HTMLElement | null>(null);
 const lobbyId = computed(() => lobby.value?.id ?? String(route.params.id));
 
 const me = computed(() => auth.user);
@@ -110,6 +108,12 @@ function showNotification(text: string) {
   toastTimer = window.setTimeout(() => (toastText.value = ''), 2500);
 }
 
+function scrollChat(): void {
+  setTimeout(() => {
+    if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
+  }, 30);
+}
+
 function joinLobby(): void {
   socket.timeout(8000).emit('lobby:join', lobbyId.value, (timeout, ack) => {
     if (timeout || !ack) { error.value = i18n.locale === 'en' ? 'Could not connect. Check your connection and try again.' : 'Не удалось подключиться. Проверьте связь и повторите попытку.'; return; }
@@ -136,13 +140,11 @@ onMounted(() => {
     if (state.id !== lobbyId.value) return;
     lobby.value = state;
     if (state.autoCountdown !== undefined && state.autoCountdown !== null) {
-      const humans = state.players.filter(p => !p.isBot);
-      const pausedCount = state.pausedBy?.length ?? 0;
       countdown.value = {
         seconds: state.autoCountdown,
-        paused: humans.length > 0 && pausedCount === humans.length,
-        pausedCount,
-        neededCount: humans.length,
+        paused: state.pausedBy?.length ? true : false,
+        pausedCount: state.pausedBy?.length || 0,
+        neededCount: state.players.filter((p) => !p.isBot).length,
       };
     } else {
       countdown.value = null;
@@ -158,6 +160,7 @@ onMounted(() => {
   });
   socket.on('lobby:chat', (msg) => {
     chat.value.push(msg);
+    scrollChat();
   });
   socket.on('lobby:chat:clear-countdown', () => {
     chat.value = chat.value.filter((m) => !m.isCountdown);
@@ -290,12 +293,14 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
       <div class="hero-left">
         <div class="hero-title-row">
           <h1>{{ lobbyDisplayName }}</h1>
+          <span class="badge">{{ modeLabel(lobby.mode) }}</span>
           <span class="badge mono">{{ timeControlLabel(lobby.timeControl) }}</span>
         </div>
         <p class="dim hero-desc">
           {{ lobby.rematchOf
             ? (i18n.locale === 'en' ? 'Play again with the same teams and settings.' : 'Ещё одна партия с прежними командами и настройками.')
             : (i18n.locale === 'en' ? 'Wait for people or start with bots filling the available seats.' : 'Подождите людей или начните с ботами на свободных местах.') }}
+          <span v-if="hasPockets(lobby.mode)">{{ i18n.locale === 'en' ? ' Bots can use pocket pieces.' : ' Боты умеют выставлять фигуры из кармана.' }}</span>
         </p>
       </div>
 
@@ -315,194 +320,229 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
       </div>
     </header>
 
-    <section class="panel players-panel" aria-labelledby="lobby-players-heading">
-      <div class="panel-head">
-        <h2 id="lobby-players-heading">{{ i18n.locale === 'en' ? 'Players at Table' : 'Игроки за столом' }}</h2>
-        <span class="hint">{{ lobby.players.length }}/{{ capacity }} {{ i18n.t.home.playersCount }}</span>
-      </div>
-
-      <div class="panel-body">
-        <div class="mode-selector">
-          <label for="lobby-mode" class="dim">{{ i18n.locale === 'en' ? 'Game mode:' : 'Режим игры:' }}</label>
-          <select id="lobby-mode" :value="lobby.mode" :disabled="!isHost || modeBusy" @change="changeMode(($event.target as HTMLSelectElement).value as GameMode)">
-            <option v-for="mode in GAME_MODES" :key="mode" :value="mode">{{ modeLabel(mode) }}</option>
-          </select>
-          <router-link :to="modeRulesPath(lobby.mode)" target="_blank">{{ i18n.locale === 'en' ? 'Rules' : 'Правила' }}</router-link>
+    <!-- Основная раскладка: Игроки слева + Чат справа -->
+    <div class="lobby-layout">
+      <!-- 4 слота игроков -->
+      <section class="panel players-panel" aria-labelledby="lobby-players-heading">
+        <div class="panel-head">
+          <h2 id="lobby-players-heading">{{ i18n.locale === 'en' ? 'Players at Table' : 'Игроки за столом' }}</h2>
+          <span class="hint">{{ lobby.players.length }}/{{ capacity }} {{ i18n.t.home.playersCount }}</span>
         </div>
 
-        <!-- Баннер Быстрого стола (Автолобби или реванш) -->
-        <div v-if="quick || lobby.rematchOf" class="auto-lobby-banner">
-          <div class="auto-banner-info">
-            <span class="countdown-chip" :class="{ paused: countdown?.paused }">
-              <span v-if="countdown?.paused">{{ i18n.locale === 'en' ? 'Paused' : 'Пауза' }} ({{ countdown?.pausedCount }}/{{ countdown?.neededCount }})</span>
-              <span v-else-if="countdown?.seconds != null">{{ i18n.locale === 'en' ? `Auto-start in ${countdown.seconds}s` : `Автостарт через ${countdown.seconds} с` }}</span>
-              <span v-else>{{ i18n.locale === 'en' ? 'Waiting to start' : 'Ожидание старта' }}</span>
-            </span>
-            <p class="dim tiny auto-hint">
-              {{ lobby.rematchOf
-                ? (i18n.locale === 'en' ? 'Same players, bot strength and settings. You can pause the countdown.' : 'Тот же состав, сила ботов и настройки. Отсчёт можно приостановить.')
-                : lobby.mode === 'crazyhouse'
-                  ? (i18n.locale === 'en' ? 'People replace bots. You can wait for an opponent.' : 'Человек заменяет бота. Можно дождаться соперника.')
-                  : (i18n.locale === 'en' ? 'Incoming humans displace bots. Teams are balanced adaptively.' : 'Вход человека вытесняет бота. При 2 игроках команды балансируются адаптивно.') }}
-            </p>
-          </div>
-          <button
-            v-if="quick"
-            class="small brass pause-btn"
-            :class="{ active: isPausedByMe }"
-            @click="togglePause"
-          >
-            {{ isPausedByMe ? i18n.t.lobby.cancelWaitBtn : i18n.t.lobby.waitBtn }}
-          </button>
-        </div>
-
-        <!-- Режим команд (для хоста обычных столов) -->
-        <div v-else-if="isHost && !isFreeForAll(lobby.mode)" class="team-mode-selector">
-          <span class="dim tiny">{{ i18n.locale === 'en' ? 'Team mode:' : 'Режим команд:' }}</span>
-          <div class="team-mode-pills">
-            <button
-              type="button"
-              class="tiny pill"
-              :class="{ active: lobby.teamMode === 'auto' }"
-              @click="setTeamMode('auto')"
-            >
-              {{ i18n.t.createModal.teamBalanceAuto }}
-            </button>
-            <button
-              type="button"
-              class="tiny pill"
-              :class="{ active: lobby.teamMode === 'random' }"
-              @click="setTeamMode('random')"
-            >
-              {{ i18n.t.createModal.teamBalanceRandom }}
-            </button>
-            <button
-              type="button"
-              class="tiny pill"
-              :class="{ active: lobby.teamMode === 'manual' }"
-              @click="setTeamMode('manual')"
-            >
-              {{ i18n.locale === 'en' ? 'Custom' : 'Ручной' }}
-            </button>
-          </div>
-        </div>
-
-        <div class="slots">
-          <div
-            v-for="(p, i) in lobby.players"
-            :key="p.userId"
-            class="slot-card"
-            :class="{ 'is-ready': p.ready, 'is-me': p.userId === me?.id }"
-          >
-            <div class="slot-idx mono">{{ i + 1 }}</div>
-            <div class="slot-avatar">
-              <span class="dot" :class="{ on: p.online }" :title="p.online ? (i18n.locale === 'en' ? 'Online' : 'В сети') : (i18n.locale === 'en' ? 'Offline' : 'Не в сети')"></span>
-            </div>
-            <div class="slot-info">
-              <div class="slot-name-row">
-                <span class="slot-name">{{ p.username }}</span>
-                <span v-if="p.host" class="host-crown" :title="i18n.locale === 'en' ? 'Table creator' : 'Создатель стола'">
-                  <AppIcon name="crown" :size="12" /> {{ i18n.locale === 'en' ? 'Host' : 'Хост' }}
-                </span>
-              </div>
-              <div v-if="lobby.teamMode === 'manual' && !isFreeForAll(lobby.mode)" class="team-picker">
-                <button
-                  type="button"
-                  class="tiny pill"
-                  :class="{ active: p.teamChoice === 1 }"
-                  :disabled="p.userId !== me?.id || (p.teamChoice !== 1 && team1Count >= capacity / 2)"
-                  @click="chooseTeam(p.teamChoice === 1 ? null : 1)"
-                >
-                  {{ lobby.mode === 'bughouse' ? (i18n.locale === 'en' ? 'Team 1' : 'Команда 1') : (i18n.locale === 'en' ? 'White' : 'Белые') }} ({{ team1Count }}/{{ capacity / 2 }})
-                </button>
-                <button
-                  type="button"
-                  class="tiny pill"
-                  :class="{ active: p.teamChoice === 2 }"
-                  :disabled="p.userId !== me?.id || (p.teamChoice !== 2 && team2Count >= capacity / 2)"
-                  @click="chooseTeam(p.teamChoice === 2 ? null : 2)"
-                >
-                  {{ lobby.mode === 'bughouse' ? (i18n.locale === 'en' ? 'Team 2' : 'Команда 2') : (i18n.locale === 'en' ? 'Black' : 'Чёрные') }} ({{ team2Count }}/{{ capacity / 2 }})
-                </button>
-              </div>
-              <span class="slot-rating mono dim">{{ p.isGuest ? (i18n.locale === 'en' ? 'Guest · training games' : 'Гость · тренировочные партии') : p.isBot ? (i18n.locale === 'en' ? `Bot strength: ${p.rating}` : `Уровень бота: ${p.rating}`) : `Elo · ${modeLabel(lobby.mode)}: ${p.rating}` }}</span>
-            </div>
-
-            <div class="slot-status">
-              <BotHoverCard v-if="p.isBot" :username="p.username" :rating="p.rating">
-                <span class="bot-badge">
-                  {{ i18n.locale === 'en' ? 'Bot Lvl.' : 'Бот Ур.' }}{{ p.botLevel || eloToLevel(p.rating) }} · {{ (i18n.locale === 'en' && getBotPersonality(p.username)?.badgeEn) || getBotPersonality(p.username)?.badge || (i18n.locale === 'en' ? 'AI' : 'ИИ') }}
-                </span>
-              </BotHoverCard>
-              <span class="ready-badge" :class="p.ready ? 'ready' : 'waiting'">
-                <AppIcon v-if="p.ready" name="check" :size="12" /><span>{{ p.ready ? (i18n.locale === 'en' ? 'Ready' : 'Готов') : (i18n.locale === 'en' ? 'Waiting…' : 'Ждём…') }}</span>
+        <div class="panel-body">
+          <!-- Баннер Быстрого стола (Автолобби или реванш) -->
+          <div v-if="quick || lobby.rematchOf" class="auto-lobby-banner">
+            <div class="auto-banner-info">
+              <span class="countdown-chip" :class="{ paused: countdown?.paused }">
+                <span v-if="countdown?.paused">{{ i18n.locale === 'en' ? 'Paused' : 'Пауза' }} ({{ countdown?.pausedCount }}/{{ countdown?.neededCount }})</span>
+                <span v-else>{{ i18n.locale === 'en' ? `Auto-start in ${countdown?.seconds ?? 5}s` : `Автостарт через ${countdown?.seconds ?? 5} с` }}</span>
               </span>
+              <p class="dim tiny auto-hint">
+                {{ lobby.rematchOf
+                  ? (i18n.locale === 'en' ? 'Same players, bot strength and settings. You can pause the countdown.' : 'Тот же состав, сила ботов и настройки. Отсчёт можно приостановить.')
+                  : lobby.mode === 'crazyhouse'
+                    ? (i18n.locale === 'en' ? 'People replace bots. You can wait for an opponent.' : 'Человек заменяет бота. Можно дождаться соперника.')
+                    : (i18n.locale === 'en' ? 'Incoming humans displace bots. Teams are balanced adaptively.' : 'Вход человека вытесняет бота. При 2 игроках команды балансируются адаптивно.') }}
+              </p>
+            </div>
+            <button
+              v-if="quick"
+              class="small brass pause-btn"
+              :class="{ active: isPausedByMe }"
+              @click="togglePause"
+            >
+              {{ isPausedByMe ? i18n.t.lobby.cancelWaitBtn : i18n.t.lobby.waitBtn }}
+            </button>
+          </div>
+
+          <!-- Режим команд (для хоста обычных столов) -->
+          <div v-else-if="isHost && !isFreeForAll(lobby.mode)" class="team-mode-selector">
+            <span class="dim tiny">{{ i18n.locale === 'en' ? 'Team mode:' : 'Режим команд:' }}</span>
+            <div class="team-mode-pills">
               <button
-                v-if="isHost && !quick && p.userId !== me?.id"
-                class="small danger icon-only"
-                :title="p.isBot ? (i18n.locale === 'en' ? `Remove bot ${p.username}` : `Убрать бота ${p.username}`) : (i18n.locale === 'en' ? 'Kick player' : 'Исключить игрока')"
-                :aria-label="p.isBot ? (i18n.locale === 'en' ? `Remove bot ${p.username}` : `Убрать бота ${p.username}`) : (i18n.locale === 'en' ? `Kick ${p.username}` : `Исключить ${p.username}`)"
-                @click="kick(p.userId, p.username, p.isBot)"
+                type="button"
+                class="tiny pill"
+                :class="{ active: lobby.teamMode === 'auto' }"
+                @click="setTeamMode('auto')"
               >
-                <AppIcon name="close" :size="14" />
+                {{ i18n.t.createModal.teamBalanceAuto }}
+              </button>
+              <button
+                type="button"
+                class="tiny pill"
+                :class="{ active: lobby.teamMode === 'random' }"
+                @click="setTeamMode('random')"
+              >
+                {{ i18n.t.createModal.teamBalanceRandom }}
+              </button>
+              <button
+                type="button"
+                class="tiny pill"
+                :class="{ active: lobby.teamMode === 'manual' }"
+                @click="setTeamMode('manual')"
+              >
+                {{ i18n.locale === 'en' ? 'Custom' : 'Ручной' }}
               </button>
             </div>
           </div>
 
-          <!-- Пустые слоты -->
-          <div
-            v-for="i in capacity - lobby.players.length"
-            :key="'empty' + i"
-            class="slot-card empty-slot"
-          >
-            <div class="slot-idx mono">{{ lobby.players.length + i }}</div>
-            <div class="slot-info">
-              <span class="slot-name dim">{{ i18n.locale === 'en' ? 'Waiting for player…' : 'Ожидание игрока…' }}</span>
-              <span v-if="hasPockets(lobby.mode)" class="dim tiny">{{ i18n.locale === 'en' ? 'You can fill empty seats with bots' : 'Свободные места можно заполнить ботами' }}</span>
+          <div class="tc-selector mode-selector">
+            <label for="lobby-mode" class="dim tiny">{{ i18n.locale === 'en' ? 'Game mode:' : 'Режим игры:' }}</label>
+            <select id="lobby-mode" :value="lobby.mode" :disabled="!isHost || modeBusy" @change="changeMode(($event.target as HTMLSelectElement).value as GameMode)">
+              <option v-for="mode in GAME_MODES" :key="mode" :value="mode">{{ modeLabel(mode) }}</option>
+            </select>
+            <router-link :to="modeRulesPath(lobby.mode)" target="_blank">{{ i18n.locale === 'en' ? 'Rules' : 'Правила' }}</router-link>
+          </div>
+
+          <section class="lobby-mode-preview">
+            <ModeBoardPreview :mode="lobby.mode" />
+            <div><strong>{{ modeGuide(lobby.mode, i18n.locale).players }}</strong><p>{{ modeGuide(lobby.mode, i18n.locale).summary }}</p><p>{{ modeGuide(lobby.mode, i18n.locale).goal }}</p></div>
+          </section>
+          <!-- Контроль времени (для хоста обычных столов или игроков быстрого стола) -->
+          <div v-if="isHost || (quick && me)" class="tc-selector">
+            <span class="dim tiny">{{ i18n.locale === 'en' ? 'Time control:' : 'Контроль времени:' }}</span>
+            <div class="tc-pills">
+              <button
+                v-for="preset in tcOptions"
+                :key="preset.label"
+                type="button"
+                class="tiny pill mono"
+                :class="{ active: isCurrentTc(preset.tc) }"
+                @click="setTimeControl(preset.tc)"
+              >
+                {{ preset.label }}
+              </button>
             </div>
-            <button
-              v-if="isHost && !quick"
-              type="button"
-              class="small ghost add-bot-slot-btn"
-              :title="i18n.locale === 'en' ? 'Add bot with random style' : 'Добавить бота со случайным стилем'"
-              @click="addBot"
+          </div>
+
+          <div class="slots">
+            <div
+              v-for="(p, i) in lobby.players"
+              :key="p.userId"
+              class="slot-card"
+              :class="{ 'is-ready': p.ready, 'is-me': p.userId === me?.id }"
             >
-              <AppIcon name="plus" :size="13" />
-              <span>{{ i18n.locale === 'en' ? 'Bot' : 'Бот' }}</span>
+              <div class="slot-idx mono">{{ i + 1 }}</div>
+              <div class="slot-avatar">
+                <span class="dot" :class="{ on: p.online }" :title="p.online ? (i18n.locale === 'en' ? 'Online' : 'В сети') : (i18n.locale === 'en' ? 'Offline' : 'Не в сети')"></span>
+              </div>
+              <div class="slot-info">
+                <div class="slot-name-row">
+                  <span class="slot-name">{{ p.username }}</span>
+                  <span v-if="p.host" class="host-crown" :title="i18n.locale === 'en' ? 'Table creator' : 'Создатель стола'">
+                    <AppIcon name="crown" :size="12" /> {{ i18n.locale === 'en' ? 'Host' : 'Хост' }}
+                  </span>
+                </div>
+                <div v-if="lobby.teamMode === 'manual' && !isFreeForAll(lobby.mode)" class="team-picker">
+                  <button
+                    type="button"
+                    class="tiny pill"
+                    :class="{ active: p.teamChoice === 1 }"
+                    :disabled="p.userId !== me?.id || (p.teamChoice !== 1 && team1Count >= capacity / 2)"
+                    @click="chooseTeam(p.teamChoice === 1 ? null : 1)"
+                  >
+                    {{ lobby.mode === 'bughouse' ? (i18n.locale === 'en' ? 'Team 1' : 'Команда 1') : (i18n.locale === 'en' ? 'White' : 'Белые') }} ({{ team1Count }}/{{ capacity / 2 }})
+                  </button>
+                  <button
+                    type="button"
+                    class="tiny pill"
+                    :class="{ active: p.teamChoice === 2 }"
+                    :disabled="p.userId !== me?.id || (p.teamChoice !== 2 && team2Count >= capacity / 2)"
+                    @click="chooseTeam(p.teamChoice === 2 ? null : 2)"
+                  >
+                    {{ lobby.mode === 'bughouse' ? (i18n.locale === 'en' ? 'Team 2' : 'Команда 2') : (i18n.locale === 'en' ? 'Black' : 'Чёрные') }} ({{ team2Count }}/{{ capacity / 2 }})
+                  </button>
+                </div>
+                <span class="slot-rating mono dim">{{ p.isGuest ? (i18n.locale === 'en' ? 'Guest · training games' : 'Гость · тренировочные партии') : p.isBot ? (i18n.locale === 'en' ? `Bot strength: ${p.rating}` : `Уровень бота: ${p.rating}`) : `Elo · ${modeLabel(lobby.mode)}: ${p.rating}` }}</span>
+              </div>
+
+              <div class="slot-status">
+                <BotHoverCard v-if="p.isBot" :username="p.username" :rating="p.rating">
+                  <span class="bot-badge">
+                    {{ i18n.locale === 'en' ? 'Bot Lvl.' : 'Бот Ур.' }}{{ p.botLevel || eloToLevel(p.rating) }} · {{ (i18n.locale === 'en' && getBotPersonality(p.username)?.badgeEn) || getBotPersonality(p.username)?.badge || (i18n.locale === 'en' ? 'AI' : 'ИИ') }}
+                  </span>
+                </BotHoverCard>
+                <span class="ready-badge" :class="p.ready ? 'ready' : 'waiting'">
+                  <AppIcon v-if="p.ready" name="check" :size="12" /><span>{{ p.ready ? (i18n.locale === 'en' ? 'Ready' : 'Готов') : (i18n.locale === 'en' ? 'Waiting…' : 'Ждём…') }}</span>
+                </span>
+                <button
+                  v-if="isHost && !quick && p.userId !== me?.id"
+                  class="small danger icon-only"
+                  :title="p.isBot ? (i18n.locale === 'en' ? `Remove bot ${p.username}` : `Убрать бота ${p.username}`) : (i18n.locale === 'en' ? 'Kick player' : 'Исключить игрока')"
+                  :aria-label="p.isBot ? (i18n.locale === 'en' ? `Remove bot ${p.username}` : `Убрать бота ${p.username}`) : (i18n.locale === 'en' ? `Kick ${p.username}` : `Исключить ${p.username}`)"
+                  @click="kick(p.userId, p.username, p.isBot)"
+                >
+                  <AppIcon name="close" :size="14" />
+                </button>
+              </div>
+            </div>
+
+            <!-- Пустые слоты -->
+            <div
+              v-for="i in capacity - lobby.players.length"
+              :key="'empty' + i"
+              class="slot-card empty-slot"
+            >
+              <div class="slot-idx mono">{{ lobby.players.length + i }}</div>
+              <div class="slot-info">
+                <span class="slot-name dim">{{ i18n.locale === 'en' ? 'Waiting for player…' : 'Ожидание игрока…' }}</span>
+                <span v-if="hasPockets(lobby.mode)" class="dim tiny">{{ i18n.locale === 'en' ? 'You can fill empty seats with bots' : 'Свободные места можно заполнить ботами' }}</span>
+              </div>
+              <button
+                v-if="isHost && !quick"
+                type="button"
+                class="small ghost add-bot-slot-btn"
+                :title="i18n.locale === 'en' ? 'Add bot with random style' : 'Добавить бота со случайным стилем'"
+                @click="addBot"
+              >
+                <AppIcon name="plus" :size="13" />
+                <span>{{ i18n.locale === 'en' ? 'Bot' : 'Бот' }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Нижняя панель: только когда есть кого призвать -->
+          <div v-if="offlinePlayers.length" class="lobby-tools">
+            <button
+              class="brass"
+              @click="summon"
+              :title="i18n.locale === 'en' ? 'Send browser notification to offline players' : 'Отправить браузерное уведомление офлайн-игрокам'"
+            >
+              <AppIcon name="bell" :size="15" />
+              {{ i18n.locale === 'en' ? `Summon players (${offlinePlayers.length} offline)` : `Призвать игроков (${offlinePlayers.length} не в сети)` }}
             </button>
           </div>
         </div>
+      </section>
 
-        <!-- Контроль времени (для хоста обычных столов или игроков быстрого стола) -->
-        <div v-if="isHost || (quick && me)" class="tc-selector">
-          <span class="dim tiny">{{ i18n.locale === 'en' ? 'Time control:' : 'Контроль времени:' }}</span>
-          <div class="tc-pills">
-            <button
-              v-for="preset in tcOptions"
-              :key="preset.label"
-              type="button"
-              class="tiny pill mono"
-              :class="{ active: isCurrentTc(preset.tc) }"
-              @click="setTimeControl(preset.tc)"
-            >
-              {{ preset.label }}
-            </button>
+      <!-- Чат лобби -->
+      <section class="panel chat-panel">
+        <div class="panel-head">
+          <h3>{{ i18n.t.lobby.chatTitle }}</h3>
+          <span class="hint">{{ chat.length }} {{ i18n.locale === 'en' ? 'messages' : 'сообщений' }}</span>
+        </div>
+        <div class="panel-body chat-body">
+          <div ref="chatBox" class="chat-log">
+            <div v-for="m in chat" :key="m.id" class="chat-msg" :class="{ system: m.system }">
+              <template v-if="m.system">
+                <span class="dim system-msg">{{ m.text }}</span>
+              </template>
+              <template v-else>
+                <span class="chat-user">{{ m.username }}:</span>
+                <span class="chat-text">{{ m.text }}</span>
+              </template>
+            </div>
+            <div v-if="!chat.length" class="empty-chat dim">
+              {{ i18n.locale === 'en' ? 'No messages yet. Say hello!' : 'Сообщений пока нет. Напишите что-нибудь игрокам!' }}
+            </div>
           </div>
+          <form class="chat-input-row" @submit.prevent="sendChat">
+            <input v-model="chatText" :placeholder="i18n.t.lobby.chatPlaceholder" maxlength="300" />
+            <button type="submit" class="primary">{{ i18n.t.lobby.sendBtn }}</button>
+          </form>
         </div>
-
-        <!-- Нижняя панель: только когда есть кого призвать -->
-        <div v-if="offlinePlayers.length" class="lobby-tools">
-          <button
-            class="brass"
-            @click="summon"
-            :title="i18n.locale === 'en' ? 'Send browser notification to offline players' : 'Отправить браузерное уведомление офлайн-игрокам'"
-          >
-            <AppIcon name="bell" :size="15" />
-            {{ i18n.locale === 'en' ? `Summon players (${offlinePlayers.length} offline)` : `Призвать игроков (${offlinePlayers.length} не в сети)` }}
-          </button>
-        </div>
-      </div>
-    </section>
+      </section>
+    </div>
 
     <!-- Нижняя полоса управления готовностью и стартом (Lichess style) -->
     <div class="start-bar panel">
@@ -552,34 +592,6 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
       </div>
     </div>
 
-    <div class="lobby-sidebar">
-      <section v-if="preview" class="panel lobby-mode-preview" aria-labelledby="lobby-preview-heading">
-        <div class="panel-head">
-          <h2 id="lobby-preview-heading">{{ i18n.locale === 'en' ? 'Board preview' : 'Предпросмотр доски' }}</h2>
-        </div>
-        <div class="panel-body">
-          <div class="preview-stage">
-            <ModeBoardPreview :mode="lobby.mode" />
-          </div>
-          <p class="preview-caption">
-            <strong>{{ preview.board }}</strong>
-            <span>{{ preview.players }}</span>
-          </p>
-        </div>
-      </section>
-
-      <MatchChat v-model="chatText" class="lobby-chat" :title="i18n.t.lobby.chatTitle" :messages="chat" @send="sendChat">
-        <template #status>
-          <span v-if="countdown?.seconds != null" class="chat-timer mono" role="timer">
-            <AppIcon :name="countdown.paused ? 'pause' : 'clock'" :size="13" />
-            {{ countdown.paused
-              ? (i18n.locale === 'en' ? 'Paused' : 'Пауза')
-              : (i18n.locale === 'en' ? `Starts in ${countdown.seconds}s` : `Старт через ${countdown.seconds} с`) }}
-          </span>
-        </template>
-      </MatchChat>
-    </div>
-
     <!-- Всплывающее уведомление -->
     <div v-if="toastText" class="toast">{{ toastText }}</div>
   </div>
@@ -589,44 +601,9 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
 
 <style scoped>
 .lobby-page {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(252px, 24vw, 300px);
-  grid-template-areas: "hero hero" "players sidebar" "start sidebar";
-  align-items: start;
-  gap: 16px;
-}
-.lobby-hero { grid-area: hero; }
-.players-panel { grid-area: players; min-width: 0; }
-.start-bar { grid-area: start; }
-.lobby-sidebar {
-  grid-area: sidebar;
-  display: grid;
-  gap: 16px;
-  min-width: 0;
-}
-.lobby-chat { height: 230px; }
-.lobby-chat :deep(.chat-message) { font-size: 13px; }
-.chat-timer {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 7px;
-  border-radius: var(--r-xs);
-  color: var(--accent-2);
-  background: var(--accent-soft);
-  font-size: 12px;
-  white-space: nowrap;
-}
-@media (max-width: 800px) {
-  .lobby-page {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "hero" "preview" "players" "start" "chat";
-    gap: 12px;
-  }
-  .lobby-sidebar { display: contents; }
-  .lobby-mode-preview { grid-area: preview; }
-  .lobby-chat { grid-area: chat; height: 170px; }
-  .lobby-chat :deep(.match-chat-input input) { height: 40px; font-size: 16px; }
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .lobby-hero {
@@ -710,6 +687,33 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
 .code-actions {
   display: flex;
   gap: 8px;
+}
+
+/* Сетка страницы: панели равной высоты */
+.lobby-layout {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 20px;
+  align-items: stretch;
+}
+@media (max-width: 900px) {
+  .lobby-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.players-panel,
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.players-panel > .panel-body,
+.chat-panel > .panel-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Слоты */
@@ -838,6 +842,58 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
   margin-top: 16px;
   display: flex;
   gap: 10px;
+}
+
+/* Чат */
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-body {
+  flex: 1;
+  height: auto;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-log {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.chat-msg {
+  font-size: 13.5px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.chat-user {
+  font-weight: 600;
+  color: var(--accent-2);
+  margin-right: 6px;
+}
+
+.system-msg {
+  font-style: italic;
+  font-size: 12.5px;
+  color: var(--accent-1, #eab308);
+}
+
+.empty-chat {
+  margin: auto;
+  font-size: 13px;
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 /* Старт-бар */
@@ -971,7 +1027,7 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 16px;
+  margin-bottom: 16px;
   flex-wrap: wrap;
 }
 
@@ -1014,40 +1070,9 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
 </style>
 
 <style scoped>
-.mode-selector {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px 12px;
-  max-width: 25rem;
-  margin-bottom: 16px;
-  font-size: 13px;
-}
-
-.mode-selector select {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  width: 100%;
-  min-width: 0;
-  min-height: 42px;
-}
-
-.preview-stage {
-  display: grid;
-  align-items: center;
-  min-height: 10.5rem;
-}
-
-.preview-stage :deep(.standard-boards svg),
-.preview-stage :deep(.multi-board-wrap:not(.double)) { max-width: 7.25rem; }
-.preview-stage :deep(.multi-board-wrap.double) { max-width: 13.5rem; }
-
-.preview-caption {
-  display: grid;
-  gap: 2px;
-  margin: 8px 0 0;
-  color: var(--ink-2);
-  font-size: 12px;
-  text-align: center;
-}
+.lobby-mode-preview { display: grid; grid-template-columns: minmax(100px, 200px) minmax(0, 1fr); gap: 20px; align-items: center; padding: 16px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 12px 0; }
+.lobby-mode-preview strong { font-size: 12px; }
+.lobby-mode-preview p { font-size: 12px; color: var(--ink-2); margin: 8px 0 0; }
+.lobby-mode-preview :deep(.standard-boards svg), .lobby-mode-preview :deep(.multi-board-wrap:not(.double)) { max-width: 120px; }
+@media (max-width: 480px) { .lobby-mode-preview { grid-template-columns: 110px minmax(0, 1fr); gap: 12px; } }
 </style>

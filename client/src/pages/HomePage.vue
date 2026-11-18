@@ -108,7 +108,7 @@ function handleCtaAction(action: unknown): void {
     quickMode.value = GAME_MODES.includes(route.query.mode as GameMode) ? route.query.mode as GameMode : 'team';
     const target = autoLobbies.value.find(l => l.mode === quickMode.value);
     if (target) {
-      playQuick(target);
+      enterLobby(target);
     } else if (!lobbyError.value) {
       openCreateModal();
     }

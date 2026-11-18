@@ -35,6 +35,8 @@ usePageSeo({
   description: computed(() => (i18n.locale === 'en' ? 'Waiting for players and game preparation on Kaissa.' : 'Ожидание игроков и подготовка к командной шахматной партии на платформе Каисса.')),
   canonical: computed(() => `/lobby/${route.params.id}`),
 });
+const preview = computed(() => lobby.value ? modeGuide(lobby.value.mode, i18n.locale) : null);
+
 const error = ref('');
 const chat = ref<ChatMessage[]>([]);
 const chatText = ref('');
@@ -288,14 +290,12 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
       <div class="hero-left">
         <div class="hero-title-row">
           <h1>{{ lobbyDisplayName }}</h1>
-          <span class="badge">{{ modeLabel(lobby.mode) }}</span>
           <span class="badge mono">{{ timeControlLabel(lobby.timeControl) }}</span>
         </div>
         <p class="dim hero-desc">
           {{ lobby.rematchOf
             ? (i18n.locale === 'en' ? 'Play again with the same teams and settings.' : 'Ещё одна партия с прежними командами и настройками.')
             : (i18n.locale === 'en' ? 'Wait for people or start with bots filling the available seats.' : 'Подождите людей или начните с ботами на свободных местах.') }}
-          <span v-if="hasPockets(lobby.mode)">{{ i18n.locale === 'en' ? ' Bots can use pocket pieces.' : ' Боты умеют выставлять фигуры из кармана.' }}</span>
         </p>
       </div>
 
@@ -315,17 +315,6 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
       </div>
     </header>
 
-    <MatchChat v-model="chatText" class="lobby-chat" :title="i18n.t.lobby.chatTitle" :messages="chat" @send="sendChat">
-      <template #status>
-        <span v-if="countdown?.seconds != null" class="chat-timer mono" role="timer">
-          <AppIcon :name="countdown.paused ? 'pause' : 'clock'" :size="13" />
-          {{ countdown.paused
-            ? (i18n.locale === 'en' ? 'Paused' : 'Пауза')
-            : (i18n.locale === 'en' ? `Starts in ${countdown.seconds}s` : `Старт через ${countdown.seconds} с`) }}
-        </span>
-      </template>
-    </MatchChat>
-
     <section class="panel players-panel" aria-labelledby="lobby-players-heading">
       <div class="panel-head">
         <h2 id="lobby-players-heading">{{ i18n.locale === 'en' ? 'Players at Table' : 'Игроки за столом' }}</h2>
@@ -333,6 +322,14 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
       </div>
 
       <div class="panel-body">
+        <div class="mode-selector">
+          <label for="lobby-mode" class="dim">{{ i18n.locale === 'en' ? 'Game mode:' : 'Режим игры:' }}</label>
+          <select id="lobby-mode" :value="lobby.mode" :disabled="!isHost || modeBusy" @change="changeMode(($event.target as HTMLSelectElement).value as GameMode)">
+            <option v-for="mode in GAME_MODES" :key="mode" :value="mode">{{ modeLabel(mode) }}</option>
+          </select>
+          <router-link :to="modeRulesPath(lobby.mode)" target="_blank">{{ i18n.locale === 'en' ? 'Rules' : 'Правила' }}</router-link>
+        </div>
+
         <!-- Баннер Быстрого стола (Автолобби или реванш) -->
         <div v-if="quick || lobby.rematchOf" class="auto-lobby-banner">
           <div class="auto-banner-info">
@@ -386,35 +383,6 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
               @click="setTeamMode('manual')"
             >
               {{ i18n.locale === 'en' ? 'Custom' : 'Ручной' }}
-            </button>
-          </div>
-        </div>
-
-        <div class="tc-selector mode-selector">
-          <label for="lobby-mode" class="dim tiny">{{ i18n.locale === 'en' ? 'Game mode:' : 'Режим игры:' }}</label>
-          <select id="lobby-mode" :value="lobby.mode" :disabled="!isHost || modeBusy" @change="changeMode(($event.target as HTMLSelectElement).value as GameMode)">
-            <option v-for="mode in GAME_MODES" :key="mode" :value="mode">{{ modeLabel(mode) }}</option>
-          </select>
-          <router-link :to="modeRulesPath(lobby.mode)" target="_blank">{{ i18n.locale === 'en' ? 'Rules' : 'Правила' }}</router-link>
-        </div>
-
-        <section class="lobby-mode-preview">
-          <ModeBoardPreview :mode="lobby.mode" />
-          <div><strong>{{ modeGuide(lobby.mode, i18n.locale).players }}</strong><p>{{ modeGuide(lobby.mode, i18n.locale).summary }}</p><p>{{ modeGuide(lobby.mode, i18n.locale).goal }}</p></div>
-        </section>
-        <!-- Контроль времени (для хоста обычных столов или игроков быстрого стола) -->
-        <div v-if="isHost || (quick && me)" class="tc-selector">
-          <span class="dim tiny">{{ i18n.locale === 'en' ? 'Time control:' : 'Контроль времени:' }}</span>
-          <div class="tc-pills">
-            <button
-              v-for="preset in tcOptions"
-              :key="preset.label"
-              type="button"
-              class="tiny pill mono"
-              :class="{ active: isCurrentTc(preset.tc) }"
-              @click="setTimeControl(preset.tc)"
-            >
-              {{ preset.label }}
             </button>
           </div>
         </div>
@@ -505,6 +473,23 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
           </div>
         </div>
 
+        <!-- Контроль времени (для хоста обычных столов или игроков быстрого стола) -->
+        <div v-if="isHost || (quick && me)" class="tc-selector">
+          <span class="dim tiny">{{ i18n.locale === 'en' ? 'Time control:' : 'Контроль времени:' }}</span>
+          <div class="tc-pills">
+            <button
+              v-for="preset in tcOptions"
+              :key="preset.label"
+              type="button"
+              class="tiny pill mono"
+              :class="{ active: isCurrentTc(preset.tc) }"
+              @click="setTimeControl(preset.tc)"
+            >
+              {{ preset.label }}
+            </button>
+          </div>
+        </div>
+
         <!-- Нижняя панель: только когда есть кого призвать -->
         <div v-if="offlinePlayers.length" class="lobby-tools">
           <button
@@ -567,6 +552,34 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
       </div>
     </div>
 
+    <div class="lobby-sidebar">
+      <section v-if="preview" class="panel lobby-mode-preview" aria-labelledby="lobby-preview-heading">
+        <div class="panel-head">
+          <h2 id="lobby-preview-heading">{{ i18n.locale === 'en' ? 'Board preview' : 'Предпросмотр доски' }}</h2>
+        </div>
+        <div class="panel-body">
+          <div class="preview-stage">
+            <ModeBoardPreview :mode="lobby.mode" />
+          </div>
+          <p class="preview-caption">
+            <strong>{{ preview.board }}</strong>
+            <span>{{ preview.players }}</span>
+          </p>
+        </div>
+      </section>
+
+      <MatchChat v-model="chatText" class="lobby-chat" :title="i18n.t.lobby.chatTitle" :messages="chat" @send="sendChat">
+        <template #status>
+          <span v-if="countdown?.seconds != null" class="chat-timer mono" role="timer">
+            <AppIcon :name="countdown.paused ? 'pause' : 'clock'" :size="13" />
+            {{ countdown.paused
+              ? (i18n.locale === 'en' ? 'Paused' : 'Пауза')
+              : (i18n.locale === 'en' ? `Starts in ${countdown.seconds}s` : `Старт через ${countdown.seconds} с`) }}
+          </span>
+        </template>
+      </MatchChat>
+    </div>
+
     <!-- Всплывающее уведомление -->
     <div v-if="toastText" class="toast">{{ toastText }}</div>
   </div>
@@ -578,14 +591,20 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
 .lobby-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr) clamp(252px, 24vw, 300px);
-  grid-template-areas: "hero hero" "players chat" "start chat";
+  grid-template-areas: "hero hero" "players sidebar" "start sidebar";
   align-items: start;
   gap: 16px;
 }
 .lobby-hero { grid-area: hero; }
 .players-panel { grid-area: players; min-width: 0; }
 .start-bar { grid-area: start; }
-.lobby-chat { grid-area: chat; height: 230px; }
+.lobby-sidebar {
+  grid-area: sidebar;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.lobby-chat { height: 230px; }
 .lobby-chat :deep(.chat-message) { font-size: 13px; }
 .chat-timer {
   display: inline-flex;
@@ -601,10 +620,12 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
 @media (max-width: 800px) {
   .lobby-page {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "hero" "chat" "players" "start";
+    grid-template-areas: "hero" "preview" "players" "start" "chat";
     gap: 12px;
   }
-  .lobby-chat { width: min(100%, 420px); height: 170px; }
+  .lobby-sidebar { display: contents; }
+  .lobby-mode-preview { grid-area: preview; }
+  .lobby-chat { grid-area: chat; height: 170px; }
   .lobby-chat :deep(.match-chat-input input) { height: 40px; font-size: 16px; }
 }
 
@@ -950,7 +971,7 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-top: 16px;
   flex-wrap: wrap;
 }
 
@@ -993,9 +1014,40 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
 </style>
 
 <style scoped>
-.lobby-mode-preview { display: grid; grid-template-columns: minmax(100px, 200px) minmax(0, 1fr); gap: 20px; align-items: center; padding: 16px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 12px 0; }
-.lobby-mode-preview strong { font-size: 12px; }
-.lobby-mode-preview p { font-size: 12px; color: var(--ink-2); margin: 8px 0 0; }
-.lobby-mode-preview :deep(.standard-boards svg), .lobby-mode-preview :deep(.multi-board-wrap:not(.double)) { max-width: 120px; }
-@media (max-width: 480px) { .lobby-mode-preview { grid-template-columns: 110px minmax(0, 1fr); gap: 12px; } }
+.mode-selector {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 12px;
+  max-width: 25rem;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.mode-selector select {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+}
+
+.preview-stage {
+  display: grid;
+  align-items: center;
+  min-height: 10.5rem;
+}
+
+.preview-stage :deep(.standard-boards svg),
+.preview-stage :deep(.multi-board-wrap:not(.double)) { max-width: 7.25rem; }
+.preview-stage :deep(.multi-board-wrap.double) { max-width: 13.5rem; }
+
+.preview-caption {
+  display: grid;
+  gap: 2px;
+  margin: 8px 0 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  text-align: center;
+}
 </style>

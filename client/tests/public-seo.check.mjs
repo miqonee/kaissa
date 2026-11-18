@@ -76,6 +76,11 @@ for (const [route, variants] of Object.entries(content))
         /<script[^>]*type="application\/ld\+json">([\s\S]*?)<\/script>/,
       )[1],
     );
+    if (route === "/") {
+      assert.equal(json[0]["@type"], "WebSite");
+      assert.equal(json[0].name, locale === "en" ? "Kaissa" : "Каисса");
+      assert(json[0].alternateName.includes("DuoChess"));
+    }
     assert.equal(json[0].url, url);
     assert.equal(json[0].inLanguage, locale);
     assert.equal(json[0].image, "https://duochess.ru/favicon-512x512.png");

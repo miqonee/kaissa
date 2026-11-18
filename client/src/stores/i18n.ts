@@ -50,6 +50,10 @@ export const useI18nStore = defineStore('i18n', () => {
     }
   }
 
+  function localizedPage(path: string) {
+    return { path, query: locale.value === 'en' ? { lang: 'en' } : {} };
+  }
+
   function toggle(): void {
     setLocale(locale.value === 'ru' ? 'en' : 'ru');
   }
@@ -62,6 +66,7 @@ export const useI18nStore = defineStore('i18n', () => {
     locale,
     t,
     setLocale,
+    localizedPage,
     toggle,
     init,
   };

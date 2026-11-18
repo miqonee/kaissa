@@ -144,7 +144,7 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
       return val.filter(Boolean).join(', ');
     }
     if (val?.trim()) return val.trim();
-    return getCurrentLocale() === 'en' ? DEFAULT_KEYWORDS_EN : DEFAULT_KEYWORDS;
+    return locale.value === 'en' ? DEFAULT_KEYWORDS_EN : DEFAULT_KEYWORDS;
   });
 
   const canonicalBase = computed(() => {
@@ -325,7 +325,8 @@ export function usePageSeo(options: PageSeoOptions = {}): ResolvedSeoMeta {
         {
           '@context': 'https://schema.org',
           '@type': pagePath.value === '/' ? 'WebSite' : 'WebPage',
-          name: resolvedTitle.value,
+          name: pagePath.value === '/' ? orgName : resolvedTitle.value,
+          ...(pagePath.value === '/' && { alternateName: [isEn ? SITE_NAME : SITE_NAME_EN, 'DuoChess'] }),
           description: resolvedDescription.value,
           url: canonicalUrl,
           inLanguage: locale.value,

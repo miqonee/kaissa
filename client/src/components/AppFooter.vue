@@ -12,7 +12,7 @@ const i18n = useI18n();
     <!-- Для неавторизованных гостей: компактное описание платформы (SEO) -->
     <div v-if="!auth.user" class="footer-inner">
       <div class="footer-brand-col">
-        <router-link to="/" class="footer-brand">
+        <router-link :to="i18n.localizedPage('/')" class="footer-brand">
           <svg class="brand-logo" width="22" height="22" viewBox="0 0 180 180" fill="none" aria-hidden="true">
             <rect class="logo-felt" x="24" y="42" width="46" height="46" rx="12" />
             <rect class="logo-gold" x="86" y="36" width="46" height="46" rx="12" />
@@ -37,18 +37,18 @@ const i18n = useI18n();
           <span class="footer-tagline">{{ i18n.locale === 'ru' ? 'Шахматы на двоих онлайн' : 'Team Chess Online' }}</span>
         </div>
 
-        <nav class="footer-bottom-nav" aria-label="Правила и о платформе">
-          <router-link to="/rules/duo" class="footer-link">{{ i18n.t.footer.rulesDuo }}</router-link>
+        <nav class="footer-bottom-nav" :aria-label="i18n.locale === 'en' ? 'Rules and club information' : 'Правила и информация о клубе'">
+          <router-link :to="i18n.localizedPage('/rules/duo')" class="footer-link">{{ i18n.t.footer.rulesDuo }}</router-link>
           <span class="footer-sep">·</span>
-          <router-link to="/rules/double" class="footer-link">{{ i18n.locale === 'en' ? 'Double Chess' : 'Двойные шахматы' }}</router-link>
+          <router-link :to="i18n.localizedPage('/rules/double')" class="footer-link">{{ i18n.locale === 'en' ? 'Double Chess' : 'Двойные шахматы' }}</router-link>
           <span class="footer-sep">·</span>
-          <router-link to="/rules/bughouse" class="footer-link">{{ i18n.t.footer.rulesBughouse }}</router-link>
+          <router-link :to="i18n.localizedPage('/rules/bughouse')" class="footer-link">{{ i18n.t.footer.rulesBughouse }}</router-link>
           <span class="footer-sep">·</span>
-          <router-link to="/rules/crazyhouse" class="footer-link">Crazyhouse</router-link>
+          <router-link :to="i18n.localizedPage('/rules/crazyhouse')" class="footer-link">Crazyhouse</router-link>
           <span class="footer-sep">·</span>
-          <router-link to="/rules/multiplayer" class="footer-link">{{ i18n.t.footer.rulesMultiplayer }}</router-link>
+          <router-link :to="i18n.localizedPage('/rules/multiplayer')" class="footer-link">{{ i18n.t.footer.rulesMultiplayer }}</router-link>
           <span class="footer-sep">·</span>
-          <router-link to="/about" class="footer-link">{{ i18n.t.footer.about }}</router-link>
+          <router-link :to="i18n.localizedPage('/about')" class="footer-link">{{ i18n.t.footer.about }}</router-link>
           <a class="footer-link repository-link" href="https://github.com/miqonee/kaissa" target="_blank" rel="noopener noreferrer" :aria-label="i18n.locale === 'en' ? 'Source code on GitHub' : 'Код проекта на GitHub'" :title="i18n.locale === 'en' ? 'Source code on GitHub' : 'Код проекта на GitHub'"><AppIcon name="github" :size="18" /></a>
         </nav>
       </div>

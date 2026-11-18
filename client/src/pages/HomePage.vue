@@ -18,30 +18,7 @@ import { usePageSeo } from '../composables/useSeo';
 
 const i18n = useI18n();
 
-usePageSeo({
-  title: computed(() => seoPages['/'][i18n.locale].title),
-  description: computed(() => seoPages['/'][i18n.locale].description),
-  keywords: [
-    'шахматы на двоих',
-    'шахматы на двоих онлайн',
-    'играть в шахматы на двоих',
-    'шахматы 2 на 2',
-    'командные шахматы',
-    'шахматы 2х2',
-    'багхаус',
-    'шведские шахматы',
-    'шахматы на троих',
-    'шахматы на четверых',
-    'шахматы на 3 игрока',
-    'шахматы на 4 игрока',
-    '3 player chess',
-    '4 player chess',
-    'team chess',
-    'bughouse chess',
-    'kaissa',
-  ],
-  canonical: '/',
-});
+usePageSeo({ canonical: '/' });
 
 const router = useRouter();
 const route = useRoute();
@@ -271,7 +248,7 @@ function lobbyRosterTitle(l: LobbySummary): string {
         <summary><h2 id="home-guide-title"><span>{{ i18n.locale === 'en' ? 'About the modes and rules' : 'О режимах и правилах' }}</span><AppIcon name="chevron-down" :size="18" /></h2></summary>
         <div class="home-guide-content">
       <div class="guide-grid"><article v-for="section in seoPages['/'][i18n.locale].sections" :key="section.heading"><h3>{{ section.heading }}</h3><p v-for="paragraph in section.paragraphs" :key="paragraph">{{ paragraph }}</p></article></div>
-      <nav :aria-label="i18n.locale === 'en' ? 'Learn the rules' : 'Изучить правила'"><router-link to="/rules/duo">{{ i18n.locale === 'en' ? '2v2 rules' : 'Правила 2×2' }}</router-link><router-link to="/rules/double">{{ i18n.locale === 'en' ? 'Double Chess rules' : 'Правила Двойных шахмат' }}</router-link><router-link to="/rules/bughouse">{{ i18n.locale === 'en' ? 'Bughouse rules' : 'Правила багхауса' }}</router-link><router-link to="/rules/crazyhouse">{{ i18n.locale === 'en' ? 'Crazyhouse rules' : 'Правила Crazyhouse' }}</router-link><router-link to="/rules/multiplayer">{{ i18n.locale === 'en' ? '3 & 4 player rules' : 'Правила 3 и 4 игрока' }}</router-link></nav>
+      <nav :aria-label="i18n.locale === 'en' ? 'Learn the rules' : 'Изучить правила'"><router-link :to="i18n.localizedPage('/rules/duo')">{{ i18n.locale === 'en' ? '2v2 rules' : 'Правила 2×2' }}</router-link><router-link :to="i18n.localizedPage('/rules/double')">{{ i18n.locale === 'en' ? 'Double Chess rules' : 'Правила Двойных шахмат' }}</router-link><router-link :to="i18n.localizedPage('/rules/bughouse')">{{ i18n.locale === 'en' ? 'Bughouse rules' : 'Правила багхауса' }}</router-link><router-link :to="i18n.localizedPage('/rules/crazyhouse')">{{ i18n.locale === 'en' ? 'Crazyhouse rules' : 'Правила Crazyhouse' }}</router-link><router-link :to="i18n.localizedPage('/rules/multiplayer')">{{ i18n.locale === 'en' ? '3 & 4 player rules' : 'Правила 3 и 4 игрока' }}</router-link></nav>
         </div>
       </details>
     </section>

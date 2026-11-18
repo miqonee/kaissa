@@ -44,7 +44,8 @@ const cells = Array.from({ length: 64 }, (_, n) => {
 .standard-boards { display: flex; justify-content: center; gap: 12px; width: 100%; }
 .standard-boards svg { width: min(100%, 200px); min-width: 0; aspect-ratio: 1; border-radius: 5px; overflow: hidden; box-shadow: 0 3px 12px #0002; }
 .bughouse .standard-boards svg { width: calc(50% - 6px); }
-.light { fill: #e8d7b5; } .dark { fill: #829675; }
+.standard-boards .light { fill: var(--board-light); }
+.standard-boards .dark { fill: var(--board-dark); }
 .preview-note { margin: 0; font-size: 11px; color: var(--ink-2); text-align: center; }
 .preview-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 16px; font-size: 11px; color: var(--ink-2); }
 .preview-legend span { display: inline-flex; align-items: center; gap: 4px; }

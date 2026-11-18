@@ -54,14 +54,14 @@ const connLabel = computed(() => {
   <div class="app-shell">
     <header class="topbar">
       <div class="topbar-inner">
-        <router-link to="/" class="brand" :aria-label="i18n.t.nav.brand">
+        <router-link :to="i18n.localizedPage('/')" class="brand" :aria-label="i18n.t.nav.brand">
           <BrandMark />
           <span class="brand-name">{{ i18n.t.nav.brand }}</span>
         </router-link>
 
         <nav :aria-label="i18n.locale === 'en' ? 'Main navigation' : 'Основная навигация'">
-          <router-link to="/" class="header-control header-nav-link">{{ i18n.t.nav.lobbies }}</router-link>
-          <router-link to="/leaderboard" class="header-control header-nav-link">{{ i18n.t.nav.leaderboard }}</router-link>
+          <router-link :to="i18n.localizedPage('/')" class="header-control header-nav-link">{{ i18n.t.nav.lobbies }}</router-link>
+          <router-link :to="i18n.localizedPage('/leaderboard')" class="header-control header-nav-link">{{ i18n.t.nav.leaderboard }}</router-link>
           <router-link v-if="auth.user && !auth.user.isGuest" to="/history" class="header-control header-nav-link">{{ i18n.t.nav.history }}</router-link>
           <router-link
             v-if="auth.user?.isAdmin"

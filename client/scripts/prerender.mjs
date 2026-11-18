@@ -67,7 +67,8 @@ function schemaFor(page, route, locale) {
     {
       "@context": "https://schema.org",
       "@type": route === "/" ? "WebSite" : "WebPage",
-      name: page.title,
+      name: route === "/" ? orgName : page.title,
+      ...(route === "/" && { alternateName: [locale === "en" ? "Каисса" : "Kaissa", "DuoChess"] }),
       description: page.description,
       url,
       inLanguage: locale,

@@ -45,6 +45,7 @@ const isHost = computed(() => lobby.value?.players.find((p) => p.userId === auth
 const iAmReady = computed(() => lobby.value?.players.find((p) => p.userId === auth.user?.id)?.ready ?? false);
 const capacity = computed(() => lobbyCapacity(lobby.value?.mode ?? 'team'));
 const quick = computed(() => Boolean(lobby.value?.isAuto || lobby.value?.isQuick));
+const canSetTimeControl = computed(() => Boolean(isHost.value || (quick.value && me.value)));
 const allReady = computed(() => lobby.value?.players.length === capacity.value && lobby.value.players.every((p) => p.ready));
 const offlinePlayers = computed(() => lobby.value?.players.filter((p) => !p.online && !p.isBot) ?? []);
 const link = computed(() => `${location.origin}/lobby/${lobbyId.value}`);
@@ -85,10 +86,14 @@ const tcOptions = computed<{ label: string; tc: TimeControl }[]>(() => {
     { label: '10+5', tc: { kind: 'clock', baseMin: 10, incSec: 5 } },
     { label: i18n.t.createModal.tcNoClock, tc: { kind: 'none', baseMin: 0, incSec: 0 } },
   ];
-  return all; //
-  // All presets allowed
-  // in all modes
+  return all;
 });
+const currentTimeLabel = computed(() => {
+  const current = lobby.value?.timeControl;
+  if (!current) return '';
+  return current.kind === 'none' ? i18n.t.createModal.tcNoClock : timeControlLabel(current);
+});
+const hasCurrentPreset = computed(() => tcOptions.value.some(preset => isCurrentTc(preset.tc)));
 
 function isCurrentTc(tc: TimeControl): boolean {
   if (!lobby.value) return false;
@@ -105,6 +110,7 @@ function changeMode(mode: GameMode): void {
 }
 
 function setTimeControl(tc: TimeControl): void {
+  if (!canSetTimeControl.value) return;
   socket.emit('lobby:set-time-control', tc);
 }
 
@@ -311,7 +317,6 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
       <div class="hero-left">
         <div class="hero-title-row">
           <h1>{{ lobbyDisplayName }}</h1>
-          <span class="badge mono">{{ timeControlLabel(lobby.timeControl) }}</span>
         </div>
         <p class="dim hero-desc">
           {{ lobby.rematchOf
@@ -357,22 +362,24 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
           </div>
         </section>
 
-        <!-- Контроль времени (для хоста обычных столов или игроков быстрого стола) -->
-        <div v-if="isHost || (quick && me)" class="tc-selector time-control-panel panel">
-          <span class="setting-label">{{ i18n.locale === 'en' ? 'Time control' : 'Контроль времени' }}</span>
-          <div class="tc-pills">
+        <section class="tc-selector time-control-panel panel" :class="{ 'is-readonly': !canSetTimeControl }" aria-labelledby="lobby-time-control">
+          <span id="lobby-time-control" class="setting-label">{{ i18n.locale === 'en' ? 'Time control' : 'Контроль времени' }}</span>
+          <strong v-if="!canSetTimeControl" class="current-time-control mono">{{ currentTimeLabel }}</strong>
+          <div v-else class="tc-pills">
+            <strong v-if="!hasCurrentPreset" class="current-time-control mono">{{ currentTimeLabel }}</strong>
             <button
               v-for="preset in tcOptions"
               :key="preset.label"
               type="button"
               class="tiny pill mono"
               :class="{ active: isCurrentTc(preset.tc) }"
+              :aria-pressed="isCurrentTc(preset.tc)"
               @click="setTimeControl(preset.tc)"
             >
               {{ preset.label }}
             </button>
           </div>
-        </div>
+        </section>
         <!-- 4 слота игроков -->
         <section class="panel players-panel" aria-labelledby="lobby-players-heading">
           <div class="panel-head">
@@ -1148,17 +1155,17 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
 .mode-selector select { flex: 1; min-width: 0; }
 .players-panel { height: auto; }
 .lobby-mode-preview { min-width: 0; overflow: hidden; }
-.lobby-mode-preview > .panel-head { height: 60px; min-height: 60px; }
+.lobby-mode-preview > .panel-head { height: 52px; min-height: 52px; }
 .lobby-mode-preview > .panel-head h2 { font-size: 16px; white-space: nowrap; }
 .lobby-mode-preview > .panel-head .hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.preview-frame { height: 282px; display: flex; align-items: center; justify-content: center; padding: 16px 20px; background: var(--surface-inset); border-bottom: 1px solid var(--line); }
+.preview-frame { height: 252px; display: flex; align-items: center; justify-content: center; padding: 8px 16px; background: var(--surface-inset); border-bottom: 1px solid var(--line); }
 .preview-frame :deep(.mode-preview) { max-width: 440px; }
 .preview-frame :deep(.multi-board-wrap:not(.double)) { width: min(100%, 225px); height: auto; aspect-ratio: 1; }
 .preview-frame :deep(.standard-boards svg) { max-height: 220px; }
 .preview-frame :deep(.bughouse .standard-boards svg) { max-width: 195px; }
-.preview-description { padding: 14px 20px; height: 136px; overflow-y: auto; overscroll-behavior: contain; }
+.preview-description { padding: 10px 16px; min-height: 98px; }
 .preview-description strong { font-size: 12px; }
-.preview-description p { margin: 6px 0 0; font-size: 12px; color: var(--ink-2); }
+.preview-description p { margin: 4px 0 0; font-size: 12px; line-height: 1.35; color: var(--ink-2); }
 .chat-panel { height: 280px; min-height: 0; overflow: hidden; }
 .chat-panel > .chat-body { min-height: 0; overflow: hidden; }
 .chat-log { min-height: 0; overscroll-behavior: contain; }
@@ -1174,6 +1181,7 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
 .slot-status { flex-wrap: wrap; justify-content: flex-end; max-width: 45%; }
 @media (width > 900px) {
   .lobby-primary .start-section { margin-top: auto; }
+  .preview-description { height: 98px; overflow-y: auto; overscroll-behavior: contain; }
   /* Messages scroll inside the chat rather than determining the height of both columns. */
   .lobby-secondary .chat-panel { flex: 1 0 0; height: auto; min-height: 220px; contain: size; }
 }
@@ -1194,8 +1202,8 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
   .hero-title-row h1 { font-size: 21px; }
   .code-actions { flex-wrap: wrap; }
   .mode-panel, .time-control-panel, .start-bar { padding: 14px; }
-  .preview-frame { height: 260px; padding: 16px; }
-  .preview-description { padding: 12px 16px; height: 148px; }
+  .preview-frame { height: auto; min-height: clamp(208px, 62vw, 252px); padding: 8px 10px; }
+  .preview-description { padding: 10px 14px; }
   .slot-card { padding: 10px; gap: 7px; flex-wrap: wrap; }
   .slot-idx { width: 14px; }
   .slot-info { flex: 1; min-width: 130px; }
@@ -1218,6 +1226,9 @@ function modeLabel(m: GameMode): string { return sharedModeLabel(m, i18n.locale)
 .mode-select-wrap.disabled select { cursor: default; opacity: .65; }
 .mode-chevron { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
 .time-control-panel { flex-direction: column; align-items: flex-start; gap: 10px; }
+.time-control-panel .tc-pills { min-width: 0; }
+.time-control-panel.is-readonly { flex-direction: row; align-items: center; justify-content: space-between; min-height: 60px; }
+.current-time-control { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: var(--r-s); border: 1px solid var(--line); background: var(--surface-inset); color: var(--ink); font-size: 13px; }
 @media (width > 900px) { .time-control-panel { flex-flow: row wrap; align-items: center; gap: 8px 12px; } }
 .start-section { border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); }
 .start-section.phase-ready { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }

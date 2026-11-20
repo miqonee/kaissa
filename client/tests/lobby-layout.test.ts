@@ -69,6 +69,30 @@ describe('lobby layout and controls', () => {
     root.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
     expect(wire.emit).toHaveBeenCalledWith('lobby:chat', 'Hello');
   });
+  it('shows the same clock panel to a public-table non-host, without permitting edits', async () => {
+    const ordinary = lobby({ mode: 'team', players: lobby().players.slice(0, 3).map(p => ({ ...p, host: p.userId === 2 })) });
+    await setState(ordinary);
+    const panel = root.querySelector<HTMLElement>('.time-control-panel')!;
+    expect(panel.previousElementSibling?.classList.contains('mode-panel')).toBe(true);
+    expect(panel.nextElementSibling?.classList.contains('players-panel')).toBe(true);
+    expect(panel.getAttribute('aria-labelledby')).toBe('lobby-time-control');
+    expect(panel.querySelector('.setting-label')?.textContent).toBe('Контроль времени');
+    expect(panel.querySelectorAll('button')).toHaveLength(0);
+    expect(panel.querySelector('.current-time-control')?.textContent).toBe('5+3');
+    expect(root.querySelector('.hero-title-row')?.textContent).not.toContain('5+3');
+    await setState({ ...ordinary, timeControl: { kind: 'clock', baseMin: 7, incSec: 4 } });
+    expect(panel.querySelector('.current-time-control')?.textContent).toBe('7+4');
+    await setState({ ...ordinary, timeControl: { kind: 'none', baseMin: 0, incSec: 0 } });
+    expect(panel.querySelector('.current-time-control')?.textContent).toBe('Без часов');
+    expect(wire.emit).not.toHaveBeenCalledWith('lobby:set-time-control', expect.anything());
+  });
+  it('keeps clock editing available to a non-host at a quick table', async () => {
+    await setState(lobby({ isQuick: true, players: lobby().players.map(p => ({ ...p, host: p.userId === 2 })) }));
+    const buttons = [...root.querySelectorAll<HTMLButtonElement>('.time-control-panel button')];
+    expect(buttons.every(button => !button.disabled)).toBe(true);
+    buttons[0].click();
+    expect(wire.emit).toHaveBeenCalledWith('lobby:set-time-control', { kind: 'clock', baseMin: 1, incSec: 0 });
+  });
   it('keeps a labeled native mode select with all seven options', () => {
     const select = root.querySelector<HTMLSelectElement>('#lobby-mode')!;
     expect(root.querySelector('label[for="lobby-mode"]')?.textContent).toContain('Режим игры');

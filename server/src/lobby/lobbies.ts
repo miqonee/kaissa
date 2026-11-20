@@ -12,6 +12,7 @@ import type {
 } from 'shared';
 import { GAME_MODES, isMultiplayer, isFreeForAll, lobbyCapacity, defaultTimeControl, modeLabel, eloToLevel } from 'shared';
 import { loadPlayerRatings } from '../ratings/service.js';
+import { isNewcomer, newcomerOpponentRating } from './newcomer.js';
 import { presence } from '../socket/presence.js';
 import { prisma } from '../prisma.js';
 import { env } from '../env.js';
@@ -947,8 +948,34 @@ export class LobbiesManager {
 
     lobby.clearCountdown();
     lobby.started = true;
+    const startingMembers = [...lobby.members.values()];
+    const startingHumans = startingMembers.filter(m => !m.isBot);
+    const candidate = lobby.isQuick && lobby.mode === 'team' && lobby.teamMode === 'auto'
+      && !lobby.rematchOf && startingHumans.length === 1 ? startingHumans[0] : undefined;
+    let newcomerUid: number | undefined;
     try {
-      const current = await loadPlayerRatings([...lobby.members.values()], lobby.mode);
+      let current: LobbyMember[];
+      if (candidate) {
+        const [loaded, newcomer] = await Promise.all([
+          loadPlayerRatings(startingMembers, lobby.mode),
+          isNewcomer(candidate.uid).catch(error => {
+            // An unavailable eligibility lookup must not block ordinary play.
+            console.warn('[lobby] Could not check newcomer training:', error);
+            return false;
+          }),
+        ]);
+        current = loaded;
+        if (newcomer) newcomerUid = candidate.uid;
+      } else {
+        current = await loadPlayerRatings(startingMembers, lobby.mode);
+      }
+      if (candidate && (this.lobbies.get(lobbyId) !== lobby
+        || lobby.members.size !== startingMembers.length
+        || startingMembers.some(member => !lobby.members.has(member.uid)))) {
+        lobby.started = false;
+        void this.refillAutoBots(lobby);
+        return { ok: false, error: 'Состав стола изменился. Попробуйте ещё раз' };
+      }
       for (const member of current) lobby.members.set(member.uid, member);
     } catch (error) {
       lobby.started = false;
@@ -1011,14 +1038,19 @@ export class LobbiesManager {
 
     lobby.started = true;
     let gameId: number;
-    const toSetup = (m: LobbyMember) => ({
-      uid: m.uid,
-      username: m.username,
-      rating: m.rating,
-      isGuest: m.isGuest,
-      isBot: m.isBot,
-      botLevel: m.isBot ? eloToLevel(m.rating) : m.botLevel,
-    });
+    // Team balancing must use the original ratings. Apply the assistance
+    // only to the actual opposing seats in this match's copied setup.
+    const noviceTeam = newcomerUid !== undefined && humans.length === 1 && bots.length === 3
+      && lobby.isQuick && lobby.mode === 'team' && lobby.teamMode === 'auto' && !lobby.rematchOf
+      ? (team1.some(m => m.uid === newcomerUid) ? team2 : team1)
+      : [];
+    const toSetup = (m: LobbyMember) => {
+      const rating = m.isBot && noviceTeam.includes(m) ? newcomerOpponentRating(m.rating) : m.rating;
+      return {
+        uid: m.uid, username: m.username, rating, isGuest: m.isGuest, isBot: m.isBot,
+        botLevel: m.isBot ? eloToLevel(rating) : m.botLevel,
+      };
+    };
     const shuffledSeats = lobby.mode === 'double'
       ? [team1[0], team2[0], team1[1], team2[1]].map(toSetup)
       : isMultiplayer(lobby.mode)

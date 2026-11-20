@@ -11,6 +11,10 @@ import { prisma } from '../prisma.js';
 import { presence } from '../socket/presence.js';
 import { botStatsTracker } from '../ai/botStats.js';
 import { calculatePlatformDurationMetrics } from './durationStats.js';
+import { botOutcome } from './botResults.js';
+import { parseActivityPeriod, readActivity } from './activityStats.js';
+import { adminReadViews } from './readViews.js';
+import { asyncRoute } from '../http/asyncRoute.js';
 
 // ============================================================
 // Админка: список игроков, удаление аккаунтов, сброс рейтинга.
@@ -20,9 +24,42 @@ import { calculatePlatformDurationMetrics } from './durationStats.js';
 export const adminRouter = Router();
 
 adminRouter.use(requireAdmin);
+adminRouter.use(adminReadViews);
 
 /** Общие метрики платформы и балансировки ботов */
-adminRouter.get('/metrics', async (_req, res) => {
+adminRouter.get('/metrics', asyncRoute(async (req, res) => {
+  if (req.query.scope !== undefined && (typeof req.query.scope !== 'string' || !['overview', 'all'].includes(req.query.scope))) {
+    return void res.status(400).json({ error: 'Некорректная область метрик' });
+  }
+  // The normal dashboard must not load the entire bot participation archive.
+  // Full historical bot metrics remain available through the unchanged default request.
+  if (req.query.scope === 'overview') {
+    const period = parseActivityPeriod(req.query.period);
+    if (!period) return void res.status(400).json({ error: 'Некорректный период метрик' });
+    // Lifetime saved rows are independent of the selected cohort, even if a
+    // stored match has a future start timestamp and is excluded from activity.
+    const [totalUsers, onlineUsers, finishedGames, activity, totalGames, totalMoves] = await Promise.all([
+      prisma.user.count({ where: { isBot: false } }),
+      prisma.user.count({ where: { id: { in: presence.onlineUids() } } }),
+      prisma.game.findMany({
+        where: { status: 'finished', endedAt: { not: null } },
+        orderBy: { endedAt: 'desc' }, take: 200,
+        select: { id: true, mode: true, baseMin: true, incSec: true, noClock: true,
+          startedAt: true, endedAt: true, _count: { select: { moves: true } } },
+      }),
+      readActivity(period),
+      prisma.game.count(), prisma.gameMove.count(),
+    ]);
+    const { avgGameDurationSec, durationStats } = calculatePlatformDurationMetrics(finishedGames);
+    const payload: PlatformMetrics = {
+      totalUsers, totalGames, totalMoves, onlineUsers, avgGameDurationSec, durationStats,
+      botMetrics: [], botMetricsVsHuman: [], botMetricsVsBot: [],
+      personalityMetricsVsHuman: [], personalityMetricsVsBot: [],
+      bestPair: null, worstPair: null, topLevel: null, topPersonality: null,
+    };
+    res.json({ ...payload, activity });
+    return;
+  }
   const [totalUsers, totalGames, totalMoves, finishedGames, users, botParts] = await Promise.all([
     prisma.user.count({ where: { isBot: false } }),
     prisma.game.count(),
@@ -44,7 +81,7 @@ adminRouter.get('/metrics', async (_req, res) => {
     }),
     prisma.user.findMany({ select: { id: true } }),
     prisma.gameParticipant.findMany({
-      where: { user: { isBot: true } },
+      where: { user: { isBot: true }, game: { status: 'finished' } },
       include: {
         user: { select: { id: true, username: true, botLevel: true } },
         game: {
@@ -71,14 +108,13 @@ adminRouter.get('/metrics', async (_req, res) => {
   });
 
   const processGamePart = (p: typeof botParts[0], acc: ReturnType<typeof createAcc>) => {
+    const outcome = botOutcome(p);
+    if (!outcome) return;
     const g = p.game;
     acc.totalGames++;
     acc.totalMovesInGames += g._count.moves;
-    const isWinner = (g.result === '1-0' && p.team === 1) || (g.result === '0-1' && p.team === 2);
-    const isLoser = (g.result === '1-0' && p.team === 2) || (g.result === '0-1' && p.team === 1);
-    if (isWinner) acc.wins++;
-    else if (isLoser) acc.losses++;
-
+    if (outcome === 'win') acc.wins++;
+    else if (outcome === 'loss') acc.losses++;
     if (g.reason === 'checkmate') acc.checkmateCount++;
     else if (g.reason === 'timeout') acc.timeoutCount++;
     else if (g.reason === 'stalemate') acc.stalemateCount++;
@@ -169,15 +205,16 @@ adminRouter.get('/metrics', async (_req, res) => {
       if (!vsHumanParts.length) return `${persona.defaultElo} (Номинал)`;
       const map = new Map<number, { games: number; wins: number; draws: number }>();
       for (const p of vsHumanParts) {
+        const outcome = botOutcome(p);
+        if (!outcome) continue;
         const elo = p.ratingBefore || persona.defaultElo;
         let entry = map.get(elo);
         if (!entry) { entry = { games: 0, wins: 0, draws: 0 }; map.set(elo, entry); }
         entry.games++;
-        const isWin = (p.game.result === '1-0' && p.team === 1) || (p.game.result === '0-1' && p.team === 2);
-        const isDraw = p.game.result === '1/2-1/2' || p.game.result === '*';
-        if (isWin) entry.wins++;
-        else if (isDraw) entry.draws++;
+        if (outcome === 'win') entry.wins++;
+        else if (outcome === 'draw') entry.draws++;
       }
+      if (!map.size) return `${persona.defaultElo} (Номинал)`;
       const list = [...map.entries()].map(([elo, stat]) => ({ elo, ...stat, winRate: stat.games ? Math.round(((stat.wins + 0.5 * stat.draws) / stat.games) * 100) : 0 }));
       const withScore = list.filter((x) => x.winRate > 0);
       if (withScore.length > 0) {
@@ -268,7 +305,7 @@ adminRouter.get('/metrics', async (_req, res) => {
   };
 
   res.json(payload);
-});
+}));
 
 /** Список всех игроков */
 adminRouter.get('/users', async (_req, res) => {

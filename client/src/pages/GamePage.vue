@@ -283,6 +283,15 @@ function lastMoveOf(b: 0 | 1): (string | null)[] | null {
   return lm && (lm[0] || lm[1]) ? lm : null;
 }
 
+function watchReserveText(board: 0 | 1, color: 'w' | 'b'): string {
+  const pocket = pocketOfBoard(board, color);
+  if (!pocket) return '—';
+  const pieces = (['p', 'n', 'b', 'r', 'q'] as const)
+    .filter(piece => pocket[piece] > 0)
+    .map(piece => `${i18n.t.bughouse.pieces[piece]} ×${pocket[piece]}`);
+  return pieces.join(', ') || (i18n.locale === 'en' ? 'Empty' : 'Пусто');
+}
+
 function playerOfBoard(b: number, color: 'w' | 'b'): GameParticipantInfo | undefined {
   return state.value?.participants.find((x) => x.boardIndex === b && x.color === color);
 }
@@ -784,7 +793,7 @@ function resultHeadline(): string {
 </script>
 
 <template>
-  <div v-if="state" ref="gameRoot" class="game-page" :class="state.mode">
+  <div v-if="state" ref="gameRoot" class="game-page" :class="[state.mode, { 'watch-layout': isViewing }]">
     <div v-if="error || disconnected.length" class="panel game-notice" role="alert">
       <p v-if="error">{{ error }}</p>
       <p v-if="disconnected.length">{{ i18n.locale === 'en' ? 'Disconnected:' : 'Отключились:' }} {{ disconnected.map(player => player.username).join(', ') }}</p>
@@ -1192,7 +1201,7 @@ function resultHeadline(): string {
             <div class="panel-head">
               <div class="opening-head-title">
                 <AppIcon name="book-open" :size="15" />
-                <h3>{{ i18n.locale === 'en' ? 'Opening & Analysis' : 'Дебют и анализ' }}</h3>
+                <h3>{{ state.mode === 'bughouse' ? (i18n.locale === 'en' ? 'Both boards' : 'Обзор двух досок') : (i18n.locale === 'en' ? 'Opening & Analysis' : 'Дебют и анализ') }}</h3>
               </div>
               <div class="opening-badges">
                 <span v-if="state.mode === 'team'" class="eco-badge mono">{{ recognizedOpening.eco }}</span>
@@ -1309,6 +1318,18 @@ function resultHeadline(): string {
                   <router-link to="/rules/crazyhouse">{{ i18n.locale === 'en' ? 'Crazyhouse rules and examples' : 'Правила и примеры Crazyhouse' }}</router-link></div>
               </template>
               <template v-else>
+                <div class="watch-board-facts">
+                  <section v-for="bc in boardsConfig" :key="bc.index" class="watch-board-fact" :data-watch-board="bc.index">
+                    <h4>{{ i18n.locale === 'en' ? 'Board' : 'Доска' }} {{ bc.index + 1 }}</h4>
+                    <p class="watch-board-players">{{ boardPlayerName(bc.index, 'w') }} · {{ boardPlayerName(bc.index, 'b') }}</p>
+                    <p v-if="state.status === 'active'">{{ i18n.locale === 'en' ? 'To move:' : 'Ход:' }} {{ boardPlayerName(bc.index, state.turns[bc.index] ?? 'w') }}
+                      <strong v-if="checkByBoard[bc.index]"> · {{ i18n.locale === 'en' ? 'Check' : 'Шах' }}</strong>
+                    </p>
+                    <p><strong>{{ i18n.locale === 'en' ? 'White reserve:' : 'Резерв белых:' }}</strong> {{ watchReserveText(bc.index, 'w') }}</p>
+                    <p><strong>{{ i18n.locale === 'en' ? 'Black reserve:' : 'Резерв чёрных:' }}</strong> {{ watchReserveText(bc.index, 'b') }}</p>
+                  </section>
+                </div>
+                <p class="dim watch-facts-note">{{ i18n.locale === 'en' ? 'Current position and reserves, not an engine evaluation. Transfers between boards can change threats immediately.' : 'Текущая позиция и резервы, не оценка движка. Передача фигур между досками может сразу изменить угрозы.' }}</p>
                 <div class="opening-name-block">
                   <h4 class="opening-title">Багхаус (Шведские шахматы)</h4>
                   <p class="opening-variation">Две параллельные доски с дропами</p>
@@ -2740,5 +2761,50 @@ function resultHeadline(): string {
 }
 @media (max-width: 759px) and (max-height: 650px) {
   .game-page.bughouse .game-tools { flex-direction: row; align-items: center; }
+}
+</style>
+
+<style scoped>
+.watch-board-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.watch-board-fact { min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: var(--r-s); }
+.watch-board-fact h4 { margin: 0 0 6px; }
+.watch-board-fact p { margin: 4px 0; overflow-wrap: anywhere; font-size: 12px; }
+.watch-board-players { color: var(--ink-2); }
+.watch-facts-note { font-size: 12px; }
+@media (max-width: 759px) { .watch-board-facts { grid-template-columns: minmax(0, 1fr); } }
+/* A spectator board and its surrounding UI share one measured width. Avoid
+   the mobile 320px wrapper minimum and older Crazyhouse margin override. */
+.game-page.watch-layout .team-board-wrapper,
+.game-page.watch-layout .team-board-wrapper.with-reserve {
+  width: min(100%, var(--board-size, 600px));
+  max-width: none;
+  min-width: 0;
+  margin-inline: auto;
+}
+.game-page.watch-layout .team-board-wrapper > .board-frame,
+.game-page.watch-layout .team-board-wrapper > .single-pocket,
+.game-page.watch-layout .team-board-wrapper > .team-players-bar {
+  width: 100%; min-width: 0; box-sizing: border-box;
+}
+.game-page.watch-layout .single-pocket :deep(.pocket) {
+  min-width: 0; box-sizing: border-box;
+}
+.game-page.watch-layout .team-slot { overflow: hidden; }
+.game-page.watch-layout .side-clock-group { flex-shrink: 0; }
+@media (max-height: 500px) and (orientation: landscape) {
+  /* Classic/team has no reserves: do not reserve empty side columns. */
+  .game-page.watch-layout .team-board-wrapper:not(.with-reserve) {
+    --board-side-space: 0px;
+    display: flex;
+    flex-direction: column;
+  }
+  .game-page.watch-layout .team-board-wrapper.with-reserve {
+    --board-side-space: 108px;
+    width: min(100%, calc(var(--board-size, 180px) + 108px));
+    grid-template-columns: 48px minmax(0, 1fr) 48px;
+  }
+  .game-page.watch-layout .team-board-wrapper.with-reserve > .single-pocket {
+    width: 48px;
+  }
 }
 </style>

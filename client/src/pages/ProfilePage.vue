@@ -225,7 +225,7 @@ const sparkPath = computed(() => {
     <section v-if="profile && !loading && !error" class="panel">
       <div class="panel-head">
         <h2>{{ en ? "Recent games" : "Последние партии" }}</h2>
-        <router-link :to="{ path: '/history', query: { playerId: profile.user.id, player: profile.user.username } }">{{
+        <router-link :to="{ path: '/history', query: { playerId: profile.user.id, player: profile.user.username, mode, tab: 'all' } }">{{
           en ? "Full archive" : "Весь архив"
         }}</router-link>
       </div>

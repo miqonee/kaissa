@@ -342,13 +342,15 @@ describe('calculatePlatformDurationMetrics (расчет общих метрик
       expect(handler).toBeDefined();
 
       let jsonPayload: any = null;
-      const req = {} as any;
-      const res = {
-        json: (data: any) => { jsonPayload = data; },
-        status: () => res,
-      } as any;
-
-      await handler!(req, res, () => {});
+      const req = { query: {} } as any;
+      // asyncRoute sends its response after a microtask, just like the HTTP route.
+      await new Promise<void>((resolve, reject) => {
+        const res = {
+          json: (data: any) => { jsonPayload = data; resolve(); },
+          status: () => res,
+        } as any;
+        handler!(req, res, reject);
+      });
 
       expect(capturedArgs).toBeDefined();
       expect(capturedArgs.where).toEqual({ status: 'finished', endedAt: { not: null } });

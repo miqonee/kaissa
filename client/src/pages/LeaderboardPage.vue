@@ -13,12 +13,16 @@ const en = computed(() => i18n.locale === "en");
 usePageSeo({ canonical: '/leaderboard' });
 const mode = ref<GameMode | "all">("all");
 const rows = ref<LeaderboardRow[]>([]);
-const rankedRows = computed(() => rows.value.map((row, index) => ({ ...row, rank: index + 1 })));
+const rankedRows = computed(() => rows.value.map((row, index) => ({
+  ...row, rank: index + 1,
+  archived: typeof row.unarchivedGames === 'number' ? Math.max(0, row.totalGames - row.unarchivedGames) : null,
+})));
 const { sortedRows, sortBy, sortDirection, key: sortKey, direction } = useTableSort(rankedRows, {
   rank: r => r.rank,
   username: r => r.username,
   rating: r => (r.hasRating || r.ratedGames) ? r.rating : null,
   totalGames: r => r.totalGames,
+  archived: r => r.archived,
   wins: r => r.wins,
   draws: r => r.draws,
   losses: r => r.losses,
@@ -27,7 +31,8 @@ const columns = computed(() => [
   { key: 'rank', label: '#', numeric: true },
   { key: 'username', label: en.value ? 'Player' : 'Игрок', numeric: false },
   ...(mode.value === 'all' ? [] : [{ key: 'rating', label: 'Elo', numeric: true }]),
-  { key: 'totalGames', label: en.value ? 'Games' : 'Партий', numeric: true },
+  { key: 'totalGames', label: en.value ? 'Total games' : 'Всего партий', numeric: true },
+  { key: 'archived', label: en.value ? 'In archive' : 'В архиве', numeric: true },
   { key: 'wins', label: en.value ? 'W' : 'Победы', numeric: true },
   { key: 'draws', label: en.value ? 'D' : 'Ничьи', numeric: true },
   { key: 'losses', label: en.value ? 'L' : 'Поражения', numeric: true },
@@ -63,7 +68,7 @@ watch(mode, load, { immediate: true });
       <button v-for="m in GAME_MODES" :key="m" :aria-pressed="mode === m" :class="{ primary: mode === m }" @click="mode = m">{{ modeLabel(m, i18n.locale) }}</button>
     </div>
     <div class="panel-body rating-rules">
-      <p>{{ en ? 'Totals include all completed games. Choose a mode to see its Elo rating.' : 'В итогах учитываются все сыгранные партии. Выберите режим, чтобы посмотреть его рейтинг Elo.' }}</p>
+      <p>{{ en ? 'Totals include stored results that may not have an archived game. “In archive” counts only finished games for the selected mode. Choose a mode to see its Elo rating.' : 'Итоги могут включать сохранённые результаты без записи партии. «В архиве» показывает только завершённые партии для выбранного режима. Elo показывается по режимам.' }}</p>
     </div>
     <p v-if="loading" class="empty" role="status">
       {{ en ? "Loading…" : "Загрузка…" }}
@@ -101,6 +106,7 @@ watch(mode, load, { immediate: true });
               <span v-if="r.ratedGames && r.provisional" class="provisional" :title="en ? 'Preliminary rating' : 'Предварительный рейтинг'" :aria-label="en ? 'Preliminary rating' : 'Предварительный рейтинг'">?</span>
             </td>
             <td><strong>{{ r.totalGames }}</strong></td>
+            <td>{{ r.archived ?? '—' }}</td>
             <td>{{ r.wins }}</td>
             <td>{{ r.draws }}</td>
             <td>{{ r.losses }}</td>

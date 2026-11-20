@@ -1,4 +1,5 @@
 import { leaderboard } from '../ratings/leaderboard.js';
+import { archiveFilters } from './archiveFilters.js';
 import { GAME_MODES, isMultiplayer, normalizedResult, SEAT_COLORS, type GameMode, type MultiMode } from 'shared';
 import type { Prisma } from '@prisma/client';
 import { asyncRoute } from '../http/asyncRoute.js';
@@ -44,11 +45,12 @@ async function listGames(req: import('express').Request, res: import('express').
   const user = mine ? await currentUser(req) : null;
   if (mine && !user) return void res.status(401).json({ error: 'Не авторизован' });
   const playerId = Number(req.query.playerId);
-  const exactPlayer = Number.isSafeInteger(playerId) && playerId > 0;
+  const exactPlayer = Number.isSafeInteger(playerId) && playerId > 0 && playerId <= 2147483647;
   const and: Prisma.GameWhereInput[] = exactPlayer
     ? [{ participants: { some: { userId: playerId } } }]
     : [{ participants: { some: { user: { isBot: false } } } }];
   if (user) and.push({ participants: { some: { userId: user.id } } });
+  and.push(...archiveFilters(req.query));
   if (req.query.mode && GAME_MODES.includes(req.query.mode as GameMode)) and.push({ mode: String(req.query.mode) });
   const q = String(req.query.player ?? '').trim().slice(0, 30);
   if (q && !exactPlayer) and.push({ participants: { some: { user: { username: { contains: q, mode: 'insensitive' } } } } });
@@ -75,7 +77,7 @@ async function listGames(req: import('express').Request, res: import('express').
     });
   }
   const cursor = Number(req.query.cursor);
-  if (Number.isSafeInteger(cursor) && cursor > 0) and.push({ id: { lt: cursor } });
+  if (Number.isSafeInteger(cursor) && cursor > 0 && cursor <= 2147483647) and.push({ id: { lt: cursor } });
   const games = await prisma.game.findMany({ where: { AND: and }, orderBy: { id: 'desc' }, take: 31, include: { participants: { include: { user: true } } } });
   const page = games.slice(0, 30);
   res.json({ games: page.map(dbGameToSummary), nextCursor: games.length > 30 ? page[page.length - 1].id : null });

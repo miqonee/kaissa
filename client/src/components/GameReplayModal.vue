@@ -49,7 +49,7 @@ watch(() => props.gameId, load);
       ref="dialog"
       tabindex="-1"
       class="modal replay-modal"
-      :class="{ 'two-boards': game?.mode === 'bughouse' }"
+      :class="{ 'two-boards': game?.mode === 'bughouse', 'wide-board': game?.mode === 'double' }"
       role="dialog"
       aria-modal="true"
       :aria-label="title ?? (i18n.locale === 'en' ? `Match #${gameId}` : `Партия #${gameId}`)"
@@ -79,13 +79,14 @@ watch(() => props.gameId, load);
 .replay-backdrop { padding: 12px; z-index: 1100; overflow: hidden; }
 .replay-modal { width: min(960px, 100%); max-width: 960px; height: min(860px, calc(100dvh - 24px)); max-height: calc(100dvh - 24px); margin: auto; display: flex; flex-direction: column; overflow: hidden; }
 .replay-modal.two-boards { width: min(1200px, 100%); max-width: 1200px; }
+.replay-modal.wide-board { width: min(1240px, 100%); max-width: 1240px; }
 .replay-modal .modal-head { flex: none; }
 .replay-modal .modal-body { flex: 1; min-height: 0; padding: 12px 16px; overflow: hidden; display: flex; flex-direction: column; }
 .replay-modal :deep(.replayer) { flex: 1; min-height: 0; }
 .rh-actions { display: flex; align-items: center; gap: var(--gap-xs); }
 @media (max-width: 720px) {
   .replay-backdrop { padding: 0; }
-  .replay-modal, .replay-modal.two-boards { width: 100%; max-width: 100%; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  .replay-modal, .replay-modal.two-boards, .replay-modal.wide-board { width: 100%; max-width: 100%; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
   .replay-modal .modal-head { padding: 10px 12px; }
   .replay-modal .modal-body { padding: 6px 8px 8px; }
 }

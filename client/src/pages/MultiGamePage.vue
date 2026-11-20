@@ -87,6 +87,7 @@ const multiMode = computed<MultiMode>(() =>
   state.value?.mode === 'double' ? 'double' : state.value?.mode === 'three-player' ? 'three-player' : 'four-player',
 );
 const isDouble = computed(() => multiMode.value === 'double');
+const isDoubleSpectator = computed(() => isDouble.value && !isParticipant.value);
 const topology = computed(() => getTopology(multiMode.value));
 
 const spectatorSeat = ref(0);
@@ -133,8 +134,23 @@ const movesSanHistory = computed<string[]>(() => {
   return log.map((item) => {
     const pieceChar = item.role === 'p' ? '' : item.role.toUpperCase();
     const sep = item.captured ? 'x' : '–';
+    const promotion = item.promotionRole ? `=${item.promotionRole.toUpperCase()}` : '';
     const checkSuffix = item.checkedSeats?.length ? '+' : '';
-    return `${pieceChar}${item.from}${sep}${item.to}${checkSuffix}`;
+    return `${pieceChar}${item.from}${sep}${item.to}${promotion}${checkSuffix}`;
+  });
+});
+
+const recentSpectatorMoves = computed(() => {
+  const log = state.value?.multi?.snapshot.moveLog ?? [];
+  const labels = movesSanHistory.value;
+  const start = Math.max(0, log.length - 12);
+  return log.slice(start).map((entry, index) => {
+    const color = SEAT_COLORS.double[entry.seat];
+    return {
+      ply: entry.ply,
+      color,
+      label: labels[start + index],
+    };
   });
 });
 
@@ -533,7 +549,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="state" class="multi-game-page" :class="[state.mode, { 'double-game': isDouble }]">
+  <div v-if="state" class="multi-game-page" :class="[state.mode, { 'double-game': isDouble, 'double-spectator': isDoubleSpectator }]">
     <!-- Compact 1-line Header Bar -->
     <header ref="topbarRef" class="multi-topbar panel">
       <div class="topbar-left">
@@ -562,7 +578,7 @@ onBeforeUnmount(() => {
 
       <div class="topbar-right">
         <label v-if="!isParticipant" class="spectator-view">
-          <span>{{ i18n.locale === 'en' ? 'View from' : 'Обзор со стороны' }}</span>
+          <span>{{ i18n.locale === 'en' ? 'View from' : 'Вид со стороны' }}</span>
           <select v-model.number="spectatorSeat">
             <option v-for="card in seatCards" :key="card.seat" :value="card.seat">
               {{ colorName(card.color) }}{{ card.participant ? ` · ${displayName(card.participant)}` : '' }}
@@ -726,11 +742,27 @@ onBeforeUnmount(() => {
       </div>
     </main>
 
-    <!-- Right-side Collapsible Chat & Move Log Widget (Closed by Default) -->
+    <section v-if="isDoubleSpectator" class="panel spectator-moves" aria-labelledby="spectator-moves-title">
+      <header class="spectator-moves-head">
+        <h2 id="spectator-moves-title">{{ i18n.locale === 'en' ? 'Recent moves' : 'Последние ходы' }}</h2>
+        <span class="dim mono">{{ i18n.locale === 'en' ? 'Played' : 'Сыграно' }}: {{ state.moveNumber }}</span>
+      </header>
+      <ol v-if="recentSpectatorMoves.length" class="spectator-move-list">
+        <li v-for="move in recentSpectatorMoves" :key="move.ply">
+          <span class="dim mono">{{ move.ply }}.</span>
+          <span v-if="move.color" class="spectator-move-dot" :class="move.color" role="img" :aria-label="colorName(move.color)" :title="colorName(move.color)" />
+          <span class="mono">{{ move.label }}</span>
+        </li>
+      </ol>
+      <p v-else class="dim">{{ i18n.locale === 'en' ? 'No moves yet.' : 'Ходов пока нет.' }}</p>
+    </section>
+
+    <!-- Floating chat; Double Chess spectators have a fixed move log below the board. -->
     <ChatWidget
       ref="chatWidgetRef"
       :messages="chat"
       :moves="movesSanHistory"
+      :show-moves="!isDoubleSpectator"
       :total-moves="state.moveNumber"
       :my-user-id="myId"
       @send="sendChat"
@@ -1070,6 +1102,19 @@ onBeforeUnmount(() => {
 .double .seat-clock { color: var(--ink); }
 .team-label { margin-left: auto; font-size: 11px; color: var(--ink-2); }
 @media (max-width: 640px) { .double-turn-guide { font-size: 11px; } .board-stage.double { gap: 8px; } .board-stage.double .seat-card { padding: 8px; } }
+.double-spectator .spectator-view select { min-height: 34px; padding: 5px 9px; border: 1px solid var(--line-2); border-radius: var(--r-s); background: var(--surface-inset); color: var(--ink); }
+.double-spectator .spectator-view select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.spectator-moves { width: 100%; max-width: 1500px; margin-inline: auto; padding: 12px 14px; }
+.spectator-moves-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px; }
+.spectator-moves h2 { margin: 0; font-size: 15px; }
+.spectator-moves p { margin: 0; font-size: 13px; }
+.spectator-move-list { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.spectator-move-list li { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface-inset); font-size: 13px; white-space: nowrap; }
+.spectator-move-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; }
+.spectator-move-dot.yellow { background: #eab308; }
+.spectator-move-dot.green { background: #16a34a; }
+.spectator-move-dot.red { background: #dc2626; }
+.spectator-move-dot.blue { background: #2563eb; }
 </style>
 
 <style scoped>
@@ -1116,5 +1161,7 @@ onBeforeUnmount(() => {
   .double .seat-actions { margin-left: auto; }
   .double-game :deep(.chat-fab) { display: none; }
   .double-game :deep(.chat-drawer) { top: 42px; bottom: 8px; }
+  .double-game.double-spectator { height: auto; min-height: 100%; }
+  .double-spectator .multi-arena { flex: none; }
 }
 </style>

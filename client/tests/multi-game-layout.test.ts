@@ -17,11 +17,16 @@ vi.mock('../src/components/MultiBoard.vue', async () => {
  return { default: { props: ['viewerSeat', 'myTurn'], setup: (p: any) => () => h('div', { class: 'test-board', 'data-seat': p.viewerSeat, 'data-can-move': p.myTurn }) } };
 });
 let app: App, root: HTMLElement;
-async function mount(mode: MultiMode, id = 99) {
+async function mount(mode: MultiMode, id = 99, moveTotal = 0) {
  const count = mode === 'three-player' ? 3 : 4;
- const state = { gameId: 1, mode, status: 'active', moveNumber: 0, startedAt: Date.now(), timeControl: { initialMs: 300000, incrementMs: 0 }, fens: [], chat: [],
+ const snapshot = new MultiChess(mode).snapshot();
+ // Representative server history tail with authoritative global ply indexes.
+ if (moveTotal > 0) snapshot.moveLog = Array.from({ length: moveTotal }, (_, i) => ({
+  ply: 101 + i, seat: i % 4, role: 'p', from: 'm2', to: 'm4',
+ }));
+ const state = { gameId: 1, mode, status: 'active', moveNumber: snapshot.moveLog.at(-1)?.ply ?? 0, startedAt: Date.now(), timeControl: { initialMs: 300000, incrementMs: 0 }, fens: [], chat: [],
  participants: Array.from({ length: count }, (_, seat) => ({ userId: seat + 1, username: `Player ${seat}`, seat, boardIndex: seat, team: seat % 2 + 1, ratingBefore: 1500 })),
- multi: { snapshot: new MultiChess(mode).snapshot(), clocksMs: Array(count).fill(300000), clockActiveSeat: 0, legalMoves: {} },
+ multi: { snapshot, clocksMs: Array(count).fill(300000), clockActiveSeat: 0, legalMoves: {} },
  } as unknown as GameState;
  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/game/:id', component: { render: () => null } }] });
  await router.push('/game/1');
@@ -45,9 +50,24 @@ describe('multiplayer layout controls', () => {
   expect(root.querySelector('.seat-actions')).toBeNull();
   expect(root.querySelector('.topbar-right .danger')).toBeNull();
  });
+ it('puts recent Double moves after the board and keeps the original ply numbers', async () => {
+  await mount('double', 99, 16);
+  const moves = root.querySelector('.spectator-moves')!;
+  expect(moves.previousElementSibling?.classList.contains('multi-arena')).toBe(true);
+  expect(moves.querySelectorAll('li')).toHaveLength(12);
+  expect(moves.querySelector('li')?.textContent).toContain('105.');
+  expect(moves.textContent).toContain('116.');
+  expect(moves.textContent).toContain('Сыграно: 116');
+  expect(moves.querySelector('[aria-label="Жёлтые"]')).not.toBeNull();
+ });
+ it('does not add the spectator move strip to the player or other formats', async () => {
+  await mount('three-player', 99, 1);
+  expect(root.querySelector('.spectator-moves')).toBeNull();
+ });
  it.each([1, 2, 3, 4])('surrender is in player %s own card and needs confirmation', async id => {
   await mount('double', id);
   expect(root.querySelector('.spectator-view')).toBeNull();
+  expect(root.querySelector('.spectator-moves')).toBeNull();
   expect(root.querySelectorAll('.seat-actions')).toHaveLength(1);
   expect(root.querySelector('.seat-actions')?.closest('.seat-card')?.textContent).toContain(`Player ${id - 1}`);
   expect(root.querySelector('.topbar-right .danger')).toBeNull();

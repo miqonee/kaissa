@@ -86,6 +86,63 @@ export interface AdminUserRow {
   createdAt: string;
 }
 
+/** Read-only administration views. The legacy rating is retained for compatibility. */
+export interface AdminUserDetail extends AdminUserRow {
+  lastSeenAt: string;
+  activeGameId: number | null;
+  modeRatings: {
+    mode: string;
+    rating: number;
+    wins: number;
+    losses: number;
+    draws: number;
+    trainingWins: number;
+    trainingLosses: number;
+    trainingDraws: number;
+  }[];
+}
+
+export interface AdminGameRow {
+  id: number;
+  mode: string;
+  status: string;
+  result: string;
+  reason: string | null;
+  ratingKind: string | null;
+  baseMin: number;
+  incSec: number;
+  noClock: boolean;
+  startedAt: string;
+  endedAt: string | null;
+  moves: number;
+  participants: {
+    id: number;
+    username: string;
+    isGuest: boolean;
+    wasGuest: boolean;
+    isBot: boolean;
+    team: number;
+    online: boolean;
+  }[];
+  diagnostics: {
+    inMemory: boolean;
+    paused: boolean;
+    waitingForHuman: boolean;
+    disconnectedUserIds: number[];
+    offlineUserIds: number[];
+    lastMove: { ply: number; boardIndex: number; userId: number } | null;
+    pendingResult: boolean;
+    warnings: string[];
+  };
+}
+
+export interface AdminPageInfo {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
 export interface LobbyPlayer {
   isGuest?: boolean;
   userId: number;
@@ -920,7 +977,23 @@ export interface GameDurationStats {
   byTimeControl: DurationByTimeControl[];
 }
 
+export type AdminActivityPeriod = '7' | '30' | 'all';
+export interface AdminActivity {
+  period: AdminActivityPeriod;
+  from: string | null;
+  asOf: string;
+  started: number;
+  finished: number;
+  abandoned: number;
+  active: number;
+  abandonedWithMoves: number;
+  abandonedWithoutMoves: number;
+  recordedMoves: number;
+  distinctHumanMovers: number;
+}
+
 export interface PlatformMetrics {
+  activity?: AdminActivity;
   onlineUsers: number;
   totalUsers: number;
   totalGames: number;

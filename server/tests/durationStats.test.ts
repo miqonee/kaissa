@@ -317,6 +317,7 @@ describe('calculatePlatformDurationMetrics (расчет общих метрик
 
       let capturedArgs: any = null;
       vi.spyOn(prisma.user, 'count').mockResolvedValue(10 as any);
+      vi.spyOn(prisma.user, 'groupBy').mockResolvedValue([] as any);
       vi.spyOn(prisma.game, 'count').mockResolvedValue(50 as any);
       vi.spyOn(prisma.gameMove, 'count').mockResolvedValue(500 as any);
       vi.spyOn(prisma.game, 'findMany').mockImplementation(((args: any) => {

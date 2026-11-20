@@ -4,7 +4,7 @@ import type { Pocket } from 'shared';
 import { calculateMaterial, MATERIAL_ORDER } from '../utils/material';
 import { useI18n } from '../stores/i18n';
 
-const props = defineProps<{ fen: string; color: 'w' | 'b'; pockets?: readonly [Pocket | null, Pocket | null] }>();
+const props = defineProps<{ fen: string; color: 'w' | 'b'; inline?: boolean; pockets?: readonly [Pocket | null, Pocket | null] }>();
 const i18n = useI18n();
 const open = ref(false);
 const trigger = ref<HTMLButtonElement | null>(null);
@@ -42,7 +42,7 @@ function toggle(event: MouseEvent): void {
 </script>
 
 <template>
-  <div class="material-balance" :class="{ expanded: open, 'is-equal': !pieces.length && score <= 0 }"
+  <div v-if="!inline || pieces.length || score > 0" class="material-balance" :class="{ inline, expanded: open, 'is-equal': !pieces.length && score <= 0 }"
     @pointerenter="hover($event, true)" @pointerleave="hover($event, false)" @focusout="open = false" @keydown.esc.stop="open = false">
     <button ref="trigger" type="button" class="material-trigger" :aria-label="description" :aria-expanded="open" :aria-describedby="open ? tooltipId : undefined"
       @click="toggle">
@@ -90,4 +90,11 @@ function toggle(event: MouseEvent): void {
   .material-miniatures img + img { margin-left: -7px; }
   .material-score { font-size: 9px; line-height: 9px; }
 }
+/* Replay rails already identify the side. Only show actual surplus, in one line. */
+.material-balance.inline { flex: none; width: auto; height: 26px; }
+.inline .material-trigger { flex-direction: row; align-items: center; gap: 4px; width: auto; height: 26px; padding: 0 3px; background: transparent; border: 0; }
+.inline .material-trigger:hover { background: var(--surface-inset); }
+.inline .material-miniatures, .inline .material-miniatures img { height: 20px; }
+.inline .material-miniatures img { width: 20px; }
+.inline .material-score { font-size: 12px; line-height: 1; color: var(--ink-2); }
 </style>

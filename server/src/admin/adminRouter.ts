@@ -13,6 +13,7 @@ import { botStatsTracker } from '../ai/botStats.js';
 import { calculatePlatformDurationMetrics } from './durationStats.js';
 import { botOutcome } from './botResults.js';
 import { parseActivityPeriod, readActivity } from './activityStats.js';
+import { readAccountCounts } from './accountCounts.js';
 import { adminReadViews } from './readViews.js';
 import { asyncRoute } from '../http/asyncRoute.js';
 
@@ -38,9 +39,8 @@ adminRouter.get('/metrics', asyncRoute(async (req, res) => {
     if (!period) return void res.status(400).json({ error: 'Некорректный период метрик' });
     // Lifetime saved rows are independent of the selected cohort, even if a
     // stored match has a future start timestamp and is excluded from activity.
-    const [totalUsers, onlineUsers, finishedGames, activity, totalGames, totalMoves] = await Promise.all([
-      prisma.user.count({ where: { isBot: false } }),
-      prisma.user.count({ where: { id: { in: presence.onlineUids() } } }),
+    const [accounts, finishedGames, activity, totalGames, totalMoves] = await Promise.all([
+      readAccountCounts(),
       prisma.game.findMany({
         where: { status: 'finished', endedAt: { not: null } },
         orderBy: { endedAt: 'desc' }, take: 200,
@@ -52,7 +52,8 @@ adminRouter.get('/metrics', asyncRoute(async (req, res) => {
     ]);
     const { avgGameDurationSec, durationStats } = calculatePlatformDurationMetrics(finishedGames);
     const payload: PlatformMetrics = {
-      totalUsers, totalGames, totalMoves, onlineUsers, avgGameDurationSec, durationStats,
+      accounts, totalUsers: accounts.registered + accounts.guests, onlineUsers: accounts.online,
+      totalGames, totalMoves, avgGameDurationSec, durationStats,
       botMetrics: [], botMetricsVsHuman: [], botMetricsVsBot: [],
       personalityMetricsVsHuman: [], personalityMetricsVsBot: [],
       bestPair: null, worstPair: null, topLevel: null, topPersonality: null,
@@ -60,8 +61,8 @@ adminRouter.get('/metrics', asyncRoute(async (req, res) => {
     res.json({ ...payload, activity });
     return;
   }
-  const [totalUsers, totalGames, totalMoves, finishedGames, users, botParts] = await Promise.all([
-    prisma.user.count({ where: { isBot: false } }),
+  const [accounts, totalGames, totalMoves, finishedGames, botParts] = await Promise.all([
+    readAccountCounts(),
     prisma.game.count(),
     prisma.gameMove.count(),
     prisma.game.findMany({
@@ -79,7 +80,6 @@ adminRouter.get('/metrics', asyncRoute(async (req, res) => {
       },
       take: 200,
     }),
-    prisma.user.findMany({ select: { id: true } }),
     prisma.gameParticipant.findMany({
       where: { user: { isBot: true }, game: { status: 'finished' } },
       include: {
@@ -95,7 +95,6 @@ adminRouter.get('/metrics', asyncRoute(async (req, res) => {
   ]);
 
   const { avgGameDurationSec, durationStats } = calculatePlatformDurationMetrics(finishedGames);
-  const onlineUsers = users.filter((u) => presence.isOnline(u.id)).length;
 
   const createAcc = () => ({
     totalGames: 0,
@@ -287,8 +286,9 @@ adminRouter.get('/metrics', asyncRoute(async (req, res) => {
     : null;
 
   const payload: PlatformMetrics = {
-    onlineUsers,
-    totalUsers,
+    accounts,
+    onlineUsers: accounts.online,
+    totalUsers: accounts.registered + accounts.guests,
     totalGames,
     totalMoves,
     avgGameDurationSec,

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { fmtDuration, GAME_MODES, modeLabel, type GameMode, type AdminUserRow, type AdminUserDetail, type AdminGameRow, type AdminActivityPeriod, type PlatformMetrics } from 'shared';
+import { fmtDuration, GAME_MODES, modeLabel, type GameMode, type AdminUserRow, type AdminUserDetail, type AdminUserSearchResult, type AdminAccountCounts, type AdminGameRow, type AdminActivityPeriod, type PlatformMetrics } from 'shared';
 import { api } from '../api/rest';
 import { useAuthStore } from '../stores/auth';
 import { useI18n } from '../stores/i18n';
 import SortableHeader from '../components/SortableHeader.vue';
 import { useTableSort } from '../composables/useTableSort';
 import AppIcon from '../components/AppIcon.vue';
+import AdminAccountSummary from '../components/AdminAccountSummary.vue';
+import AdminSelect from '../components/AdminSelect.vue';
 import { usePageSeo } from '../composables/useSeo';
 
 const i18n = useI18n();
@@ -57,7 +59,7 @@ const displayedPersonalityMetrics = computed(() => {
 const userSort = useTableSort(users, {
   id: u => u.id, online: u => u.online, username: u => u.username,
   rating: u => u.rating, results: u => [u.wins, u.losses], games: u => u.games,
-  createdAt: u => Date.parse(u.createdAt), isAdmin: u => u.isAdmin,
+  createdAt: u => Date.parse(u.createdAt), role: u => u.isGuest ? 0 : u.isAdmin ? 2 : 1,
 }, 'id');
 const levelSort = useTableSort(displayedLevelMetrics, {
   level: b => b.level, elo: b => b.elo, games: b => b.totalGames,
@@ -69,10 +71,6 @@ const personalitySort = useTableSort(displayedPersonalityMetrics, {
   results: p => [p.wins, p.losses, p.draws], score: p => p.winRate,
   endings: p => [p.checkmateCount, p.timeoutCount, p.stalemateCount], moves: p => p.avgMoves,
 }, 'name');
-const userColumns = [
-  ['id', 'ID'], ['online', 'Статус'], ['username', 'Игрок'], ['rating', 'Рейтинг'],
-  ['results', 'В / П'], ['games', 'Партий'], ['createdAt', 'Регистрация'], ['isAdmin', 'Роль'],
-];
 const metricColumns = [['games', 'Игр'], ['results', 'В / П / Н'], ['score', 'Очки'], ['endings', 'М / Ф / П'], ['moves', 'Ср. ходов']];
 const metricTitles: Record<string, string> = { results: 'Сортировка по победам, затем поражениям и ничьим', endings: 'Сортировка по матам, затем флагам и патам', score: 'Очки = (победы + 0.5 × ничьи) / игры', moves: 'Среднее число полуходов в партии' };
 
@@ -102,6 +100,40 @@ type Tab = 'overview' | 'games' | 'users' | 'bots';
 const tab = ref<Tab>('overview');
 const en = computed(() => i18n.locale === 'en');
 const txt = (ru: string, english: string) => en.value ? english : ru;
+const gameStatusOptions = computed(() => [
+  { value: 'all', label: txt('Все статусы', 'All statuses') },
+  { value: 'active', label: txt('Активные', 'Active') },
+  { value: 'finished', label: txt('Завершённые', 'Finished') },
+  { value: 'abandoned', label: txt('Прерванные', 'Abandoned') },
+]);
+const gameModeOptions = computed(() => [
+  { value: 'all', label: txt('Все режимы', 'All modes') },
+  ...GAME_MODES.map(value => ({ value, label: modeLabel(value, i18n.locale) })),
+]);
+const gameClockOptions = computed(() => [
+  { value: 'all', label: txt('Любые часы', 'Any clock') },
+  { value: 'timed', label: txt('С часами', 'Timed') },
+  { value: 'untimed', label: txt('Без часов', 'Untimed') },
+]);
+const userKindOptions = computed(() => [
+  { value: 'all', label: txt('Игроки и гости', 'Players & guests') },
+  { value: 'registered', label: txt('Зарегистрированные', 'Registered') },
+  { value: 'guest', label: txt('Гости', 'Guests') },
+  { value: 'admin', label: txt('Администраторы', 'Administrators') },
+]);
+const userOnlineOptions = computed(() => [
+  { value: 'all', label: txt('Любой статус', 'Any status') },
+  { value: 'online', label: txt('Онлайн', 'Online') },
+  { value: 'offline', label: txt('Офлайн', 'Offline') },
+]);
+const numberFormat = computed(() => new Intl.NumberFormat(en.value ? 'en-US' : 'ru-RU'));
+const fmtNumber = (n: number) => numberFormat.value.format(n);
+const roleLabel = (user: AdminUserRow) => user.isGuest ? txt('Гость', 'Guest')
+  : user.isAdmin ? txt('Админ', 'Admin') : txt('Игрок', 'Player');
+const userColumns = computed(() => [
+  ['id', 'ID'], ['online', txt('Статус', 'Status')], ['username', txt('Имя', 'Username')], ['rating', txt('Рейтинг', 'Rating')],
+  ['results', txt('В / П', 'W / L')], ['games', txt('Партий', 'Matches')], ['createdAt', txt('Создан', 'Created')], ['role', txt('Роль', 'Role')],
+]);
 const tabs = computed(() => [
   { id: 'overview' as Tab, label: txt('Обзор', 'Overview') },
   { id: 'games' as Tab, label: txt('Партии', 'Matches') },
@@ -129,6 +161,12 @@ const userOnline = ref('all');
 const userPage = ref(1);
 const userPages = ref(1);
 const userTotal = ref(0);
+const userAccounts = ref<AdminAccountCounts | null>(null);
+const userPageSize = ref(25);
+const userVisibleRange = computed(() => {
+  const first = (userPage.value - 1) * userPageSize.value + 1;
+  return `${fmtNumber(first)}–${fmtNumber(first + users.value.length - 1)}`;
+});
 const userLoading = ref(false);
 const userError = ref('');
 const selectedUser = ref<AdminUserDetail | null>(null);
@@ -157,9 +195,16 @@ async function loadUsers(page = 1) {
   showDanger.value = false;
   const query = new URLSearchParams({ q: userQuery.value.trim(), kind: userKind.value, online: userOnline.value, page: String(page), pageSize: String(pageSize) });
   try {
-    const res = await api.get<{ users: AdminUserDetail[]; page: number; totalPages: number; total: number }>(`/api/admin/users/search?${query}`);
+    const res = await api.get<AdminUserSearchResult>(`/api/admin/users/search?${query}`);
     if (version !== usersVersion) return;
+    // Deletion or a presence change can remove the last page between requests.
+    if (!res.users.length && res.page > Math.max(1, res.totalPages)) {
+      await loadUsers(Math.max(1, res.totalPages));
+      return;
+    }
     users.value = res.users; userPage.value = res.page; userPages.value = res.totalPages; userTotal.value = res.total;
+    userPageSize.value = res.pageSize;
+    userAccounts.value = res.accounts;
   } catch (e) { if (version === usersVersion) userError.value = e instanceof Error ? e.message : txt('Ошибка загрузки игроков', 'Failed to load players'); }
   finally { if (version === usersVersion) userLoading.value = false; }
 }
@@ -338,15 +383,14 @@ function inspectActive() {
           <p class="hint interrupted-split">{{ txt('Прерванные партии:', 'Interrupted matches:') }} <strong>{{ activity.abandonedWithoutMoves }}</strong> {{ txt('без ходов', 'without moves') }} · <strong>{{ activity.abandonedWithMoves }}</strong> {{ txt('с записанными ходами', 'with recorded moves') }}</p>
         </article>
         <div class="platform-totals hint" :title="updatedAt?.toLocaleTimeString(en ? 'en-US' : 'ru-RU')">
-          <span><strong class="mono">{{ metrics.onlineUsers }}</strong> {{ txt('подключено сейчас', 'connected now') }}</span>
-          <span><strong class="mono">{{ metrics.totalUsers }}</strong> {{ txt('аккаунтов людей, включая гостей', 'human accounts, including guests') }}</span>
-          <span><strong class="mono">{{ metrics.totalGames }}</strong> {{ txt('сохранённых партий за всё время', 'matches saved all time') }}</span>
+          <span>{{ txt('Партии за всё время:', 'Matches saved all time:') }} <strong class="mono">{{ fmtNumber(metrics.totalGames) }}</strong></span>
         </div>
+        <AdminAccountSummary v-if="metrics.accounts" :counts="metrics.accounts" :english="en" />
         <div class="overview-details">
           <article class="panel insight-card"><h3>{{ txt('Длительность партий', 'Match duration') }}</h3><strong class="metric-val mono" :title="durationTooltip">{{ fmtDuration((metrics.durationStats?.timedCount ? metrics.durationStats.timedAvgSec : metrics.durationStats?.noClockAvgSec) ?? metrics.avgGameDurationSec) }}</strong><p class="hint">{{ txt('По последним завершённым партиям, до 200. С часами, если они есть.', 'Up to 200 recently finished matches. Timed matches when available.') }}</p>
             <dl v-if="metrics.durationStats" class="fact-list"><div><dt>{{ txt('С часами', 'Timed') }}</dt><dd>{{ fmtDuration(metrics.durationStats.timedAvgSec) }} <small class="dim">({{ metrics.durationStats.timedCount }})</small></dd></div><div><dt>{{ txt('Без часов', 'Untimed') }}</dt><dd>{{ fmtDuration(metrics.durationStats.noClockAvgSec) }} <small class="dim">({{ metrics.durationStats.noClockCount }})</small></dd></div><div v-for="control in metrics.durationStats.byTimeControl.filter(c => c.label !== 'Без часов')" :key="control.label"><dt>{{ control.label }}</dt><dd>{{ fmtDuration(control.avgSec) }} <small class="dim">({{ control.count }})</small></dd></div></dl>
           </article>
-          <article class="panel insight-card"><h3>{{ txt('Быстрый переход', 'Quick access') }}</h3><button class="quick-link" @click="inspectActive"><strong>{{ txt('Активные партии', 'Active matches') }}</strong><span class="hint">{{ txt('Участники, паузы, связь с сервером', 'Participants, pauses, server state') }}</span><AppIcon name="chevron-right" :size="18" /></button><button class="quick-link" @click="userOnline = 'online'; tab = 'users'"><strong>{{ txt('Игроки онлайн', 'Online players') }}</strong><span class="hint">{{ txt('Аккаунты, гости и рейтинги по режимам', 'Accounts, guests and ratings by mode') }}</span><AppIcon name="chevron-right" :size="18" /></button><button class="quick-link" @click="tab = 'bots'"><strong>{{ txt('Калибровка ботов', 'Bot calibration') }}</strong><span class="hint">{{ txt('Уровни, стили и командные сочетания', 'Levels, styles and team pairings') }}</span><AppIcon name="chevron-right" :size="18" /></button></article>
+          <article class="panel insight-card"><h3>{{ txt('Быстрый переход', 'Quick access') }}</h3><button class="quick-link" @click="inspectActive"><strong>{{ txt('Активные партии', 'Active matches') }}</strong><span class="hint">{{ txt('Участники, паузы, связь с сервером', 'Participants, pauses, server state') }}</span><AppIcon name="chevron-right" :size="18" /></button><button class="quick-link" @click="userQuery = ''; userKind = 'all'; userOnline = 'online'; tab = 'users'"><strong>{{ txt('Игроки онлайн', 'Online players') }}</strong><span class="hint">{{ txt('Аккаунты, гости и рейтинги по режимам', 'Accounts, guests and ratings by mode') }}</span><AppIcon name="chevron-right" :size="18" /></button><button class="quick-link" @click="tab = 'bots'"><strong>{{ txt('Калибровка ботов', 'Bot calibration') }}</strong><span class="hint">{{ txt('Уровни, стили и командные сочетания', 'Levels, styles and team pairings') }}</span><AppIcon name="chevron-right" :size="18" /></button></article>
         </div>
       </template>
     </section>
@@ -355,9 +399,9 @@ function inspectActive() {
       <div class="section-heading"><div><h2 id="games-title">{{ txt('Партии', 'Matches') }}</h2><p class="hint">{{ txt('Сохранённые партии. Демо, которые существуют только в памяти, не включены. Диагностика относится к текущему процессу сервера.', 'Saved matches, excluding memory-only demos. Diagnostics describe the current server process.') }}</p></div><span class="badge mono">{{ gameTotal }}</span></div>
       <form class="admin-filters" @submit.prevent="loadGames()">
         <label class="search-field">{{ txt('ID партии или имя участника', 'Match ID or participant') }}<input v-model="gameQuery" type="search" :placeholder="txt('Например, 155 или ник', 'For example, 155 or username')" /></label>
-        <label>{{ txt('Статус', 'Status') }}<select v-model="gameStatus" @change="loadGames()"><option value="all">{{ txt('Все', 'All') }}</option><option value="active">{{ txt('Активные', 'Active') }}</option><option value="finished">{{ txt('Завершённые', 'Finished') }}</option><option value="abandoned">{{ txt('Прерванные', 'Abandoned') }}</option></select></label>
-        <label>{{ txt('Режим', 'Mode') }}<select v-model="gameMode" @change="loadGames()"><option value="all">{{ txt('Все режимы', 'All modes') }}</option><option v-for="mode in GAME_MODES" :key="mode" :value="mode">{{ modeLabel(mode, i18n.locale) }}</option></select></label>
-        <label>{{ txt('Часы', 'Clock') }}<select v-model="gameClock" @change="loadGames()"><option value="all">{{ txt('Все', 'All') }}</option><option value="timed">{{ txt('С часами', 'Timed') }}</option><option value="untimed">{{ txt('Без часов', 'Untimed') }}</option></select></label>
+        <AdminSelect v-model="gameStatus" :label="txt('Статус', 'Status')" :options="gameStatusOptions" @change="loadGames()" />
+        <AdminSelect class="admin-select--wide" v-model="gameMode" :label="txt('Режим', 'Mode')" :options="gameModeOptions" @change="loadGames()" />
+        <AdminSelect v-model="gameClock" :label="txt('Часы', 'Clock')" :options="gameClockOptions" @change="loadGames()" />
         <button type="submit" class="primary" :disabled="gameLoading">{{ txt('Найти', 'Search') }}</button>
       </form>
       <p v-if="gameError" role="alert" class="error-text">{{ gameError }}</p>
@@ -387,21 +431,23 @@ function inspectActive() {
     </section>
 
     <section v-else-if="tab === 'users'" class="admin-section" aria-labelledby="users-title">
-      <div class="section-heading"><div><h2 id="users-title">{{ txt('Игроки и гости', 'Players & guests') }}</h2><p class="hint">{{ txt('Боты не входят в этот список. Поиск по всей базе, сортировка внутри страницы.', 'Bots are excluded. Search covers all accounts; sorting applies to the current page.') }}</p></div><span class="badge mono">{{ userTotal }}</span></div>
-      <form class="admin-filters" @submit.prevent="loadUsers()"><label class="search-field">{{ txt('Имя или ID игрока', 'Username or player ID') }}<input v-model="userQuery" type="search" :placeholder="txt('Найти аккаунт', 'Find an account')" /></label><label>{{ txt('Тип аккаунта', 'Account type') }}<select v-model="userKind" @change="loadUsers()"><option value="all">{{ txt('Все люди', 'All humans') }}</option><option value="registered">{{ txt('Зарегистрированные', 'Registered') }}</option><option value="guest">{{ txt('Гости', 'Guests') }}</option><option value="admin">{{ txt('Администраторы', 'Administrators') }}</option></select></label><label>{{ txt('Присутствие', 'Presence') }}<select v-model="userOnline" @change="loadUsers()"><option value="all">{{ txt('Все', 'All') }}</option><option value="online">{{ txt('Онлайн', 'Online') }}</option><option value="offline">{{ txt('Офлайн', 'Offline') }}</option></select></label><button type="submit" class="primary" :disabled="userLoading">{{ txt('Найти', 'Search') }}</button></form>
+      <div class="section-heading"><div><h2 id="users-title">{{ txt('Игроки и гости', 'Players & guests') }}</h2><p class="hint">{{ txt('Поиск по всем игрокам и гостям. Ботов в списке нет. Сортировка на текущей странице.', 'Search all registered and guest accounts. Bots are listed separately. Sorting applies to this page.') }}</p></div></div>
+      <AdminAccountSummary v-if="userAccounts" :counts="userAccounts" :english="en" />
+      <form class="admin-filters" @submit.prevent="loadUsers()"><label class="search-field">{{ txt('Имя или ID игрока', 'Username or player ID') }}<input v-model="userQuery" type="search" :placeholder="txt('Найти аккаунт', 'Find an account')" /></label><AdminSelect class="admin-select--wide" v-model="userKind" :label="txt('Тип аккаунта', 'Account type')" :options="userKindOptions" @change="loadUsers()" /><AdminSelect v-model="userOnline" :label="txt('Присутствие', 'Presence')" :options="userOnlineOptions" @change="loadUsers()" /><button type="submit" class="primary" :disabled="userLoading">{{ txt('Найти', 'Search') }}</button></form>
       <p v-if="userError" role="alert" class="error-text">{{ userError }}</p><p v-if="userLoading" role="status" class="hint">{{ txt('Загружаем игроков…', 'Loading players…') }}</p>
-      <div v-else-if="!userError && !users.length" class="admin-empty">{{ txt('Игроки не найдены. Измените запрос или фильтры.', 'No players found. Change the search or filters.') }}</div>
-      <div v-else-if="!userError" class="table-wrap user-table" tabindex="0" :aria-label="txt('Таблица игроков, можно прокручивать', 'Scrollable players table')"><table class="club"><thead><tr><SortableHeader v-for="[key, label] in userColumns" :key="key" :direction="userSort.sortDirection(key)" @sort="userSort.sortBy(key, ['username', 'id'].includes(key) ? 'ascending' : 'descending')">{{ label }}</SortableHeader><th>{{ txt('Карточка', 'Details') }}</th></tr></thead><tbody><tr v-for="user in userSort.sortedRows.value" :key="user.id" :class="{ 'is-me': user.id === auth.user?.id, selected: selectedUser?.id === user.id }"><td class="mono dim">{{ user.id }}</td><td><span class="dot" :class="{ on: user.online }" />{{ user.online ? txt('Онлайн', 'Online') : txt('Офлайн', 'Offline') }}</td><td><router-link :to="`/players/${encodeURIComponent(user.username)}`">{{ user.username }}</router-link><span v-if="user.isGuest" class="badge dim">{{ txt('Гость', 'Guest') }}</span></td><td class="mono">{{ user.rating }}</td><td class="mono">{{ user.wins }} / {{ user.losses }}</td><td class="mono">{{ user.games }}</td><td>{{ fmtDate(user.createdAt) }}</td><td>{{ user.isAdmin ? txt('Админ', 'Admin') : txt('Игрок', 'Player') }}</td><td><button class="small" @click="selectUser(user)">{{ txt('Открыть', 'Open') }}</button></td></tr></tbody></table></div>
+      <p v-else-if="!userError" class="user-result-count hint" role="status"><strong>{{ txt('Найдено:', 'Accounts found:') }} <span class="mono">{{ fmtNumber(userTotal) }}</span></strong><span v-if="users.length">{{ txt('Показаны', 'Showing') }} {{ userVisibleRange }}</span></p>
+      <div v-if="!userLoading && !userError && !users.length" class="admin-empty">{{ txt('Нет подходящих аккаунтов. Измените запрос или фильтры.', 'No accounts match. Change the search or filters.') }}</div>
+      <div v-else-if="!userLoading && !userError" class="table-wrap user-table" tabindex="0" :aria-label="txt('Таблица игроков, можно прокручивать', 'Scrollable players table')"><table class="club"><thead><tr><SortableHeader v-for="[key, label] in userColumns" :key="key" :direction="userSort.sortDirection(key)" @sort="userSort.sortBy(key, ['username', 'id'].includes(key) ? 'ascending' : 'descending')">{{ label }}</SortableHeader><th>{{ txt('Карточка', 'Details') }}</th></tr></thead><tbody><tr v-for="user in userSort.sortedRows.value" :key="user.id" :class="{ 'is-me': user.id === auth.user?.id, selected: selectedUser?.id === user.id }"><td class="mono dim">{{ user.id }}</td><td><span class="dot" :class="{ on: user.online }" />{{ user.online ? txt('Онлайн', 'Online') : txt('Офлайн', 'Offline') }}</td><td><router-link :to="`/players/${encodeURIComponent(user.username)}`">{{ user.username }}</router-link></td><td class="mono">{{ user.rating }}</td><td class="mono">{{ user.wins }} / {{ user.losses }}</td><td class="mono">{{ user.games }}</td><td>{{ fmtDate(user.createdAt) }}</td><td><span class="badge account-role" :class="{ 'account-role-guest': user.isGuest }">{{ roleLabel(user) }}</span></td><td><button class="small" @click="selectUser(user)">{{ txt('Открыть', 'Open') }}</button></td></tr></tbody></table></div>
       <div v-if="!userLoading && !userError" class="mobile-users">
         <article v-for="user in users" :key="user.id" class="mobile-user" :class="{ selected: selectedUser?.id === user.id }">
-          <div><strong>{{ user.username }}</strong><span class="hint mono">#{{ user.id }} · {{ user.isGuest ? txt('Гость', 'Guest') : user.isAdmin ? txt('Администратор', 'Administrator') : txt('Игрок', 'Player') }}</span></div>
+          <div><strong>{{ user.username }}</strong><span class="hint mono">#{{ user.id }} · {{ roleLabel(user) }}</span></div>
           <span class="hint"><i class="dot" :class="{ on: user.online }" />{{ user.online ? txt('Онлайн', 'Online') : txt('Офлайн', 'Offline') }}</span>
           <p class="hint mono">{{ user.rating }} Elo · {{ user.games }} {{ txt('партий', 'matches') }} · {{ user.wins }}/{{ user.losses }} {{ txt('В/П', 'W/L') }}</p>
           <button class="small" @click="selectUser(user)">{{ txt('Карточка игрока', 'Player details') }}</button>
         </article>
       </div>
-      <div class="admin-pagination"><span class="hint">{{ txt('Страница', 'Page') }} {{ userPage }} / {{ Math.max(1, userPages) }} · {{ txt('по 25 аккаунтов', '25 accounts per page') }}</span><button :disabled="userLoading || userPage <= 1" @click="loadUsers(userPage - 1)">{{ txt('Назад', 'Previous') }}</button><button :disabled="userLoading || userPage >= userPages" @click="loadUsers(userPage + 1)">{{ txt('Далее', 'Next') }}</button></div>
-      <article v-if="selectedUser" class="panel account-detail"><div class="section-heading"><div><h3>{{ selectedUser.username }} <small class="dim mono">#{{ selectedUser.id }}</small></h3><p class="hint">{{ txt('Регистрация', 'Joined') }}: {{ fmtDate(selectedUser.createdAt) }} · {{ txt('Сохранённая отметка посещения', 'Stored last-seen timestamp') }}: {{ fmtDate(selectedUser.lastSeenAt) }}</p></div><button class="small ghost" @click="selectedUser = null">{{ txt('Закрыть', 'Close') }}</button></div><div class="detail-links"><router-link :to="{ path: '/history', query: { playerId: selectedUser.id, player: selectedUser.username } }">{{ txt('История партий', 'Match history') }}</router-link><router-link v-if="selectedUser.activeGameId" :to="`/game/${selectedUser.activeGameId}`">{{ txt('Активная партия', 'Active match') }} #{{ selectedUser.activeGameId }}</router-link></div>
+      <div v-if="!userError && userPages > 1" class="admin-pagination"><span class="hint">{{ txt('Страница', 'Page') }} {{ fmtNumber(userPage) }} / {{ fmtNumber(userPages) }}</span><button :disabled="userLoading || userPage <= 1" @click="loadUsers(userPage - 1)">{{ txt('Назад', 'Previous') }}</button><button :disabled="userLoading || userPage >= userPages" @click="loadUsers(userPage + 1)">{{ txt('Далее', 'Next') }}</button></div>
+      <article v-if="selectedUser" class="panel account-detail"><div class="section-heading"><div><h3>{{ selectedUser.username }} <small class="dim mono">#{{ selectedUser.id }}</small> <span class="badge account-role" :class="{ 'account-role-guest': selectedUser.isGuest }">{{ roleLabel(selectedUser) }}</span></h3><p class="hint">{{ txt('Аккаунт создан', 'Account created') }}: {{ fmtDate(selectedUser.createdAt) }} · {{ txt('Сохранённая отметка посещения', 'Stored last-seen timestamp') }}: {{ fmtDate(selectedUser.lastSeenAt) }}</p></div><button class="small ghost" @click="selectedUser = null">{{ txt('Закрыть', 'Close') }}</button></div><div class="detail-links"><router-link :to="{ path: '/history', query: { playerId: selectedUser.id, player: selectedUser.username } }">{{ txt('История партий', 'Match history') }}</router-link><router-link v-if="selectedUser.activeGameId" :to="`/game/${selectedUser.activeGameId}`">{{ txt('Активная партия', 'Active match') }} #{{ selectedUser.activeGameId }}</router-link></div>
         <div class="rating-cards"><div v-for="rating in selectedUser.modeRatings" :key="rating.mode"><strong>{{ adminModeLabel(rating.mode) }}</strong><span class="mono">{{ rating.rating }} Elo</span><small class="hint">{{ txt('Рейтинг В/П/Н', 'Rated W/L/D') }}: {{ rating.wins }}/{{ rating.losses }}/{{ rating.draws }}</small><small class="hint">{{ txt('Тренировки В/П/Н', 'Training W/L/D') }}: {{ rating.trainingWins }}/{{ rating.trainingLosses }}/{{ rating.trainingDraws }}</small></div></div>
         <button class="small ghost danger-reveal" :aria-expanded="showDanger" @click="showDanger = !showDanger">{{ txt('Управление аккаунтом · опасные действия', 'Account management · sensitive actions') }}</button>
         <div v-if="showDanger" class="danger-zone"><h4>{{ txt('Изменения влияют на реальные данные', 'These actions affect real data') }}</h4><p>{{ txt('Удаление аккаунта удаляет его партии из истории всех участников. Сброс изменяет рейтинг и результаты. Права администратора открывают управление платформой. Каждое действие требует отдельного подтверждения.', 'Deleting an account removes its matches from every participant’s history. Reset changes ratings and results. Administrator access grants platform management permissions. Each action requires separate confirmation.') }}</p><p v-if="actionError" role="alert" class="error-text">{{ actionError }}</p><div class="admin-actions"><button :disabled="busyId !== null" @click="resetRating(selectedUser)">{{ txt('Сбросить рейтинг на 1200', 'Reset rating to 1200') }}</button><button :disabled="busyId !== null || selectedUser.id === auth.user?.id || selectedUser.isGuest || selectedUser.isBot" @click="toggleAdmin(selectedUser)">{{ selectedUser.isAdmin ? txt('Снять права админа', 'Remove admin access') : txt('Предоставить права админа', 'Grant admin access') }}</button><button class="danger" :disabled="busyId !== null || selectedUser.id === auth.user?.id" @click="deleteUser(selectedUser)">{{ txt('Удалить аккаунт и партии', 'Delete account and matches') }}</button></div></div>
@@ -851,6 +897,10 @@ function inspectActive() {
 .activity-legend button { padding-inline: 6px; }
 .activity-legend i { border-radius: 50%; width: 9px; height: 9px; }
 .interrupted-split { margin: 0; }
+.user-result-count { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; }
+.user-result-count strong { color: var(--ink); }
+.account-role { white-space: nowrap; }
+.account-role-guest { background: var(--surface-inset); color: var(--ink-2); }
 .platform-totals { display: flex; flex-wrap: wrap; gap: 6px 18px; }
 .diagnosis-title { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
 .diagnosis-title h3 { margin: 0; font-size: 16px; }
@@ -868,8 +918,10 @@ function inspectActive() {
 .admin-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--surface); }
 .admin-filters label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--ink-2); min-width: 120px; }
 .admin-filters .search-field { flex: 1 1 220px; }
-.admin-filters input, .admin-filters select, .admin-filters button { min-height: 40px; }
-.admin-filters input, .admin-filters select { width: 100%; min-width: 0; }
+.admin-filters input, .admin-filters button { min-height: 40px; }
+.admin-filters .admin-select { flex: 0 1 148px; }
+.admin-filters .admin-select--wide { flex-basis: 188px; }
+.admin-filters input { width: 100%; min-width: 0; }
 .admin-pagination { display: flex; align-items: center; gap: 8px; }
 .admin-pagination > span { margin-right: auto; }
 .admin-pagination button { min-height: 38px; }
@@ -919,7 +971,8 @@ function inspectActive() {
   .activity-main .hint { font-size: 11px; }
   .overview-details { grid-template-columns: 1fr; }
   .admin-filters { padding: 12px; gap: 10px; }
-  .admin-filters label { flex: 1 1 120px; }
+  .admin-filters label, .admin-filters .admin-select { flex: 1 1 120px; }
+  .admin-filters .admin-select--wide { flex-basis: 148px; }
   .admin-filters .search-field { flex-basis: 100%; }
   .admin-pagination { flex-wrap: wrap; }
   .admin-pagination > span { flex-basis: 100%; }

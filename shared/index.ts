@@ -143,6 +143,20 @@ export interface AdminPageInfo {
   totalPages: number;
 }
 
+/** Current persisted account rows, independent of activity periods and search filters. */
+export interface AdminAccountCounts {
+  registered: number;
+  guests: number;
+  bots: number;
+  /** Distinct persisted human accounts with an active connection. */
+  online: number;
+}
+
+export interface AdminUserSearchResult extends AdminPageInfo {
+  users: AdminUserDetail[];
+  accounts: AdminAccountCounts;
+}
+
 export interface LobbyPlayer {
   isGuest?: boolean;
   userId: number;
@@ -993,6 +1007,7 @@ export interface AdminActivity {
 }
 
 export interface PlatformMetrics {
+  accounts: AdminAccountCounts;
   activity?: AdminActivity;
   onlineUsers: number;
   totalUsers: number;

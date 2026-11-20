@@ -1,18 +1,17 @@
 <script setup lang="ts">
-import { getTopology, SEAT_COLORS, isMultiplayer, modeLabel as sharedModeLabel, type GameMode, type MultiMode } from 'shared';
-import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
-import type { GameSummary, MoveRecord, PieceType, Pocket } from 'shared';
-import { detectOpening, timeControlLabel } from 'shared';
+import { getTopology, SEAT_COLORS, isMultiplayer, normalizedResult, modeLabel as sharedModeLabel, type GameMode, type MultiMode } from 'shared';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
+import type { GameSummary, MoveRecord } from 'shared';
+import { timeControlLabel } from 'shared';
 import { useI18n } from '../stores/i18n';
 import ChessBoard from './ChessBoard.vue';
 import MultiBoard from './MultiBoard.vue';
-import PocketBar from './PocketBar.vue';
+import ReplaySeat from './ReplaySeat.vue';
 import AppIcon from './AppIcon.vue';
-import MaterialBalance from './MaterialBalance.vue';
+import ReplayOpening from './ReplayOpening.vue';
 import { useReplayLayout } from '../composables/useReplayLayout';
 import { buildMoveRows, buildReplay, type ReplayMoveView } from '../game/replay';
 import { matchOutcome, endReason } from '../utils/match';
-import { analyzePosition } from '../utils/analysis';
 import {
   playMoveSound,
   playCaptureSound,
@@ -22,7 +21,7 @@ import {
 } from '../audio/sounds';
 
 const i18n = useI18n();
-
+const en = computed(() => i18n.locale === 'en');
 
 const props = withDefaults(
   defineProps<{
@@ -56,12 +55,7 @@ function moverColor(mv: ReplayMoveView): string {
 }
 watch(() => props.game.id, () => { stop(); cursor.value = total.value; viewerSeat.value = 0; classicFlipped.value = false; });
 
-const SPEEDS = [
-  { label: '0,5×', value: 0.5 },
-  { label: '1×', value: 1 },
-  { label: '2×', value: 2 },
-  { label: '4×', value: 4 },
-];
+const SPEEDS = [0.5, 1, 2, 4];
 const BASE_DELAY = 900;
 
 const data = computed(() => buildReplay(props.game, props.moves));
@@ -111,21 +105,24 @@ function goTo(ply: number, withSound: boolean = false): void {
   }
   cursor.value = target;
 }
+function seek(ply: number, withSound = false): void {
+  stop();
+  goTo(ply, withSound);
+}
 function first(): void {
-  goTo(0);
+  seek(0);
 }
 function prev(): void {
-  goTo(cursor.value - 1);
+  seek(cursor.value - 1);
 }
 function next(): void {
-  goTo(cursor.value + 1, true);
+  seek(cursor.value + 1, true);
 }
 function last(): void {
-  goTo(total.value);
+  seek(total.value);
 }
 function stepToMove(index: number): void {
-  goTo(index + 1, true);
-  stop();
+  seek(index + 1, true);
 }
 
 // ---------- Автоплей ----------
@@ -147,6 +144,7 @@ function play(): void {
       return;
     }
     goTo(cursor.value + 1, true);
+    if (cursor.value === total.value) stop();
   }, BASE_DELAY / speed.value);
 }
 
@@ -165,17 +163,19 @@ watch(total, (n) => {
 // ---------- Клавиатура ----------
 
 function onKey(e: KeyboardEvent): void {
-  const t = e.target as HTMLElement | null;
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.tagName === 'BUTTON' || t.isContentEditable)) return;
+  if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+  const t = e.target instanceof HTMLElement ? e.target : null;
+  // Native inputs keep their arrow keys. Buttons keep Space for normal activation,
+  // but arrow navigation should work immediately after opening (Close has focus).
+  if (t?.closest('input, textarea, select, [role="combobox"], [contenteditable="true"]') ||
+      (e.key === ' ' && t?.closest('button, a, summary'))) return;
   switch (e.key) {
     case 'ArrowLeft':
       e.preventDefault();
-      stop();
       prev();
       break;
     case 'ArrowRight':
       e.preventDefault();
-      stop();
       next();
       break;
     case ' ':
@@ -184,12 +184,10 @@ function onKey(e: KeyboardEvent): void {
       break;
     case 'Home':
       e.preventDefault();
-      stop();
       first();
       break;
     case 'End':
       e.preventDefault();
-      stop();
       last();
       break;
   }
@@ -215,12 +213,6 @@ function bottomColorOf(b: number): 'w' | 'b' {
   return orientationOf(b) === 'white' ? 'w' : 'b';
 }
 
-function pocketOf(b: number, color: 'w' | 'b'): Pocket | null {
-  const p = frame.value.pockets;
-  if (!p || !p[b]) return null;
-  return p[b][color === 'w' ? 0 : 1] ?? null;
-}
-
 function checkOf(b: number): string | null {
   return frame.value.boards[b]?.check ?? null;
 }
@@ -241,9 +233,13 @@ const playedMovesSan = computed(() => {
     .map((m) => m.san);
 });
 
-const board0Fen = computed(() => fenOf(0));
-const recognizedOpening = computed(() => detectOpening(playedMovesSan.value));
-const currentAnalysis = computed(() => analyzePosition(board0Fen.value));
+function topColorOf(board: number): 'w' | 'b' { return bottomColorOf(board) === 'w' ? 'b' : 'w'; }
+function sideStatus(board: number, side: 'w' | 'b'): string | undefined {
+  if (!checkOf(board) || fenOf(board).split(' ')[1] !== side) return;
+  const isMate = cursor.value === total.value && props.game.status === 'finished' && props.game.reason === 'checkmate' &&
+    (boardsCount.value === 1 || props.game.endBoardIndex === board);
+  return isMate ? i18n.t.game.reasonCheckmate : (en.value ? 'Check' : 'Шах');
+}
 
 const rowsByBoard = computed(() => {
   const out = [];
@@ -267,915 +263,301 @@ const teams = computed(() => {
   };
 });
 
-const resultText = computed(() => [matchOutcome(props.game, undefined, i18n.locale), endReason(props.game, i18n.locale)].filter(Boolean).join(' · '));
-
-/** имя игрока, сделавшего активный ход */
-const activeMover = computed(() => {
-  const idx = activeMoveIndex.value;
-  if (idx === null) return null;
-  const mv = data.value.moves[idx];
-  if (!mv) return null;
-  return props.game.participants.find((p) => p.userId === mv.userId)?.username ?? null;
+const teamNames = computed(() => props.game.mode === 'bughouse'
+  ? [en.value ? 'Team 1' : 'Команда 1', en.value ? 'Team 2' : 'Команда 2']
+  : [en.value ? 'White' : 'Белые', en.value ? 'Black' : 'Чёрные']);
+const resultText = computed(() => {
+  const game = props.game, result = normalizedResult(game);
+  const byColor = !isMulti.value && boardsCount.value === 1 && game.status === 'finished';
+  const outcome = byColor && result === '1-0' ? i18n.t.game.whiteWon : byColor && result === '0-1' ? i18n.t.game.blackWon : matchOutcome(game, undefined, i18n.locale);
+  return [outcome, endReason(game, i18n.locale)].filter(Boolean).join(' · ');
 });
-
-function pieceLabel(t: PieceType): string {
-  const map: Record<PieceType, string> = { p: 'пешка', n: 'конь', b: 'слон', r: 'ладья', q: 'ферзь', k: 'король' };
-  return map[t] ?? t;
+const activeMove = computed(() => activeMoveIndex.value === null ? null : data.value.moves[activeMoveIndex.value] ?? null);
+const movesList = ref<HTMLElement | null>(null);
+// Keep the selected half-move visible without ever scrolling the board/modal away
+// on phones (scrollIntoView would scroll every ancestor).
+function revealCurrentMove(): void {
+  const list = movesList.value;
+  if (!list) return;
+  const active = list.querySelector<HTMLElement>('[aria-current="step"]');
+  if (!active) { list.scrollTop = 0; return; }
+  const viewport = list.getBoundingClientRect();
+  const item = active.getBoundingClientRect();
+  if (item.top < viewport.top + 2) list.scrollTop += item.top - viewport.top - 2;
+  else if (item.bottom > viewport.bottom - 2) list.scrollTop += item.bottom - viewport.bottom + 2;
 }
+watch([activeMoveIndex, () => props.game.id], revealCurrentMove, { flush: 'post' });
+onMounted(() => { nextTick(revealCurrentMove); });
+// The board measures itself after mount, and resizing the window or opening
+// analysis changes how many notation rows fit without moving the cursor.
+watch(movesList, (list, _, cleanup) => {
+  if (!list || typeof ResizeObserver === 'undefined') return;
+  const observer = new ResizeObserver(revealCurrentMove);
+  observer.observe(list);
+  cleanup(() => observer.disconnect());
+}, { flush: 'post' });
 </script>
 
 <template>
   <div ref="replayRoot" class="replayer" :class="{ compact, 'double-replay': game.mode === 'double' }">
-    <!-- Шапка: кто играл и чем кончилось -->
     <header class="replayer-head">
-      <div v-if="isMulti" class="rh-multi-players" role="radiogroup" :aria-label="i18n.locale === 'en' ? 'View from' : 'Вид со стороны'">
-        <span class="rh-perspective-label" aria-hidden="true">{{ i18n.locale === 'en' ? 'Perspective' : 'Ракурс' }}</span>
+      <div v-if="isMulti" class="rh-multi-players" role="radiogroup" :aria-label="en ? 'View from' : 'Вид со стороны'">
+        <span class="rh-perspective-label" aria-hidden="true">{{ en ? 'View from' : 'Ракурс' }}</span>
         <label v-for="player in multiPlayers" :key="player.userId" class="rh-player" :title="player.username">
           <input v-model="viewerSeat" type="radio" :name="perspectiveGroup" :value="player.seat ?? 0" />
           <span class="rh-player-chip">
             <i class="seat-dot" :style="{ background: playerColor(player.seat) }" aria-hidden="true" />
             <strong class="truncate">{{ player.username }}</strong>
-            <small v-if="game.mode === 'double'">{{ i18n.locale === 'en' ? 'Team' : 'Команда' }} {{ player.team }}</small>
+            <small v-if="game.mode === 'double'">{{ en ? 'Team' : 'Команда' }} {{ player.team }}</small>
             <AppIcon class="rh-perspective-check" name="check" :size="12" />
           </span>
         </label>
       </div>
-      <div v-else class="rh-matchup" :class="{ 'has-flip': game.mode === 'team' }">
+      <div v-else class="rh-matchup">
         <div class="rh-teams">
-          <span class="color-tag w">{{ (game.mode === 'bughouse' || game.mode === 'double') ? (i18n.locale === 'en' ? 'Team 1' : 'Команда 1') : (i18n.locale === 'en' ? 'White' : 'Белые') }}</span>
-          <strong class="truncate">{{ teams.t1 }}</strong>
-          <span class="rh-vs">vs</span>
-          <span class="color-tag b">{{ (game.mode === 'bughouse' || game.mode === 'double') ? (i18n.locale === 'en' ? 'Team 2' : 'Команда 2') : (i18n.locale === 'en' ? 'Black' : 'Чёрные') }}</span>
-          <strong class="truncate">{{ teams.t2 }}</strong>
+          <span v-for="(names, side) in [teams.t1, teams.t2]" :key="side" class="rh-team" :title="teamNames[side] + ': ' + names">
+            <span class="team-key"><i v-if="game.mode !== 'bughouse'" class="team-stone" :class="{ dark: side }" aria-hidden="true" />{{ teamNames[side] }}</span>
+            <strong class="truncate">{{ names }}</strong>
+          </span>
         </div>
-        <button
-          v-if="game.mode === 'team'"
-          type="button"
-          class="rh-flip small ghost"
-          :aria-pressed="classicFlipped"
-          :aria-label="i18n.locale === 'en' ? 'Flip board' : 'Перевернуть доску'"
-          :title="i18n.locale === 'en' ? 'Flip board' : 'Перевернуть доску'"
-          @click="classicFlipped = !classicFlipped"
-        >
-          <AppIcon name="refresh" :size="14" />
-          <span>{{ i18n.locale === 'en' ? 'Flip board' : 'Перевернуть доску' }}</span>
+        <button v-if="game.mode === 'team'" type="button" class="rh-flip"
+          :aria-pressed="classicFlipped" :aria-label="en ? 'Flip board' : 'Перевернуть доску'"
+          :title="en ? 'Flip board' : 'Перевернуть доску'" @click="classicFlipped = !classicFlipped">
+          <AppIcon name="refresh" :size="17" />
         </button>
       </div>
       <div class="rh-meta">
-        <span class="badge">{{ modeLabel(game.mode) }}<template v-if="game.mode === 'double'"> · 16×8</template></span>
-        <span class="badge mono">{{ timeControlLabel(game.timeControl) }}</span>
-        <span class="badge" :class="{ on: game.status === 'active' }">{{ resultText }}</span>
+        <span v-if="!compact">{{ modeLabel(game.mode) }} · {{ timeControlLabel(game.timeControl) }}</span>
+        <span class="rh-result"><AppIcon :name="game.status === 'active' ? 'clock' : 'flag'" :size="13" />{{ resultText }}</span>
       </div>
     </header>
 
     <div class="replayer-body">
-      <!-- Доски -->
-      <section class="rp-boards" aria-label="Шахматные доски" :class="{ two: boardsCount === 2 }">
+      <section class="rp-boards" :aria-label="en ? 'Chessboards' : 'Шахматные доски'" :class="{ two: boardsCount === 2 }">
         <div v-for="b in boardsCount" :key="b" class="rp-board-col">
-          <div v-if="game.mode !== 'double' || checkOf(b - 1)" class="rp-board-head">
-            <span class="rp-board-num mono">{{ i18n.locale === 'en' ? 'Board' : 'Доска' }} {{ b }}</span>
-            <span
-              v-show="checkOf(b - 1)"
-              class="badge bad rp-check-badge"
-              :aria-hidden="!checkOf(b - 1)"
-              :class="{ visible: Boolean(checkOf(b - 1)) }"
-              :aria-label="i18n.locale === 'en' ? 'Check' : 'Шах'"
-            >{{ i18n.locale === 'en' ? 'Check' : 'Шах' }}</span>
-          </div>
+          <span v-if="boardsCount === 2" class="rp-board-head">{{ en ? 'Board' : 'Доска' }} {{ b }}</span>
+          <ReplaySeat v-if="!isMulti" :fen="fenOf(b - 1)" :color="topColorOf(b - 1)"
+            :pockets="frame.pockets?.[b - 1]" :check-label="sideStatus(b - 1, topColorOf(b - 1))" />
 
-          <div v-if="!isMultiplayer(game.mode)" class="rp-seat">
-            <span>{{ bottomColorOf(b - 1) === 'w' ? i18n.t.material.black : i18n.t.material.white }}</span>
-            <MaterialBalance :fen="fenOf(b - 1)" :color="bottomColorOf(b - 1) === 'w' ? 'b' : 'w'" :pockets="[pocketOf(b - 1, 'w'), pocketOf(b - 1, 'b')]" />
-          </div>
-
-          <PocketBar
-            v-if="pocketOf(b - 1, bottomColorOf(b - 1) === 'w' ? 'b' : 'w')"
-            class="rp-pocket"
-            :pocket="pocketOf(b - 1, bottomColorOf(b - 1) === 'w' ? 'b' : 'w')!"
-            :label="bottomColorOf(b - 1) === 'w' ? (i18n.locale === 'en' ? 'Black reserve' : 'Резерв чёрных') : (i18n.locale === 'en' ? 'White reserve' : 'Резерв белых')"
-            :color="bottomColorOf(b - 1) === 'w' ? 'b' : 'w'"
-            :interactive="false"
-            :selected="null"
-          />
-
-          <p v-if="isMulti && activeMoveIndex !== null && !data.moves[activeMoveIndex]?.ok" class="hint rp-position-warning" role="status">
-            {{ i18n.locale === 'en' ? 'Position unavailable for this move. Showing the last saved position.' : 'Позиция этого хода недоступна. Показана последняя сохранённая позиция.' }}
+          <p v-if="isMulti && activeMove && !activeMove.ok" class="rp-position-warning" role="status">
+            {{ en ? 'Position unavailable for this move. Showing the last saved position.' : 'Позиция этого хода недоступна. Показана последняя сохранённая позиция.' }}
           </p>
           <div class="rp-board-stage" :style="{ aspectRatio: replayAspect }">
-            <MultiBoard :locale="i18n.locale"
-              v-if="isMultiplayer(game.mode)"
-              :mode="game.mode as MultiMode"
-              :viewer-seat="viewerSeat"
-              :coordinates="true"
-              :fen="fenOf(b - 1)"
-              :last-move="lastMoveOf(b - 1)"
-            />
-            <ChessBoard
-              v-else
-              :fen="fenOf(b - 1)"
-              :orientation="orientationOf(b - 1)"
-              :movable-color="null"
-              :last-move="lastMoveOf(b - 1)"
-              :check-square="checkOf(b - 1)"
-              :coordinates="true"
-            />
-
+            <MultiBoard v-if="isMultiplayer(game.mode)" :locale="i18n.locale" :mode="game.mode as MultiMode" :viewer-seat="viewerSeat"
+              :coordinates="true" :fen="fenOf(b - 1)" :last-move="lastMoveOf(b - 1)" />
+            <ChessBoard v-else :fen="fenOf(b - 1)" :orientation="orientationOf(b - 1)" :movable-color="null"
+              :last-move="lastMoveOf(b - 1)" :check-square="checkOf(b - 1)" :coordinates="true" />
           </div>
-
-          <PocketBar
-            v-if="pocketOf(b - 1, bottomColorOf(b - 1))"
-            class="rp-pocket"
-            :pocket="pocketOf(b - 1, bottomColorOf(b - 1))!"
-            :label="bottomColorOf(b - 1) === 'w' ? (i18n.locale === 'en' ? 'White reserve' : 'Резерв белых') : (i18n.locale === 'en' ? 'Black reserve' : 'Резерв чёрных')"
-            :color="bottomColorOf(b - 1)"
-            :interactive="false"
-            :selected="null"
-          />
-          <div v-if="!isMultiplayer(game.mode)" class="rp-seat">
-            <span>{{ bottomColorOf(b - 1) === 'w' ? i18n.t.material.white : i18n.t.material.black }}</span>
-            <MaterialBalance :fen="fenOf(b - 1)" :color="bottomColorOf(b - 1)" :pockets="[pocketOf(b - 1, 'w'), pocketOf(b - 1, 'b')]" />
-          </div>
+          <ReplaySeat v-if="!isMulti" :fen="fenOf(b - 1)" :color="bottomColorOf(b - 1)"
+            :pockets="frame.pockets?.[b - 1]" :check-label="sideStatus(b - 1, bottomColorOf(b - 1))" />
         </div>
       </section>
 
-      <!-- Список ходов -->
-      <aside class="rp-side">
+      <aside class="rp-side" :aria-label="en ? 'Move list' : 'Запись партии'">
         <div class="rp-moves-head">
-          <span class="hint mono"><strong v-if="game.mode === 'double'">{{ i18n.locale === 'en' ? 'Moves' : 'Ходы' }} · </strong>{{ cursor }}/{{ total }}</span>
-          <span class="hint rp-mover" :title="activeMover ?? undefined">{{ i18n.locale === 'en' ? 'Move by:' : 'Ход:' }} {{ activeMover }}</span>
+          <h3>{{ en ? 'Moves' : 'Ходы' }}</h3>
+          <span class="rp-counter mono">{{ cursor }}<span> / </span>{{ total }}</span>
         </div>
-
-        <div v-if="isMulti" class="rp-moves rp-multi-moves">
-          <button v-for="mv in data.moves" :key="mv.index" class="rp-move rp-multi-move" :class="moveClasses(mv)" @click="stepToMove(mv.index)">
-            <span class="mono">{{ mv.ply }}.</span>
+        <div class="rp-current">
+          <template v-if="activeMove"><b class="mono">{{ activeMove.san }}</b><span class="current-dot" aria-hidden="true">·</span>
+            <span class="truncate" :title="moverName(activeMove)">{{ moverName(activeMove) }}</span></template>
+          <span v-else>{{ en ? 'Starting position' : 'Начальная позиция' }}</span>
+        </div>
+        <div v-if="isMulti" ref="movesList" class="rp-moves rp-multi-moves">
+          <button v-for="mv in data.moves" :key="mv.index" type="button" class="rp-move rp-multi-move" :class="moveClasses(mv)"
+            :aria-current="mv.index === activeMoveIndex ? 'step' : undefined" @click="stepToMove(mv.index)">
+            <span class="rp-move-no mono">{{ mv.ply }}.</span>
             <span class="rp-move-player truncate" :title="moverName(mv)"><i class="seat-dot" :style="{ background: moverColor(mv) }" />{{ moverName(mv) }}</span>
-            <span class="mono">{{ mv.san }}</span>
-            <span v-if="!mv.ok" :title="i18n.locale === 'en' ? 'Position unavailable' : 'Позиция недоступна'">⚠</span>
+            <b class="mono">{{ mv.san }}</b><span v-if="!mv.ok" :title="en ? 'Position unavailable' : 'Позиция недоступна'">⚠</span>
           </button>
         </div>
-        <div v-else class="rp-moves" :class="{ two: boardsCount === 2 }">
+        <div v-else ref="movesList" class="rp-moves" :class="{ two: boardsCount === 2 }">
           <div v-for="(rows, b) in rowsByBoard" :key="b" class="rp-move-col">
-            <div v-if="boardsCount === 2" class="rp-col-title mono">{{ i18n.locale === 'en' ? 'Board' : 'Доска' }} {{ b + 1 }}</div>
+            <h4 v-if="boardsCount === 2" class="rp-col-title">{{ en ? 'Board' : 'Доска' }} {{ b + 1 }}</h4>
             <div class="rp-move-grid">
-              <template v-for="row in rows" :key="row.no">
-                <span class="rp-move-no mono">{{ row.label }}</span>
-                <button
-                  class="rp-move"
-                  :class="moveClasses(row.white)"
-                  :disabled="!row.white"
-                  @click="row.white && stepToMove(row.white.index)"
-                >
-                  {{ row.white ? row.white.san : '—' }}
+              <div v-for="row in rows" :key="row.no" class="rp-move-row">
+                <span class="rp-move-no mono">{{ row.no }}.</span>
+                <button v-for="(mv, side) in [row.white, row.black]" :key="side" type="button" class="rp-move"
+                  :class="moveClasses(mv)" :disabled="!mv" :title="mv ? moverName(mv) : undefined"
+                  :aria-label="mv ? (boardsCount === 2 ? (en ? 'Board ' : 'Доска ') + (b + 1) + ', ' : '') + row.no + (side ? '… ' : '. ') + mv.san + ', ' + moverName(mv) : undefined"
+                  :aria-current="mv && mv.index === activeMoveIndex ? 'step' : undefined" @click="mv && stepToMove(mv.index)">
+                  {{ mv ? mv.san : '·' }}
                 </button>
-                <button
-                  class="rp-move"
-                  :class="moveClasses(row.black)"
-                  :disabled="!row.black"
-                  @click="row.black && stepToMove(row.black.index)"
-                >
-                  {{ row.black ? row.black.san : '—' }}
-                </button>
-              </template>
-            </div>
-          </div>
-        </div>
-
-        <p v-if="!total" class="empty tiny">{{ i18n.locale === 'en' ? 'No moves were played.' : 'В этой партии не было ходов.' }}</p>
-
-        <!-- Дебют и оценка текущей позиции (для режима 1 доски) -->
-        <div v-if="game.mode === 'team'" class="rp-analysis-card">
-          <div class="rp-an-top">
-            <div class="rp-an-title-group">
-              <AppIcon name="book-open" :size="13" />
-              <strong class="rp-op-name truncate" :title="recognizedOpening.nameRu">
-                {{ recognizedOpening.nameRu }}
-              </strong>
-            </div>
-            <div class="rp-an-badges">
-              <span class="eco-badge mono">{{ recognizedOpening.eco }}</span>
-              <span
-                class="eval-pill mono"
-                :class="{
-                  'eval-w': currentAnalysis.scoreCp > 35,
-                  'eval-b': currentAnalysis.scoreCp < -35,
-                  'eval-eq': Math.abs(currentAnalysis.scoreCp) <= 35
-                }"
-                :title="`Оценка: ${currentAnalysis.evalText} (${currentAnalysis.verdictRu})`"
-              >
-                {{ currentAnalysis.evalText }}
-              </span>
-            </div>
-          </div>
-
-          <!-- Шкала оценки -->
-          <div class="rp-eval-track" :title="`Шансы сторон: белые ${currentAnalysis.evalPercent}% / чёрные ${100 - currentAnalysis.evalPercent}%`">
-            <div class="rp-eval-fill white" :style="{ width: `${currentAnalysis.evalPercent}%` }"></div>
-            <div class="rp-eval-fill black" :style="{ width: `${100 - currentAnalysis.evalPercent}%` }"></div>
-          </div>
-
-          <div class="rp-an-sub">
-            <span class="dim tiny">{{ currentAnalysis.verdictRu }}</span>
-
-          </div>
-
-          <p v-if="recognizedOpening.variationRu" class="rp-an-var dim tiny truncate" :title="recognizedOpening.variationRu">
-            {{ recognizedOpening.variationRu }}
-          </p>
-
-          <details class="rp-details">
-            <summary class="dim tiny rp-details-summary">
-              План: {{ (recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame) ? 'дебют' : currentAnalysis.positionPlan.structureNameRu }}
-            </summary>
-            <div class="rp-details-content">
-              <p class="dim tiny rp-plan-text">
-                {{ (recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame) ? recognizedOpening.planRu : currentAnalysis.positionPlan.strategicPlanRu }}
-              </p>
-              <div v-if="recognizedOpening.continuations?.length && recognizedOpening.stage === 'theory' && !currentAnalysis.isEndgame" class="rp-cont-block">
-                <span class="dim tiny label">Теория:</span>
-                <div class="rp-cont-chips">
-                  <span v-for="c in recognizedOpening.continuations" :key="c.moveSan" class="rp-cont-chip tiny mono">
-                    {{ c.moveSan }}
-                  </span>
-                </div>
               </div>
             </div>
-          </details>
+          </div>
         </div>
+        <p v-if="!total" class="rp-empty">{{ en ? 'No moves were played.' : 'В этой партии не было ходов.' }}</p>
+        <ReplayOpening v-if="game.mode === 'team'" :fen="fenOf(0)" :san="playedMovesSan" />
       </aside>
     </div>
 
-    <!-- Транспорт -->
-    <div class="rp-transport">
+    <div class="rp-transport" role="group" :aria-label="en ? 'Playback' : 'Воспроизведение'">
       <div class="rp-buttons">
-        <button class="small icon-only" :disabled="!canPrev" :title="i18n.locale === 'en' ? 'First (Home)' : 'В начало (Home)'" :aria-label="i18n.locale === 'en' ? 'First (Home)' : 'В начало (Home)'" @click="first">
-          <AppIcon name="skip-back" :size="14" />
+        <button type="button" class="icon-only" :disabled="!canPrev" :title="en ? 'First (Home)' : 'В начало (Home)'" :aria-label="en ? 'First (Home)' : 'В начало (Home)'" @click="first"><AppIcon name="skip-back" :size="14" /></button>
+        <button type="button" class="icon-only" :disabled="!canPrev" :title="en ? 'Previous (←)' : 'Назад (←)'" :aria-label="en ? 'Previous (←)' : 'Назад (←)'" @click="prev"><AppIcon name="chevron-left" :size="18" /></button>
+        <button type="button" class="brass rp-play" :disabled="!total" @click="togglePlay">
+          <AppIcon :name="playing ? 'pause' : 'play'" :size="14" />{{ playing ? (en ? 'Pause' : 'Пауза') : (en ? 'Play' : 'Пуск') }}
         </button>
-        <button class="small icon-only" :disabled="!canPrev" :title="i18n.locale === 'en' ? 'Previous (←)' : 'Назад (←)'" :aria-label="i18n.locale === 'en' ? 'Previous (←)' : 'Назад (←)'" @click="prev">
-          <AppIcon name="chevron-left" :size="16" />
-        </button>
-        <button class="brass rp-play" :disabled="!total" @click="togglePlay">
-          <AppIcon :name="playing ? 'pause' : 'play'" :size="15" />
-          {{ playing ? (i18n.locale === 'en' ? 'Pause' : 'Пауза') : (i18n.locale === 'en' ? 'Play' : 'Пуск') }}
-        </button>
-        <button class="small icon-only" :disabled="!canNext" :title="i18n.locale === 'en' ? 'Next (→)' : 'Вперёд (→)'" :aria-label="i18n.locale === 'en' ? 'Next (→)' : 'Вперёд (→)'" @click="next">
-          <AppIcon name="chevron-right" :size="16" />
-        </button>
-        <button class="small icon-only" :disabled="!canNext" :title="i18n.locale === 'en' ? 'Last (End)' : 'В конец (End)'" :aria-label="i18n.locale === 'en' ? 'Last (End)' : 'В конец (End)'" @click="last">
-          <AppIcon name="skip-forward" :size="14" />
-        </button>
+        <button type="button" class="icon-only" :disabled="!canNext" :title="en ? 'Next (→)' : 'Вперёд (→)'" :aria-label="en ? 'Next (→)' : 'Вперёд (→)'" @click="next"><AppIcon name="chevron-right" :size="18" /></button>
+        <button type="button" class="icon-only" :disabled="!canNext" :title="en ? 'Last (End)' : 'В конец (End)'" :aria-label="en ? 'Last (End)' : 'В конец (End)'" @click="last"><AppIcon name="skip-forward" :size="14" /></button>
       </div>
-
-      <input
-        class="rp-range"
-        type="range"
-        min="0"
-        :max="total"
-        step="1"
-        :value="cursor"
-        :disabled="!total"
-        :aria-label="i18n.locale === 'en' ? 'Game position' : 'Позиция в партии'"
-        @input="goTo(Number(($event.target as HTMLInputElement).value))"
-      />
-
-      <div class="rp-speeds">
-        <button
-          v-for="s in SPEEDS"
-          :key="s.value"
-          class="rp-speed"
-          :class="{ active: speed === s.value }" :aria-pressed="speed === s.value"
-          @click="speed = s.value"
-        >
-          {{ s.label }}
-        </button>
+      <input class="rp-range" type="range" min="0" :max="total" step="1" :value="cursor" :disabled="!total"
+        :style="{ '--progress': (total ? 100 * cursor / total : 0) + '%' }" :aria-label="en ? 'Game position' : 'Позиция в партии'"
+        :aria-valuetext="cursor ? cursor + ' / ' + total : (en ? 'Starting position' : 'Начальная позиция')"
+        @input="seek(Number(($event.target as HTMLInputElement).value))" />
+      <div class="rp-speeds" role="group" :aria-label="en ? 'Playback speed' : 'Скорость воспроизведения'">
+        <button v-for="s in SPEEDS" :key="s" type="button" class="rp-speed" :class="{ active: speed === s }" :aria-pressed="speed === s"
+          @click="speed = s">{{ s.toLocaleString(en ? 'en' : 'ru') }}×</button>
       </div>
     </div>
-
-    <p class="rp-hint dim tiny">
-      {{ i18n.locale === 'en' ? '←/→: previous/next · Space: play/pause · Home/End: first/last' : '←/→: назад/вперёд · Пробел: пуск/пауза · Home/End: начало/конец' }}
-    </p>
   </div>
 </template>
 
 <style scoped>
-.replayer {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-m);
-}
-
-/* ---------- Шапка ---------- */
-.replayer-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--gap-m);
-  flex-wrap: wrap;
-}
-
-.rh-teams {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-xs);
-  min-width: 0;
-  flex-wrap: wrap;
-  font-size: 14px;
-}
-
-.rh-teams strong {
-  max-width: 190px;
-}
-
-.rh-vs {
-  color: var(--ink-3);
-  font-size: 12px;
-  font-style: italic;
-  padding: 0 2px;
-}
-
-.rh-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-xs);
-  flex-wrap: wrap;
-}
-
-/* ---------- Тело ---------- */
-.replayer-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: var(--gap-m);
-  align-items: start;
-}
-
-.rp-boards {
-  display: grid;
-  gap: var(--gap-m);
-  grid-template-columns: 1fr;
-  min-width: 0;
-}
-
-.rp-boards.two {
-  grid-template-columns: 1fr 1fr;
-}
-
-.rp-board-col {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-xs);
-  min-width: 0;
-}
-
-.rp-board-head {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-xs);
-  height: 26px;
-  min-height: 26px;
-  box-sizing: border-box;
-}
-
-.rp-check-badge {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-}
-
-.rp-check-badge.visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.rp-board-num {
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.rp-pocket {
-  max-width: 320px;
-  align-self: center;
-}
-
-/* ---------- Список ходов ---------- */
-.rp-side {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-xs);
-  min-width: 0;
-}
-
-.rp-moves-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--gap-s);
-}
-
-.rp-moves {
-  display: grid;
-  gap: var(--gap-s);
-  max-height: 420px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.rp-move-grid {
-  display: grid;
-  grid-template-columns: auto 1fr 1fr;
-  gap: 2px 6px;
-  font-size: 12.5px;
-  align-items: center;
-}
-
-/* ---------- Компактный режим (модалка) ---------- */
-.compact .rp-moves {
-  max-height: 220px;
-}
-
-/* В модалке компактнее транспорт: меньше отступы и кнопка плеера */
-.compact .rp-transport {
-  gap: var(--gap-s);
-  padding: var(--gap-xs) var(--gap-s);
-}
-
-.compact .rp-play {
-  min-width: 0;
-  padding-inline: 10px;
-}
-
-.compact .rp-hint {
-  display: none;
-}
-
-.rp-col-title {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--ink-3);
-  padding: 2px 0;
-}
-
-.rp-move-no {
-  color: var(--ink-3);
-  font-size: 11.5px;
-  text-align: right;
-  padding-right: 2px;
-}
-
-.rp-move {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 12.5px;
-  padding: 3px 6px;
-  border: 1px solid transparent;
-  border-radius: var(--r-xs);
-  background: transparent;
-  color: var(--ink);
-  cursor: pointer;
-  text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: background var(--t-fast), border-color var(--t-fast);
-}
-
-.rp-move:hover:not(:disabled) {
-  background: var(--surface-inset);
-}
-
-.rp-move:disabled {
-  opacity: 0.35;
-  cursor: default;
-  transform: none;
-}
-
-.rp-move.active {
-  background: var(--accent-soft);
-  border-color: var(--accent-2);
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.rp-move.drop {
-  color: var(--warn);
-}
-
-/* ---------- Транспорт ---------- */
-.rp-transport {
-  display: grid;
-  grid-template-columns: auto minmax(120px, 1fr) auto;
-  align-items: center;
-  gap: var(--gap-m);
-  padding: var(--gap-s) var(--gap-m);
-  background: var(--surface-inset);
-  border: 1px solid var(--line);
-  border-radius: var(--r-m);
-}
-
-/* Узкий контейнер: скорости переносятся на вторую строку, но транспорт остаётся виден целиком */
-@media (max-width: 720px) {
-  .rp-transport {
-    grid-template-columns: 1fr;
-    justify-items: stretch;
-  }
-}
-
-.rp-buttons {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-xs);
-}
-
-.rp-play {
-  min-width: 118px;
-}
-
-.rp-range {
-  width: 100%;
-  max-width: 320px;
-  margin: 0 auto;
-  padding: 0;
-  accent-color: var(--accent-2);
-}
-
-.rp-range:focus {
-  box-shadow: none;
-}
-
-.rp-speeds {
-  display: flex;
-  gap: 2px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-s);
-  padding: 2px;
-}
-
-.rp-speed {
-  border: none;
-  background: transparent;
-  color: var(--ink-3);
-  padding: 3px 8px;
-  font-size: 12px;
-  border-radius: var(--r-xs);
-  font-family: var(--font-mono);
-}
-
-.rp-speed:hover {
-  background: var(--surface-inset);
-  color: var(--ink);
-}
-
-.rp-speed.active {
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.rp-hint {
-  margin: 0;
-  text-align: center;
-}
-
-/* ---------- Адаптив ---------- */
-@media (max-width: 980px) {
-  .replayer-body {
-    grid-template-columns: 1fr;
-  }
-  .rp-transport {
-    grid-template-columns: 1fr;
-    justify-items: stretch;
-  }
-  .rp-buttons {
-    justify-content: center;
-  }
-  .rp-speeds {
-    justify-content: center;
-  }
-}
-
-@media (max-width: 620px) {
-  .rp-boards.two {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* ---------- Анализ и дебют в плеере ---------- */
-.rp-analysis-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-s);
-  padding: 8px 10px;
-  margin-top: 4px;
-}
-
-.rp-an-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.rp-an-title-group {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  flex: 1;
-}
-
-.rp-op-name {
-  font-size: 12px;
-  color: var(--ink);
-}
-
-.rp-an-badges {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.eco-badge {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 1px 5px;
-  border-radius: var(--r-xs);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-}
-
-.eval-pill {
-  font-size: 10.5px;
-  font-weight: 700;
-  padding: 1px 5px;
-  border-radius: var(--r-xs);
-}
-
-.eval-pill.eval-w {
-  background: color-mix(in srgb, var(--ok) 20%, transparent);
-  color: var(--ok);
-  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
-}
-
-.eval-pill.eval-b {
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-}
-
-.eval-pill.eval-eq {
-  background: var(--surface-3);
-  color: var(--ink-2);
-  border: 1px solid var(--line);
-}
-
-.rp-eval-track {
-  display: flex;
-  height: 4px;
-  width: 100%;
-  border-radius: 2px;
-  overflow: hidden;
-  background: var(--surface-3);
-}
-
-.rp-eval-fill {
-  height: 100%;
-  transition: width 0.2s ease-out;
-}
-
-.rp-eval-fill.white {
-  background: #ffffff;
-}
-
-.rp-eval-fill.black {
-  background: #2b2b2b;
-}
-
-.rp-an-sub {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  font-size: 11px;
-}
-
-.rp-mat-pill {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 0 4px;
-  border-radius: 3px;
-}
-
-.rp-mat-pill.mat-w {
-  background: #ffffff;
-  color: #111111;
-}
-
-.rp-mat-pill.mat-b {
-  background: #222222;
-  color: #ffffff;
-  border: 1px solid #444444;
-}
-
-.rp-an-var {
-  font-size: 11px;
-  color: var(--accent);
-  font-weight: 500;
-}
-
-.rp-details {
-  margin-top: 2px;
-}
-
-.rp-details-summary {
-  cursor: pointer;
-  list-style: none;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  font-weight: 600;
-}
-
-.rp-details-summary::-webkit-details-marker {
-  display: none;
-}
-
-.rp-details-summary::before {
-  content: '▸ ';
-}
-
-.rp-details[open] .rp-details-summary::before {
-  content: '▾ ';
-}
-
-.rp-details-content {
-  margin-top: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.rp-plan-text {
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.rp-cont-block {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-.rp-cont-chips {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-.rp-cont-chip {
-  font-size: 10px;
-  padding: 1px 5px;
-  border-radius: var(--r-xs);
-  background: var(--surface-3);
-  border: 1px solid var(--line);
-  color: var(--accent);
-  font-weight: 600;
-}
-/* A bounded viewport keeps cursor-dependent analysis out of layout sizing. */
-.replayer { height: min(820px, calc(100dvh - 100px)); min-height: 0; gap: 10px; }
-.replayer-head { flex: none; min-height: 50px; max-height: 72px; overflow: hidden; gap: 4px 12px; align-content: center; }
-.rh-matchup {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-width: 0;
-}
-.rh-teams { flex-wrap: nowrap; }
-.rh-flip {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 34px;
-  min-height: 34px;
-  white-space: nowrap;
-  border-color: var(--line);
-}
-.rh-flip:focus-visible { outline-offset: -2px; }
-@media (max-width: 600px) {
-  .rh-matchup { gap: 6px; }
-  .rh-flip span { display: none; }
-  .rh-flip { padding-inline: 0; }
-}
-@media (max-width: 440px) {
-  .rh-matchup.has-flip .rh-teams {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .rh-matchup.has-flip .rh-vs { display: none; }
-}
-
-.rh-teams strong { min-width: 0; max-width: 220px; }
-.rh-meta { flex-wrap: nowrap; min-width: 0; max-width: 100%; overflow: hidden; }
-.rh-meta .badge:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.replayer-body { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) 250px; overflow: hidden; align-items: stretch; }
-.rp-boards { min-height: 0; align-content: start; overflow: auto; scrollbar-gutter: stable; }
-.rp-board-col { align-items: center; gap: 4px; }
-.rp-board-col > * { flex-shrink: 0; }
-.rp-board-head, .rp-seat, .rp-pocket { width: min(100%, var(--replay-board-size, 500px)); max-width: none; }
-.rp-seat { height: 30px; display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--ink-3); }
-.rp-board-stage { width: min(100%, var(--replay-board-size, 500px)); aspect-ratio: 1; }
-.rp-side { min-height: 0; overflow: auto; scrollbar-gutter: stable; }
-.rp-moves-head { flex: none; height: 24px; min-height: 24px; overflow: hidden; }
-.rp-mover { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rp-moves, .compact .rp-moves { flex: 1 0 120px; min-height: 120px; max-height: none; overflow-y: auto; scrollbar-gutter: stable; }
-.rp-analysis-card { flex: none; }
-.rp-transport, .compact .rp-transport { flex: none; grid-template-columns: auto minmax(80px, 1fr) auto; gap: 8px; padding: 7px 10px; }
-.rp-play, .compact .rp-play { width: 100px; min-width: 100px; }
-.rp-range { min-width: 0; }
-@media (max-width: 980px) {
-  .replayer-body { grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; overflow-y: auto; align-content: start; gap: 10px; }
-  .rp-boards { overflow: visible; scrollbar-gutter: auto; }
-  .rp-side { overflow: visible; min-height: 220px; }
-  .rp-moves, .compact .rp-moves { height: 180px; max-height: 180px; flex: none; }
-}
-@media (max-width: 720px) {
-  .rp-boards.two { grid-template-columns: minmax(0, 1fr); gap: 14px; }
-  .rp-transport, .compact .rp-transport { grid-template-columns: minmax(0, 1fr); gap: 5px; padding: 6px; }
-  .rp-buttons, .rp-speeds { justify-content: center; }
-  .rp-buttons button { min-height: 32px; }
-  .rp-range { max-width: 100%; }
-  .rh-teams { font-size: 12px; }
-  .rh-meta .badge { font-size: 10px; }
-}
-@media (max-width: 640px) { .rp-seat { height: 26px; } }
-</style>
-
-<style scoped>
-.rh-multi-players { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; width: 100%; min-width: 0; }
-.rh-perspective-label { margin-inline-end: 4px; color: var(--ink-2); font-size: 12px; font-weight: 600; }
-.rh-player { display: inline-flex; position: relative; min-width: 0; max-width: 250px; font-size: 12px; cursor: pointer; }
-.rh-player input { position: absolute; width: 1px; height: 1px; opacity: 0; margin: 0; }
-.rh-player-chip { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 32px; padding: 4px 9px; border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface-inset); }
-.rh-player-chip strong { min-width: 0; }
-.rh-player:hover .rh-player-chip { border-color: var(--line-2); background: var(--surface-2); }
-.rh-player input:focus-visible + .rh-player-chip { outline: 2px solid var(--accent); outline-offset: 2px; }
-.rh-player input:checked + .rh-player-chip { border-color: var(--accent); background: var(--accent-soft); }
+.replayer { height: min(820px, calc(100dvh - 100px)); min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.replayer-head { display: flex; flex: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 14px; min-width: 0; padding-bottom: 9px; border-bottom: 1px solid var(--line); }
+.rh-matchup, .rh-teams, .rh-meta, .rh-result { display: flex; align-items: center; min-width: 0; }
+.rh-matchup { gap: 8px; max-width: 100%; }
+.rh-teams { gap: 14px; }
+.rh-team { display: grid; gap: 2px; min-width: 0; }
+.rh-team + .rh-team { border-inline-start: 1px solid var(--line); padding-inline-start: 14px; }
+.team-key { display: flex; align-items: center; gap: 4px; color: var(--ink-2); line-height: 1.1; font-size: 11px; }
+.team-stone { width: 8px; height: 8px; border: 1px solid #837968; border-radius: 50%; background: #faf7ee; }
+.team-stone.dark { background: #25221d; border-color: #968d7d; }
+.rh-team strong { font-size: 14px; font-weight: 600; line-height: 1.25; }
+.rh-flip { flex: none; width: 34px; height: 34px; padding: 0; color: var(--ink-2); background: transparent; border-color: transparent; }
+.rh-flip:hover:not(:disabled), .rh-flip[aria-pressed="true"] { background: var(--surface-inset); border-color: var(--line); color: var(--ink); }
+.rh-meta { flex-wrap: wrap; gap: 4px 12px; color: var(--ink-2); font-size: 12px; }
+.rh-result { gap: 6px; line-height: 1.35; }
+.rh-result .app-icon { color: var(--accent); }
+
+.rh-multi-players { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.rh-perspective-label { margin-inline-end: 5px; color: var(--ink-2); font-size: 12px; }
+.rh-player { position: relative; display: inline-flex; min-width: 0; max-width: 220px; cursor: pointer; font-size: 12px; }
+.rh-player input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.rh-player-chip { display: flex; align-items: center; gap: 5px; min-width: 0; min-height: 30px; padding: 3px 7px; border: 1px solid transparent; border-radius: var(--r-s); }
+.rh-player input:checked + .rh-player-chip { border-color: var(--line-2); background: var(--surface-inset); }
+.rh-player:not(:has(input:checked)):hover .rh-player-chip { background: var(--surface-2); }
+.rh-player input:focus-visible + .rh-player-chip { outline: 2px solid var(--accent); outline-offset: 1px; }
 .rh-player input:not(:checked) + .rh-player-chip .rh-perspective-check { visibility: hidden; }
 .rh-perspective-check { color: var(--accent); }
-.rh-player small { flex-shrink: 0; color: var(--ink-3); }
-.seat-dot { display: inline-block; width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; }
-.replayer-head:has(.rh-multi-players) { max-height: none; overflow: visible; }
-.rp-board-head { flex-wrap: wrap; }
+.rh-player small { flex: none; color: var(--ink-2); }
+.seat-dot { display: inline-block; width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; }
+
+.replayer-body { display: grid; flex: 1 1 0; min-height: 0; grid-template-columns: minmax(0, 1fr) minmax(220px, 28%); gap: 12px; overflow: hidden; }
+.rp-boards { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 12px; min-width: 0; min-height: 0; overflow: auto; }
+.rp-boards.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rp-board-col { display: flex; flex-direction: column; align-items: center; min-width: 0; gap: 2px; }
+.rp-board-col > * { flex: none; width: min(100%, var(--replay-board-size, 500px)); }
+.rp-board-stage { aspect-ratio: 1; }
+.rp-board-head { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.rp-position-warning { font-size: 12px; margin: 0; color: var(--warn); }
+
+.rp-side { display: flex; flex-direction: column; min-width: 0; min-height: 0; gap: 6px; overflow-y: auto; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-m); }
+.rp-moves-head, .rp-current { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.rp-moves-head { justify-content: space-between; }
+.rp-moves-head h3 { font: 600 17px/1.25 var(--font-display); }
+.rp-counter { font-size: 12px; color: var(--ink-2); }
+.rp-counter span, .current-dot { color: var(--ink-3); }
+.rp-current { min-height: 22px; font-size: 12px; color: var(--ink-2); border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.rp-current b { color: var(--ink); }
+.rp-moves { flex: 1 1 auto; min-height: 48px; overflow: auto; overscroll-behavior: contain; }
+.rp-move-col { min-width: 0; }
+.rp-col-title { margin: 6px 0 2px; font: 600 12px var(--font-ui); color: var(--ink-2); }
+.rp-move-row { display: grid; grid-template-columns: 3ch 1fr 1fr; gap: 3px; align-items: center; min-width: 0; min-height: 27px; padding-inline: 2px; border-radius: var(--r-xs); }
+.rp-move-row:nth-child(even) { background: color-mix(in srgb, var(--surface-inset) 55%, transparent); }
+.rp-move-no { color: var(--ink-2); font-size: 11px; text-align: end; }
+.rp-move { min-width: 0; overflow: hidden; text-overflow: ellipsis; justify-content: flex-start; text-align: start; min-height: 25px; padding: 2px 5px; color: var(--ink); background: transparent; border: 1px solid transparent; border-radius: var(--r-xs); font: 500 12px/1.35 var(--font-mono); }
+.rp-move:hover:not(:disabled) { background: var(--surface-inset); border-color: var(--line); }
+.rp-move.active { background: var(--accent-soft); border-color: var(--accent); font-weight: 700; }
+.rp-move:disabled { background: transparent; opacity: .35; }
+.rp-move.drop:not(.active) { color: var(--warn); }
 .rp-multi-moves { display: flex; flex-direction: column; gap: 3px; }
-.rp-multi-move { display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-height: 32px; text-align: left; }
-.rp-move-player { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; }
-/* Keep the controls and the first row of moves in view. The rest of
-   the history scrolls below. The modal caps its height at 860px. */
-.double-replay { overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; }
+.rp-multi-move { flex: none; min-height: 30px; display: flex; align-items: center; gap: 5px; }
+.rp-move-player { flex: 1; min-width: 0; text-overflow: ellipsis; }
+.rp-move-player i { margin-inline-end: 4px; }
+.rp-empty { order: 0; margin: 0; font-size: 13px; color: var(--ink-2); }
+.rp-side:has(.rp-empty) .rp-moves { display: none; }
+.rp-analysis-card { flex: none; margin-top: auto; }
+
+.rp-transport { flex: none; display: grid; grid-template-columns: auto minmax(60px, 1fr) auto; align-items: center; gap: 18px; padding-top: 7px; border-top: 1px solid var(--line); }
+.rp-buttons, .rp-speeds { display: flex; align-items: center; gap: 2px; }
+.rp-buttons button { min-height: 32px; }
+.rp-buttons .icon-only { width: 30px; min-width: 0; padding-inline: 0; background: transparent; border-color: transparent; }
+.rp-buttons .icon-only:hover:not(:disabled) { border-color: var(--line); background: var(--surface-inset); }
+.rp-play { width: 77px; padding-inline: 6px; }
+.rp-speeds { gap: 0; padding: 2px; border-radius: var(--r-s); background: var(--surface-2); border: 1px solid var(--line); }
+.rp-speed { height: 26px; font: 500 12px/1 var(--font-mono); padding: 0 7px; border: 1px solid transparent; border-radius: var(--r-xs); background: transparent; color: var(--ink-2); }
+.rp-speed.active { background: var(--surface); border-color: var(--line-2); color: var(--ink); }
+input.rp-range { width: 100%; min-width: 0; margin: 0; padding: 0; height: 28px; appearance: none; background: transparent; border: 0; cursor: pointer; }
+.rp-range::-webkit-slider-runnable-track { height: 4px; border-radius: 9px; background: linear-gradient(to right, var(--accent-2) var(--progress), var(--line) var(--progress)); }
+.rp-range::-moz-range-track { height: 4px; border-radius: 9px; background: var(--line); }
+.rp-range::-moz-range-progress { height: 4px; border-radius: 9px; background: var(--accent-2); }
+.rp-range::-webkit-slider-thumb { appearance: none; width: 12px; height: 12px; margin-top: -4px; border: 2px solid var(--surface); border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.rp-range::-moz-range-thumb { width: 10px; height: 10px; border: 2px solid var(--surface); border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.rp-range:focus-visible, .rp-speed:focus-visible, .rp-move:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.rp-range:disabled { opacity: .45; cursor: default; }
+
+/* The wide board uses the entire dialog width; the single transport and
+   chronological record follow it. Never fold the 16×8 board into a sidebar. */
+.double-replay { overflow-y: auto; overflow-x: hidden; }
 .double-replay .replayer-head { order: 0; }
 .double-replay .replayer-body { display: contents; }
-.double-replay .rp-boards { order: 1; flex: none; overflow: visible; scrollbar-gutter: auto; }
-.double-replay .rp-board-stage,
-.double-replay .rp-board-head { width: min(100%, max(480px, calc((min(860px, 100dvh) - 360px) * 1.9))); }
-.double-replay .rp-board-head { height: auto; min-height: 36px; gap: 8px; }
-.double-replay .rp-board-num { color: var(--ink-3); font-size: 11px; }
-.double-replay .rp-transport { order: 2; margin: 0; }
-.rp-buttons > .icon-only { width: 34px; min-width: 34px; padding-inline: 0; justify-content: center; }
-.double-replay .rp-range { max-width: none; }
-.double-replay .rp-side { order: 3; flex: none; min-height: 0; overflow: hidden; scrollbar-gutter: auto; }
-.double-replay .rp-moves-head { height: 28px; }
-.double-replay .rp-multi-moves {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
-  align-content: start;
-  flex: none;
-  min-height: 0;
-  height: 148px;
-  max-height: 148px;
-  gap: 4px;
+.double-replay .rp-boards { order: 1; flex: none; overflow: visible; }
+.double-replay .rp-board-stage { width: min(100%, max(480px, calc((min(860px, 100dvh) - 346px) * 1.9))); }
+.double-replay .rp-transport { order: 2; }
+.double-replay .rp-side { order: 3; flex: none; }
+.double-replay .rp-multi-moves { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 245px), 1fr)); align-content: start; flex: none; max-height: 146px; min-height: 0; }
+.double-replay .rp-side h3 { font-size: 15px; }
+.double-replay .rp-current { min-height: 0; }
+
+@media (max-width: 800px) {
+  .replayer-body { grid-template-columns: 1fr; grid-auto-rows: max-content; overflow: auto; align-content: start; }
+  .rp-boards { overflow: visible; }
+  .rp-side { overflow: visible; height: auto; }
+  .rp-moves { flex: none; min-height: 0; max-height: 190px; }
+  .rp-analysis-card { margin-top: 2px; }
+  /* Use the space actually left below a square board for notation. A long
+     history then exposes the selected row without scrolling the board away.
+     On a short screen the body can still scroll to a readable minimum panel. */
+  .replayer:not(.double-replay) .replayer-body:not(:has(.rp-boards.two)) {
+    grid-template-rows: max-content minmax(152px, 1fr); align-content: stretch;
+  }
+  .replayer:not(.double-replay) .replayer-body:not(:has(.rp-boards.two)) .rp-side { overflow-y: auto; }
+  .replayer:not(.double-replay) .replayer-body:not(:has(.rp-boards.two)) .rp-moves { flex: 1 1 65px; min-height: 48px; max-height: none; }
+  .rp-moves { overscroll-behavior-y: auto; }
 }
-.double-replay .rp-multi-move { min-width: 0; min-height: 36px; }
-.double-replay .rp-hint { order: 4; flex: none; margin: 0; }
 @media (max-width: 720px) {
-  .double-replay .rp-board-stage, .double-replay .rp-board-head { width: 100%; }
-  .double-replay .rp-multi-moves { grid-template-columns: minmax(0, 1fr); height: 160px; max-height: 160px; }
-  .double-replay .rp-buttons button { min-height: 38px; }
-  .double-replay .rp-speed { min-height: 30px; }
+  .replayer { gap: 7px; }
+  .replayer-head { padding: 1px 1px 6px; gap: 5px 9px; }
+  .rh-meta { font-size: 11px; }
+  .rh-teams { gap: 8px; }
+  .rh-team + .rh-team { padding-inline-start: 8px; }
+  .rh-team strong { font-size: 13px; }
+  .rp-boards.two { grid-template-columns: minmax(0, 1fr); }
+  .rp-transport { grid-template-columns: 1fr auto; column-gap: 6px; row-gap: 0; padding: 0 3px 2px; }
+  .rp-range { grid-column: 1 / -1; grid-row: 1; }
+  .rp-buttons { justify-self: start; }
+  .rp-speeds { justify-self: end; }
+  .rp-buttons button { min-height: 34px; }
+  .rp-play { width: 67px; }
+  .rp-buttons .icon-only { width: 28px; }
+  .rp-speed { height: 29px; padding: 0 5px; }
+  .double-replay .rp-board-stage { width: 100%; }
+  .double-replay .rp-multi-moves { grid-template-columns: 1fr; max-height: 160px; }
 }
 @media (max-width: 640px) {
-  .rh-multi-players { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .rh-perspective-label { grid-column: 1 / -1; }
-  .rh-player { display: block; max-width: none; }
-  .rh-player-chip { min-height: 36px; }
+  .rh-multi-players { width: 100%; display: grid; gap: 2px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rh-perspective-label { grid-column: 1 / -1; font-size: 11px; }
+  .rh-player, .rh-player-chip { width: 100%; }
   .rh-player small { display: none; }
+  .rh-player-chip { min-height: 30px; }
+}
+@media (max-width: 360px) {
+  .rp-transport { column-gap: 3px; }
+  .rp-buttons .icon-only { width: 26px; }
+  .rp-play { width: 57px; }
+  .rp-speed { padding-inline: 4px; }
 }
 </style>

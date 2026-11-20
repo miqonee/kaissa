@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import type { Prisma } from '@prisma/client';
-import { GAME_MODES, type AdminPageInfo, type AdminUserDetail } from 'shared';
+import { GAME_MODES, type AdminPageInfo, type AdminUserDetail, type AdminUserSearchResult } from 'shared';
 import { prisma } from '../prisma.js';
 import { presence } from '../socket/presence.js';
 import { gamesManager } from '../state.js';
+import { readAccountCounts } from './accountCounts.js';
 import { asyncRoute } from '../http/asyncRoute.js';
 
 /** Mounted behind requireAdmin. All handlers are read-only, including diagnostics. */
@@ -65,7 +66,7 @@ adminReadViews.get('/users/search', asyncRoute(async (req, res) => {
     const id = queryId(q);
     where.OR = [{ username: { contains: q, mode: 'insensitive' } }, ...(id ? [{ id }] : [])];
   }
-  const [total, found] = await Promise.all([
+  const [total, found, accounts] = await Promise.all([
     prisma.user.count({ where }),
     prisma.user.findMany({
       where, skip, take: pageSize, orderBy: [{ id: 'desc' }],
@@ -79,6 +80,7 @@ adminReadViews.get('/users/search', asyncRoute(async (req, res) => {
         } },
       },
     }),
+    readAccountCounts(onlineIds),
   ]);
   const users: AdminUserDetail[] = found.map(u => ({
     id: u.id, username: u.username, rating: u.rating, wins: u.wins, losses: u.losses,
@@ -87,7 +89,8 @@ adminReadViews.get('/users/search', asyncRoute(async (req, res) => {
     lastSeenAt: u.lastSeenAt.toISOString(), activeGameId: gamesManager.activeGameOf(u.id),
     modeRatings: u.modeRatings,
   }));
-  res.json({ users, ...pageInfo(page, pageSize, total) });
+  const payload: AdminUserSearchResult = { users, accounts, ...pageInfo(page, pageSize, total) };
+  res.json(payload);
 }));
 
 adminReadViews.get('/games', asyncRoute(async (req, res) => {

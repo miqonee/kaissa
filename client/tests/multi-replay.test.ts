@@ -5,6 +5,7 @@ import { createPinia } from 'pinia';
 import { MultiChess, type GameSummary, type MoveRecord, type MultiMode } from 'shared';
 import { buildReplay } from '../src/game/replay';
 import GameReplayer from '../src/components/GameReplayer.vue';
+import { useI18n } from '../src/stores/i18n';
 
 vi.mock('../src/audio/sounds', () => ({ playMoveSound: vi.fn(), playCaptureSound: vi.fn(), playCheckSound: vi.fn(), playCastleSound: vi.fn(), playDropSound: vi.fn() }));
 vi.mock('../src/composables/useReplayLayout', async () => { const { ref } = await import('vue'); return { useReplayLayout: () => ({ replayRoot: ref(null) }) }; });
@@ -55,6 +56,55 @@ describe('multiplayer replays', () => {
     props.game = { ...classic, id: 2 }; await nextTick();
     expect(button.getAttribute('aria-pressed')).toBe('false');
   });
+  it('keeps board identity, checkmate, and the selected notation aligned after flipping and rewinding', async () => {
+    root = document.createElement('div'); document.body.append(root);
+    const classic: GameSummary = { ...game('double'), mode: 'team', result: '0-1', reason: 'checkmate' };
+    const moves: MoveRecord[] = [['f2','f3'], ['e7','e5'], ['g2','g4'], ['d8','h4']].map(([from, to], i) =>
+      ({ boardIndex: 0, ply: i + 1, userId: i + 1, from, to, fenAfter: '', clocksAfter: null }));
+    const pinia = createPinia();
+    app = createApp({ render: () => h(GameReplayer, { game: classic, moves, compact: true }) });
+    app.use(pinia).mount(root); useI18n().setLocale('en', false); await nextTick();
+    const selected = () => root!.querySelector('[aria-current="step"]')?.textContent?.trim();
+    const seats = () => [...root!.querySelectorAll('.rp-seat')].map(el => el.textContent?.trim());
+    expect(root.querySelector('.rp-board-head')).toBeNull(); // no redundant “Board 1”.
+    expect(seats()[0]).toContain('Black'); expect(seats()[1]).toContain('White');
+    expect(seats()[1]).toContain('Checkmate');
+    expect(selected()).toBe('Qh4#');
+    expect(root.querySelector('.rp-current')?.textContent).toContain('Player 4');
+    const flip = root.querySelector<HTMLButtonElement>('.rh-flip')!;
+    flip.click(); await nextTick();
+    expect(seats()[0]).toContain('Checkmate'); expect(selected()).toBe('Qh4#');
+    // Immediately after opening, a button has focus. Home and End still seek.
+    flip.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true })); await nextTick();
+    expect(selected()).toBeUndefined(); expect(root.querySelector('.seat-check')).toBeNull();
+    expect(root.querySelector('.rp-current')?.textContent?.trim()).toBe('Starting position');
+    expect(root.querySelector('.rp-seat .material-trigger')).toBeNull();
+    expect(root.querySelector('.rp-analysis-card summary')?.textContent).toContain('Starting Position');
+    flip.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true })); await nextTick();
+    expect(selected()).toBe('Qh4#');
+  });
+
+  it('shows material only on the side with an actual surplus and pauses autoplay on manual seek', async () => {
+    vi.useFakeTimers();
+    root = document.createElement('div'); document.body.append(root);
+    const classic: GameSummary = { ...game('double'), mode: 'team' };
+    const moves: MoveRecord[] = [['e2','e4'], ['d7','d5'], ['e4','d5']].map(([from,to],i) =>
+      ({ boardIndex: 0, ply: i+1, userId: i+1, from, to, fenAfter: '', clocksAfter: null }));
+    app = createApp({ render: () => h(GameReplayer, { game: classic, moves, compact: true }) });
+    app.use(createPinia()).mount(root); await nextTick();
+    const rails = root.querySelectorAll('.rp-seat');
+    expect(rails[0].querySelector('.material-trigger')).toBeNull(); // no false “=” for Black.
+    expect(rails[1].querySelector('.material-score')?.textContent).toBe('+1');
+    const play = root.querySelector<HTMLButtonElement>('.rp-play')!;
+    const range = root.querySelector<HTMLInputElement>('.rp-range')!;
+    play.click(); await nextTick();
+    expect(range.value).toBe('0');
+    range.value = '2'; range.dispatchEvent(new Event('input')); await nextTick();
+    await vi.advanceTimersByTimeAsync(1800); await nextTick();
+    expect(range.value).toBe('2');
+    expect(root.querySelector('[aria-current="step"]')?.textContent?.trim()).toBe('d5');
+  });
+
   it('marks missing and mismatched snapshots instead of claiming reconstructed positions', () => {
     const g = game('double');
     const replay = buildReplay(g, [{ ...record('double'), fenAfter: '' }, { ...record('four-player'), ply: 2 }]);

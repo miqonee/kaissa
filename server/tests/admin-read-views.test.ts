@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 const db = vi.hoisted(() => ({
   $queryRaw: vi.fn(),
-  user: { count: vi.fn(), findMany: vi.fn() },
+  user: { count: vi.fn(), groupBy: vi.fn(), findMany: vi.fn() },
   game: { count: vi.fn(), findMany: vi.fn() },
   gameMove: { count: vi.fn() },
   gameParticipant: { findMany: vi.fn() },
@@ -12,7 +12,8 @@ const db = vi.hoisted(() => ({
 const runtime = vi.hoisted(() => ({ getActive: vi.fn(), activeGameOf: vi.fn() }));
 vi.mock('../src/prisma.js', () => ({ prisma: db }));
 vi.mock('../src/state.js', () => ({ gamesManager: runtime }));
-vi.mock('../src/socket/presence.js', () => ({ presence: { onlineUids: () => [2] } }));
+const presence = vi.hoisted(() => ({ onlineUids: vi.fn() }));
+vi.mock('../src/socket/presence.js', () => ({ presence }));
 vi.mock('../src/auth/auth.js', () => ({
   currentUser: vi.fn(),
   requireAdmin: (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -41,7 +42,8 @@ beforeEach(() => {
     started: 0n, finished: 0n, active: 0n, abandoned: 0n,
     abandonedWithMoves: 0n, abandonedWithoutMoves: 0n, recordedMoves: 0n, distinctHumanMovers: 0n,
   }]);
-  db.user.count.mockResolvedValue(0); db.user.findMany.mockResolvedValue([]);
+  db.user.count.mockResolvedValue(0); db.user.findMany.mockResolvedValue([]); db.user.groupBy.mockResolvedValue([]);
+  presence.onlineUids.mockReturnValue([2]);
   db.game.count.mockResolvedValue(0); db.game.findMany.mockResolvedValue([]);
   db.gameMove.count.mockResolvedValue(0); db.gameParticipant.findMany.mockResolvedValue([]);
   runtime.getActive.mockReturnValue(undefined); runtime.activeGameOf.mockReturnValue(null);
@@ -52,11 +54,19 @@ describe('Read-only admin views', () => {
   it.each(['/users/search', '/games', '/metrics?scope=overview'])('requires admin before querying %s', async path => {
     expect((await fetch(url + path)).status).toBe(403);
     expect(db.user.findMany).not.toHaveBeenCalled();
+    expect(db.user.groupBy).not.toHaveBeenCalled();
     expect(db.game.findMany).not.toHaveBeenCalled();
     expect(db.$queryRaw).not.toHaveBeenCalled();
   });
   it('loads bounded overview metrics without reading the bot archive or all users', async () => {
-    db.user.count.mockResolvedValueOnce(30).mockResolvedValueOnce(1);
+    presence.onlineUids.mockReturnValue([2, 5]); // The bot connection must not count as a human online.
+    db.user.count.mockResolvedValueOnce(1);
+    db.user.groupBy.mockResolvedValue([
+      { isBot: false, isGuest: false, _count: { _all: 23 } },
+      { isBot: false, isGuest: true, _count: { _all: 7 } },
+      { isBot: true, isGuest: false, _count: { _all: 4 } },
+      { isBot: true, isGuest: true, _count: { _all: 1 } },
+    ]);
     // Stored totals can include rows whose recorded start is later than asOf.
     db.game.count.mockResolvedValue(501);
     db.gameMove.count.mockResolvedValue(3001);
@@ -67,11 +77,14 @@ describe('Read-only admin views', () => {
     const response = await get('/metrics?scope=overview');
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ totalUsers: 30, onlineUsers: 1, totalGames: 501, totalMoves: 3001, botMetrics: [],
+      accounts: { registered: 23, guests: 7, bots: 5, online: 1 },
       activity: { period: 'all', from: null, started: 500, finished: 400, active: 10, abandoned: 90,
         abandonedWithMoves: 12, abandonedWithoutMoves: 78, recordedMoves: 3000, distinctHumanMovers: 25 },
     });
     expect(db.$queryRaw.mock.calls[0][0].values).toHaveLength(1);
     expect(db.game.findMany.mock.calls[0][0].take).toBe(200);
+    expect(db.user.groupBy).toHaveBeenCalledWith({ by: ['isBot', 'isGuest'], _count: { _all: true } });
+    expect(db.user.count).toHaveBeenCalledWith({ where: { isBot: false, id: { in: [2, 5] } } });
     expect(db.gameParticipant.findMany).not.toHaveBeenCalled();
     expect(db.user.findMany).not.toHaveBeenCalled();
   });
@@ -108,7 +121,12 @@ describe('Read-only admin views', () => {
     expect(db.gameParticipant.findMany.mock.calls[0][0].where).toEqual({ user: { isBot: true }, game: { status: 'finished' } });
   });
   it('paginates and filters human users without selecting credentials', async () => {
-    db.user.count.mockResolvedValue(80);
+    db.user.count.mockResolvedValueOnce(80).mockResolvedValueOnce(6);
+    db.user.groupBy.mockResolvedValue([
+      { isBot: false, isGuest: false, _count: { _all: 120 } },
+      { isBot: false, isGuest: true, _count: { _all: 240 } },
+      { isBot: true, isGuest: false, _count: { _all: 12 } },
+    ]);
     db.user.findMany.mockResolvedValue([{
       id: 2, username: 'Guest_test', rating: 1200, wins: 0, losses: 0, isAdmin: false, isGuest: true,
       createdAt: new Date(0), lastSeenAt: new Date(1000), _count: { participations: 3 },
@@ -118,13 +136,24 @@ describe('Read-only admin views', () => {
     const response = await get('/users/search?kind=guest&online=online&q=Guest&page=2&pageSize=10');
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ page: 2, pageSize: 10, total: 80, totalPages: 8,
-      users: [{ id: 2, online: true, activeGameId: 155, games: 3, lastSeenAt: new Date(1000).toISOString() }],
+      accounts: { registered: 120, guests: 240, bots: 12, online: 6 },
+      users: [{ id: 2, isGuest: true, isAdmin: false, online: true, activeGameId: 155, games: 3, lastSeenAt: new Date(1000).toISOString() }],
     });
     const query = db.user.findMany.mock.calls[0][0];
     expect(query).toMatchObject({ skip: 10, take: 10, where: { isBot: false, isGuest: true, id: { in: [2] } } });
     expect(query.select.passwordHash).toBeUndefined();
     expect(query.select.sessionVersion).toBeUndefined();
     expect(db.user.count).toHaveBeenCalledWith({ where: query.where });
+  });
+  it('keeps an empty search distinct from the saved audience and skips the online lookup with no connections', async () => {
+    presence.onlineUids.mockReturnValue([]);
+    db.user.groupBy.mockResolvedValue([{ isBot: false, isGuest: false, _count: { _all: 72 } }]);
+    const response = await get('/users/search?q=nonexistent');
+    expect(await response.json()).toMatchObject({
+      users: [], page: 1, total: 0, totalPages: 0,
+      accounts: { registered: 72, guests: 0, bots: 0, online: 0 },
+    });
+    expect(db.user.count).toHaveBeenCalledTimes(1);
   });
   it.each([
     ['/users/search?kind=registered&online=offline', { isGuest: false, id: { notIn: [2] } }],
@@ -153,6 +182,7 @@ describe('Read-only admin views', () => {
   ])('rejects invalid or unbounded queries %s', async path => {
     expect((await get(path)).status).toBe(400);
     expect(db.user.findMany).not.toHaveBeenCalled();
+    expect(db.user.groupBy).not.toHaveBeenCalled();
     expect(db.game.findMany).not.toHaveBeenCalled();
     expect(db.$queryRaw).not.toHaveBeenCalled();
   });

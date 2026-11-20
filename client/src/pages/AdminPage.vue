@@ -437,11 +437,17 @@ function inspectActive() {
       <p v-if="userError" role="alert" class="error-text">{{ userError }}</p><p v-if="userLoading" role="status" class="hint">{{ txt('Загружаем игроков…', 'Loading players…') }}</p>
       <p v-else-if="!userError" class="user-result-count hint" role="status"><strong>{{ txt('Найдено:', 'Accounts found:') }} <span class="mono">{{ fmtNumber(userTotal) }}</span></strong><span v-if="users.length">{{ txt('Показаны', 'Showing') }} {{ userVisibleRange }}</span></p>
       <div v-if="!userLoading && !userError && !users.length" class="admin-empty">{{ txt('Нет подходящих аккаунтов. Измените запрос или фильтры.', 'No accounts match. Change the search or filters.') }}</div>
-      <div v-else-if="!userLoading && !userError" class="table-wrap user-table" tabindex="0" :aria-label="txt('Таблица игроков, можно прокручивать', 'Scrollable players table')"><table class="club"><thead><tr><SortableHeader v-for="[key, label] in userColumns" :key="key" :direction="userSort.sortDirection(key)" @sort="userSort.sortBy(key, ['username', 'id'].includes(key) ? 'ascending' : 'descending')">{{ label }}</SortableHeader><th>{{ txt('Карточка', 'Details') }}</th></tr></thead><tbody><tr v-for="user in userSort.sortedRows.value" :key="user.id" :class="{ 'is-me': user.id === auth.user?.id, selected: selectedUser?.id === user.id }"><td class="mono dim">{{ user.id }}</td><td><span class="dot" :class="{ on: user.online }" />{{ user.online ? txt('Онлайн', 'Online') : txt('Офлайн', 'Offline') }}</td><td><router-link :to="`/players/${encodeURIComponent(user.username)}`">{{ user.username }}</router-link></td><td class="mono">{{ user.rating }}</td><td class="mono">{{ user.wins }} / {{ user.losses }}</td><td class="mono">{{ user.games }}</td><td>{{ fmtDate(user.createdAt) }}</td><td><span class="badge account-role" :class="{ 'account-role-guest': user.isGuest }">{{ roleLabel(user) }}</span></td><td><button class="small" @click="selectUser(user)">{{ txt('Открыть', 'Open') }}</button></td></tr></tbody></table></div>
+      <div v-else-if="!userLoading && !userError" class="table-wrap user-table" tabindex="0" :aria-label="txt('Таблица игроков, можно прокручивать', 'Scrollable players table')"><table class="club"><thead><tr><SortableHeader v-for="[key, label] in userColumns" :key="key" :direction="userSort.sortDirection(key)" @sort="userSort.sortBy(key, ['username', 'id'].includes(key) ? 'ascending' : 'descending')">{{ label }}</SortableHeader><th>{{ txt('Карточка', 'Details') }}</th></tr></thead><tbody><tr v-for="user in userSort.sortedRows.value" :key="user.id" :class="{ 'is-me': user.id === auth.user?.id, selected: selectedUser?.id === user.id }"><td class="mono dim">{{ user.id }}</td><td><span class="account-presence">
+            <i class="dot" :class="{ on: user.online }" aria-hidden="true" />
+            <span>{{ user.online ? txt('Онлайн', 'Online') : txt('Офлайн', 'Offline') }}</span>
+          </span></td><td><router-link :to="`/players/${encodeURIComponent(user.username)}`">{{ user.username }}</router-link></td><td class="mono">{{ user.rating }}</td><td class="mono">{{ user.wins }} / {{ user.losses }}</td><td class="mono">{{ user.games }}</td><td>{{ fmtDate(user.createdAt) }}</td><td><span class="badge account-role" :class="{ 'account-role-guest': user.isGuest }">{{ roleLabel(user) }}</span></td><td><button class="small" @click="selectUser(user)">{{ txt('Открыть', 'Open') }}</button></td></tr></tbody></table></div>
       <div v-if="!userLoading && !userError" class="mobile-users">
         <article v-for="user in users" :key="user.id" class="mobile-user" :class="{ selected: selectedUser?.id === user.id }">
           <div><strong>{{ user.username }}</strong><span class="hint mono">#{{ user.id }} · {{ roleLabel(user) }}</span></div>
-          <span class="hint"><i class="dot" :class="{ on: user.online }" />{{ user.online ? txt('Онлайн', 'Online') : txt('Офлайн', 'Offline') }}</span>
+          <span class="hint account-presence">
+            <i class="dot" :class="{ on: user.online }" aria-hidden="true" />
+            <span>{{ user.online ? txt('Онлайн', 'Online') : txt('Офлайн', 'Offline') }}</span>
+          </span>
           <p class="hint mono">{{ user.rating }} Elo · {{ user.games }} {{ txt('партий', 'matches') }} · {{ user.wins }}/{{ user.losses }} {{ txt('В/П', 'W/L') }}</p>
           <button class="small" @click="selectUser(user)">{{ txt('Карточка игрока', 'Player details') }}</button>
         </article>
@@ -934,6 +940,7 @@ function inspectActive() {
 .match-summary > .badge { margin-left: auto; }
 .match-people { padding: 12px 0; font-size: 13px; }
 .match-people > span { overflow-wrap: anywhere; }
+.match-people .dot { margin-inline-end: var(--gap-xs); }
 .match-footer { border-top: 1px solid var(--line); padding-top: 10px; }
 .match-footer > .hint { margin-right: auto; }
 .match-footer a { padding: 7px; }
@@ -943,6 +950,7 @@ function inspectActive() {
 .user-table table { min-width: 850px; }
 .mobile-users { display: none; }
 .user-table td { vertical-align: middle; }
+.account-presence { display: inline-flex; align-items: center; gap: var(--gap-xs); white-space: nowrap; }
 .account-detail { padding: 20px; }
 .detail-links { margin-top: 12px; font-size: 13px; }
 .rating-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 16px 0; }

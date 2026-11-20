@@ -70,6 +70,18 @@ describe('admin dashboard read workflows', () => {
     expect(api.get.mock.lastCall?.[0]).toContain('q=Finch');
     expect(root.querySelector('.mobile-user')?.textContent).toContain('Guest Finch');
   });
+  it('keeps status text separate from its decorative dot on desktop and mobile', async () => {
+    await tab('users');
+    for (const section of ['.user-table', '.mobile-users']) {
+      expect(root.querySelector(`${section} .account-presence > .dot.on[aria-hidden="true"]`)).not.toBeNull();
+      expect(root.querySelector(`${section} .account-presence > span`)?.textContent).toBe('Онлайн');
+    }
+    api.get.mockResolvedValueOnce({ users: [{ ...user, online: false }], accounts, pageSize: 25, page: 1, totalPages: 1, total: 1 });
+    root.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true })); await flush();
+    useI18n().setLocale('en', false); await flush();
+    expect(root.querySelectorAll('.account-presence .dot.on')).toHaveLength(0);
+    expect([...root.querySelectorAll('.account-presence > span')].map(node => node.textContent)).toEqual(['Offline', 'Offline']);
+  });
   it('keeps lifetime counts separate from matches and the visible page range', async () => {
     expect(root.querySelector('.account-counts .humans dd')?.textContent).toBe('50');
     expect(root.querySelector('.account-counts .registered dd')?.textContent).toBe('20');
